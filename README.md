@@ -80,8 +80,9 @@ like on its form factor. A phone card and a watch tile are the same capability r
 differently. See [ADR-0005](docs/adr/0005-capability-based-adapters.md).
 
 **Every device is paired separately and scoped separately.** Tokens carry
-`read` / `service.control` / `host.power` as independent grants, so a watch can restart
-Jellyfin while being structurally incapable of powering off the server.
+`read` / `service.control` / `devices.manage` / `host.power` as independent grants, so a
+watch can restart Jellyfin while being structurally incapable of powering off the server
+or of revoking your phone.
 See [ADR-0006](docs/adr/0006-device-pairing-scoped-tokens.md).
 
 ### Access model

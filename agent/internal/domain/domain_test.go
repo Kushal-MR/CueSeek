@@ -59,6 +59,11 @@ func TestHasScope(t *testing.T) {
 	if watch.HasScope(ScopeHostPower) {
 		t.Error("watch reports host.power, which it was never granted")
 	}
+	// devices.manage exists as a separate scope precisely so this holds. Had revocation
+	// reused service.control, the watch would be able to revoke the phone.
+	if watch.HasScope(ScopeDevicesManage) {
+		t.Error("watch reports devices.manage, which it was never granted")
+	}
 
 	var none Device
 	for _, s := range AllScopes {

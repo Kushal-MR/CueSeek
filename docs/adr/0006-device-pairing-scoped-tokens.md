@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-08
+- **Amended:** 2026-08-08 — `devices.manage` added to the scope set (see [Amendments](#amendments))
 
 ## Context
 
@@ -25,8 +26,9 @@ The agent issues a single-use, short-lived pairing code (with QR) only when expl
 invoked. A client redeems it once and receives a long-lived, per-device token stored in
 platform-secure storage.
 
-Tokens carry **independent scopes**: `read`, `service.control`, `host.power`. Devices are
-listed, named, last-seen and individually revocable.
+Tokens carry **independent scopes**: `read`, `service.control`, `devices.manage`,
+`host.power` (the last added by Amendment 1). Devices are listed, named, last-seen and
+individually revocable.
 
 Tokens are persisted as hashes in SQLite under `/var/lib/cueseek`, alongside an
 append-only audit log.
@@ -50,3 +52,42 @@ append-only audit log.
 - Cost: long-lived tokens do not rotate. Refresh tokens were judged unnecessary given
   revocation is immediate and the network is already private; revisit if the agent is
   ever reachable more broadly.
+
+## Amendments
+
+### Amendment 1 — 2026-08-08: `devices.manage` added
+
+**What changed.** The scope set gains a fourth member, `devices.manage`, required by
+`DELETE /v1/devices/{deviceId}`. `GET /v1/devices` remains `read`.
+
+**Why.** M1.3 implemented revocation against the contract as originally written, which
+required only `read`. Review caught that this was wrong twice over.
+
+First, revoking a device is destructive, and `read` is the scope every client holds. A
+token issued purely to display a dashboard could lock every other device out.
+
+Second — and this is why the obvious fix was not simply promoting it to
+`service.control` — that would have left the real hazard in place. A watch is routinely
+paired with `read` and `service.control` so it can restart a service from the wrist. Under
+that fix it could still revoke the phone. Revocation would have travelled with an
+unrelated permission, which is precisely the tiering this ADR set out to avoid.
+
+**Why it is a separate scope rather than a reuse.** Revocation is arguably the most
+destructive operation in the API. Powering off a machine is recoverable by walking to it;
+revoking every device removes the means to fix the problem remotely, including the device
+an operator would reach for. It deserves to be withheld on its own.
+
+**Cost.** The scope enum is public API. Four platforms' generated clients now carry a
+value that did not exist, and a fourth grant is one more thing an operator must reason
+about at pairing time. Accepted because the alternative is a permission that cannot be
+withheld independently of one every client needs.
+
+**Guard.** `TestRevokeRequiresDevicesManage` pairs a watch with `read` +
+`service.control`, asserts it can list devices but is refused revocation, and asserts a
+holder of `devices.manage` succeeds. Had revocation reused `service.control`, that test
+would fail.
+
+**What did not change.** Everything else in this record: pairing codes, per-device tokens,
+hash-only storage, immediate revocation, the audit log, and the principle that scopes are
+independent grants rather than tiers. This amendment applies that principle more
+faithfully than the original scope list did.

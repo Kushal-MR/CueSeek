@@ -47,7 +47,7 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | [0003](0003-agent-runtime-go.md) | Go for the agent runtime | Accepted |
 | [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended 2026-08-08 |
 | [0005](0005-capability-based-adapters.md) | Capability-based adapters | Accepted |
-| [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted |
+| [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended 2026-08-08 |
 | [0007](0007-client-capability-registry.md) | Client-side capability registry | Accepted |
 | [0008](0008-multi-host-and-computed-health.md) | Multi-host model and agent-computed health | Accepted |
 | [0009](0009-monorepo-contract-drift-gate.md) | Monorepo with a contract-drift gate | Accepted |

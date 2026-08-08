@@ -112,6 +112,42 @@ var migrations = []string{
 
 	CREATE INDEX idx_audit_at ON audit(at DESC);
 	`,
+
+	// 2: pairing codes.
+	//
+	// These live in the database rather than in the daemon's memory because
+	// `cueseekd pair` is a separate process from the running agent. An in-memory code
+	// minted by the CLI would be invisible to the server that has to redeem it.
+	//
+	// Storing the hash, not the code, keeps the rule from ADR-0006 uniform: nothing in
+	// this file is ever a working credential.
+	`
+	CREATE TABLE pairing_codes (
+		code_hash  TEXT PRIMARY KEY,
+		scopes     TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		expires_at TEXT NOT NULL
+	);
+
+	CREATE INDEX idx_pairing_codes_expires_at ON pairing_codes(expires_at);
+	`,
+
+	// 3: agent metadata.
+	//
+	// Currently just the host id, which clients use to key their multi-host data model
+	// (ADR-0008) and which must therefore survive restarts, hostname changes and IP
+	// changes.
+	//
+	// Generated and stored rather than derived from /etc/machine-id: machine-id is
+	// absent on non-Linux systems, which would make the agent untestable off its
+	// deployment target, and exposing it directly over an API is discouraged because it
+	// is a stable cross-application identifier for the machine.
+	`
+	CREATE TABLE meta (
+		key   TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
+	`,
 }
 
 func (s *Store) migrate() error {

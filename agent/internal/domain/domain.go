@@ -31,13 +31,26 @@ const (
 	ScopeRead Scope = "read"
 	// ScopeServiceControl permits invoking service actions, e.g. restarting Jellyfin.
 	ScopeServiceControl Scope = "service.control"
+	// ScopeDevicesManage permits revoking paired devices.
+	//
+	// Separate from ScopeServiceControl on purpose. Revocation is the most destructive
+	// operation in the API — it can lock every remaining device out of the agent,
+	// including the one an operator would reach for to undo the mistake. Bundling it
+	// with the scope a watch routinely carries would mean any device able to restart a
+	// service could also lock out the phone.
+	ScopeDevicesManage Scope = "devices.manage"
 	// ScopeHostPower permits rebooting or shutting down the machine.
 	ScopeHostPower Scope = "host.power"
 )
 
 // AllScopes is the closed set of valid scopes. Adding one is an API change: it appears
 // in the contract's Scope enum and in every generated client.
-var AllScopes = []Scope{ScopeRead, ScopeServiceControl, ScopeHostPower}
+var AllScopes = []Scope{
+	ScopeRead,
+	ScopeServiceControl,
+	ScopeDevicesManage,
+	ScopeHostPower,
+}
 
 // Valid reports whether s is a recognised scope.
 func (s Scope) Valid() bool { return slices.Contains(AllScopes, s) }

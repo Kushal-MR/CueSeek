@@ -22,8 +22,6 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 )
 
 // DefaultPath is where the packaged systemd unit will look for the config file.
@@ -250,9 +248,3 @@ func (c Config) ManagedUnits() []string {
 	}
 	return units
 }
-
-// DefaultScopes is what a newly paired device receives when none are specified.
-//
-// Read and service control, but never host power. A device that can reboot the machine
-// should be a deliberate act, not what happens when an operator accepts the defaults.
-var DefaultScopes = []domain.Scope{domain.ScopeRead, domain.ScopeServiceControl}

@@ -17,9 +17,10 @@ the phone (ADR-0006).
 persistent stream on a watch is a battery problem in exchange for latency nobody
 perceives on a glanceable surface (ADR-0004).
 
-**Typically issued `read` and `service.control`, but not `host.power`.** A device worn in
-public and unlocked by proximity should not be able to shut down a server. The
-restriction is enforced by the agent, so it holds regardless of what the watch UI offers.
+**Typically issued `read` and `service.control` only — never `host.power` or
+`devices.manage`.** A device worn in public and unlocked by proximity should not be able
+to shut down a server, nor to revoke the phone you would use to recover. Both restrictions
+are enforced by the agent, so they hold regardless of what the watch UI offers.
 
 ## Planned surface
 

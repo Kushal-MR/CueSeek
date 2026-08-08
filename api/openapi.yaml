@@ -169,12 +169,23 @@ paths:
         Revocation is immediate and affects only this device. Losing a phone means
         deleting one row, not rotating a secret shared by every client — which is the
         whole reason per-device tokens exist rather than a single API key.
-      x-required-scope: read
+
+        Requires the `devices.manage` scope, which is deliberately separate from
+        `service.control`. Revocation is the most destructive operation in this API: it
+        can lock every remaining device out of the agent, including the one an operator
+        would use to undo the mistake. Folding it into the scope a smartwatch routinely
+        carries would mean any device able to restart Jellyfin could also lock out the
+        phone.
+
+        A device may revoke itself. That is how a client logs out, and the audit log
+        records it like any other revocation.
+      x-required-scope: devices.manage
       parameters:
         - $ref: "#/components/parameters/DeviceId"
       responses:
         "204": { description: Device revoked. }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /v1/services:
@@ -298,11 +309,14 @@ components:
         | --- | --- |
         | `read` | Read state: system, devices, services, the stream. |
         | `service.control` | Invoke service actions, e.g. restart Jellyfin. |
+        | `devices.manage` | Revoke paired devices. |
         | `host.power` | Reboot or shut down the machine. |
 
-        Scopes are separate grants, not tiers. A paired watch is typically issued `read`
-        and `service.control` but not `host.power`, making it structurally incapable of
-        powering off the server regardless of what its UI offers.
+        Scopes are separate grants, not tiers, and the set is chosen so that the
+        dangerous powers can be withheld individually. A paired watch is typically issued
+        `read` and `service.control` only: it can restart Jellyfin, but is structurally
+        incapable of powering off the server or of locking other devices out — regardless
+        of what its UI offers.
 
         The scope each operation requires is given by `x-required-scope`. It is an
         extension rather than a formal OpenAPI construct because scopes are only modelled
@@ -416,7 +430,7 @@ components:
     Scope:
       type: string
       description: An independently grantable permission.
-      enum: [read, service.control, host.power]
+      enum: [read, service.control, devices.manage, host.power]
 
     Platform:
       type: string
