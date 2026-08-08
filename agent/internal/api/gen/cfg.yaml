@@ -1,0 +1,32 @@
+# oapi-codegen configuration.
+#
+# Consumed by the //go:generate directive in generate.go. The generator version is
+# pinned by the `tool` directive in agent/go.mod — CI must run the same version or the
+# drift gate produces spurious diffs (ADR-0009).
+package: gen
+output: gen.go
+
+generate:
+  # Types for every schema in the contract.
+  models: true
+
+  # Standard library routing. Go 1.22+ matches method and pattern natively, and the
+  # generated interfaces do the dispatch, so a third-party router buys nothing.
+  std-http-server: true
+
+  # Strict handlers: typed request and response values instead of raw
+  # (http.ResponseWriter, *http.Request). The compiler then enforces that a handler
+  # returns a response the contract actually declares — which is what makes "the spec
+  # is the contract" a checked property rather than an intention.
+  strict-server: true
+
+  # Embeds the gzipped spec so the running agent can serve exactly the contract it was
+  # built against. Removes any question of which version a deployed binary implements.
+  embedded-spec: true
+
+output-options:
+  # Keep every schema, including ones only reachable through the stream response.
+  # Without this, pruning would drop payload types the SSE endpoint references
+  # indirectly — and those are precisely the types that must survive a transport change
+  # if A7 forces one.
+  skip-prune: true

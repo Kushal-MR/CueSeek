@@ -1,20 +1,19 @@
 # =============================================================================
 # CueSeek API — the contract.
 #
-# This file is HAND-AUTHORED and is the single source of truth for the agent and
-# every client. Server interfaces (Go) and client SDKs (Kotlin/Swift/TS) are
-# GENERATED FROM IT. Never generate this file from handler code: a spec derived
-# from an implementation is a description, not a contract. See ADR-0004.
+# HAND-AUTHORED, and the single source of truth for the agent and every client.
+# Go server interfaces and all client SDKs are GENERATED FROM IT. Never generate
+# this file from handler code: a spec derived from an implementation is a
+# description, not a contract. CI regenerates and fails on drift. See ADR-0004
+# and ADR-0009.
 #
-# STATUS: skeleton. No operations are defined yet — they land with the agent
-# milestone. The structure below fixes the conventions those operations must follow.
+# Regenerate:  cd agent && go generate ./...
 # =============================================================================
-openapi: 3.1.0
+openapi: 3.0.3
 
 info:
   title: CueSeek Agent API
-  version: 0.0.0
-  summary: Health, activity and control for a self-hosted server.
+  version: 0.1.0
   description: |
     The API exposed by `cueseekd`, the CueSeek host agent.
 
@@ -22,36 +21,37 @@ info:
 
     This API is **not designed to be exposed to the public internet**. It assumes the
     client can already reach the host over a private network (Tailscale, WireGuard or
-    LAN), and therefore performs no TLS termination of its own. See ADR-0001.
+    LAN), and performs no TLS termination of its own (ADR-0001).
 
-    Network reachability is not authorisation: every request is authenticated with a
-    per-device token carrying explicit scopes. See ADR-0006.
+    Network reachability is not authorisation. Every request except `POST /v1/pair`
+    carries a per-device bearer token with explicit scopes (ADR-0006).
 
     ## Reads are a stream; writes are RPCs
 
-    Live state (`GET /v1/stream`) arrives over Server-Sent Events: a full snapshot as
-    the first event, then deltas. Reconnecting yields a new full snapshot — there is
-    no replay buffer, because the state is small and correctness beats bandwidth.
+    Live state arrives over `GET /v1/stream`: a full snapshot as the first event, then
+    deltas. Reconnecting yields a new full snapshot — there is no replay buffer, because
+    the state is small and correctness beats bandwidth.
 
     `GET /v1/services` exists for cold start and for clients that cannot hold a stream
-    open. Wear OS uses it exclusively: a held SSE connection does not survive Doze, so
+    open. Wear OS uses it exclusively: a held connection does not survive Doze, so
     nothing background-critical may depend on the stream.
 
     ## Actions are asynchronous
 
     Actions return `202 Accepted` with an action id; progress and terminal state arrive
-    over the stream. This is not ceremony. `POST /v1/host/actions/reboot` races the
-    machine going down — a synchronous response would surface a *successful* reboot to
-    the client as a network error. Destructive host actions are therefore acknowledged
-    first and executed after a short delay.
+    over the stream. This is not ceremony — it is forced by the platform. `RestartUnit`
+    over D-Bus returns a *job* immediately and completes later, so the agent has no
+    synchronous result to report even if it wanted one. Host power actions are worse
+    still: a synchronous reboot response is never delivered, because the machine is
+    gone. Both were confirmed empirically in M0; see `docs/m0-findings.md`.
 
     ## Capabilities
 
-    Services advertise capabilities (`health`, `control`, `now_playing`, `transfers`, …)
-    rather than being identified by type. Clients render per capability and must never
-    branch on service id. Capability names are public API: once `now_playing` ships it
-    is a semantic contract shared by Jellyfin, Plex and Emby, not a reflection of any
-    one service's data model. See ADR-0005 and ADR-0007.
+    Services advertise capabilities (`health`, `control`, and later `now_playing`,
+    `transfers`, …) rather than being identified by type. Clients render per capability
+    and must never branch on service id. Capability ids are public API: once
+    `now_playing` ships it is a semantic contract shared by Jellyfin, Plex and Emby, not
+    a reflection of any one service's data model (ADR-0005, ADR-0007).
   contact:
     name: CueSeek
     url: https://github.com/Kushal-MR/CueSeek
@@ -59,7 +59,7 @@ info:
     name: TBD
 
 servers:
-  - url: http://{host}:{port}/
+  - url: http://{host}:{port}
     description: A cueseekd instance, reachable over a private network.
     variables:
       host:
@@ -69,39 +69,221 @@ servers:
         default: "7777"
 
 tags:
-  - name: services
-    description: Managed services and their capabilities.
-  - name: host
-    description: The machine itself — metrics and power control.
-  - name: stream
-    description: Live state over Server-Sent Events.
+  - name: system
+    description: Agent and host identity.
   - name: pairing
     description: Device enrolment and token issuance.
   - name: devices
     description: Paired device management and revocation.
+  - name: services
+    description: Managed services, their capabilities and their actions.
+  - name: stream
+    description: Live state. Transport provisional — see the endpoint description.
 
 security:
   - deviceToken: []
 
-paths: {}
-  # -------------------------------------------------------------------------
-  # Planned surface. Each lands with the milestone that implements it, together
-  # with its schemas and its generated client. Listed here so the shape of the
-  # API is reviewable before any of it is built.
-  #
-  #   POST   /v1/pair                              pairing   redeem a pairing code
-  #   GET    /v1/devices                           devices   list paired devices
-  #   DELETE /v1/devices/{deviceId}                devices   revoke a device
-  #
-  #   GET    /v1/stream                            stream    SSE: snapshot, then deltas
-  #   GET    /v1/services                          services  all services + capabilities
-  #   GET    /v1/services/{serviceId}              services  one service
-  #   POST   /v1/services/{serviceId}/actions/{actionId}
-  #                                                services  202 + action id
-  #
-  #   GET    /v1/host                              host      metrics + overall health
-  #   POST   /v1/host/actions/{actionId}           host      reboot / poweroff
-  # -------------------------------------------------------------------------
+paths:
+  /v1/system:
+    get:
+      operationId: getSystem
+      tags: [system]
+      summary: Agent and host identity
+      description: |
+        Returns the agent version, the API version it implements, and the host's stable
+        id and name.
+
+        Clients need this before they can render anything else. The host id keys the
+        client's multi-host data model (ADR-0008), and the version pair lets a client
+        tell the user honestly when the *agent* is the outdated side of a version skew
+        rather than the app (ADR-0007).
+      x-required-scope: read
+      responses:
+        "200":
+          description: System information.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/System" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/pair:
+    post:
+      operationId: pairDevice
+      tags: [pairing]
+      summary: Redeem a pairing code for a device token
+      description: |
+        Exchanges a short-lived, single-use pairing code — displayed by the agent only
+        when an operator explicitly runs `cueseekd pair` — for a long-lived per-device
+        token.
+
+        The token is returned **once** and is never recoverable: the agent stores only
+        its hash. Redemption is rate-limited with backoff, because a short code is
+        guessable given unlimited attempts (ADR-0006).
+
+        This is the only unauthenticated operation.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PairRequest" }
+      responses:
+        "201":
+          description: Device paired. The token is shown here and never again.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403":
+          description: |
+            The pairing code is invalid, expired, or already redeemed. Deliberately
+            indistinguishable — telling a caller which of the three would help them
+            enumerate.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /v1/devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      summary: List paired devices
+      x-required-scope: read
+      responses:
+        "200":
+          description: All paired devices.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Device" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/devices/{deviceId}:
+    delete:
+      operationId: revokeDevice
+      tags: [devices]
+      summary: Revoke a device
+      description: |
+        Revocation is immediate and affects only this device. Losing a phone means
+        deleting one row, not rotating a secret shared by every client — which is the
+        whole reason per-device tokens exist rather than a single API key.
+      x-required-scope: read
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "204": { description: Device revoked. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/services:
+    get:
+      operationId: listServices
+      tags: [services]
+      summary: All managed services with capabilities and health
+      description: |
+        Cold-start and polling equivalent of the stream's first snapshot. Wear OS uses
+        this exclusively (ADR-0004).
+      x-required-scope: read
+      responses:
+        "200":
+          description: All managed services.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Service" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/services/{serviceId}:
+    get:
+      operationId: getService
+      tags: [services]
+      summary: One managed service
+      x-required-scope: read
+      parameters:
+        - $ref: "#/components/parameters/ServiceId"
+      responses:
+        "200":
+          description: The service.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Service" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/services/{serviceId}/actions/{actionId}:
+    post:
+      operationId: invokeServiceAction
+      tags: [services]
+      summary: Invoke an action on a service
+      description: |
+        Accepts the action and returns immediately with an action id. Progress and
+        terminal state arrive over the stream.
+
+        The agent cannot report a synchronous result: `RestartUnit` returns a systemd
+        *job* that completes later, and M0 confirmed that a `rc=0` return means only
+        that the job was enqueued (`docs/m0-findings.md`).
+
+        Requires the `service.control` scope. Scope enforcement happens here, in the
+        agent — client-side confirmation prompts are user experience, not a control.
+      x-required-scope: service.control
+      parameters:
+        - $ref: "#/components/parameters/ServiceId"
+        - $ref: "#/components/parameters/ActionId"
+      responses:
+        "202":
+          description: Action accepted. Watch the stream for its outcome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ActionAccepted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The action is not currently possible, e.g. already in progress.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
+  /v1/stream:
+    get:
+      operationId: streamEvents
+      tags: [stream]
+      summary: Live state as a stream of events
+      description: |
+        Emits a `snapshot` event on connect, then `service_updated`, `action_progress`
+        and periodic `heartbeat` events. Reconnecting yields a new full snapshot; there
+        is no `Last-Event-ID` replay buffer.
+
+        ## Transport is provisional
+
+        The default transport is Server-Sent Events (`text/event-stream`). That choice
+        is **not yet validated** on a real mobile network — assumption A7 of the M0
+        spike remains open, and is scheduled immediately before the stream is
+        implemented.
+
+        The event payloads below are therefore defined as standalone components rather
+        than inline. If A7 shows SSE behaves badly on mobile data, the transport can
+        change — to WebSocket, or to a `since`-parameterised poll — while every payload
+        schema, and therefore every generated client type, carries over unchanged. The
+        envelope's `schema_version` is versioned independently of the URL path for the
+        same reason: old Wear builds outlive refactors.
+
+        Consumers should treat this endpoint's *framing* as unstable until A7 closes,
+        and its *payloads* as stable.
+      x-required-scope: read
+      x-provisional: true
+      responses:
+        "200":
+          description: |
+            An event stream. Each SSE `data:` field contains one `StreamEnvelope`
+            encoded as JSON.
+          content:
+            text/event-stream:
+              schema: { $ref: "#/components/schemas/StreamEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
 components:
   securitySchemes:
@@ -114,38 +296,371 @@ components:
 
         | Scope | Grants |
         | --- | --- |
-        | `read` | Read state: services, capabilities, host metrics, the stream. |
-        | `service.control` | Invoke service-level actions, e.g. restart Jellyfin. |
+        | `read` | Read state: system, devices, services, the stream. |
+        | `service.control` | Invoke service actions, e.g. restart Jellyfin. |
         | `host.power` | Reboot or shut down the machine. |
 
-        Scopes are separate grants, not tiers. A paired watch is typically issued
-        `read` and `service.control` but not `host.power`, making it structurally
-        incapable of powering off the server regardless of what its UI offers.
+        Scopes are separate grants, not tiers. A paired watch is typically issued `read`
+        and `service.control` but not `host.power`, making it structurally incapable of
+        powering off the server regardless of what its UI offers.
 
-        Client-side confirmation (a biometric prompt before a destructive action) is
-        user-experience. Scope enforcement in the agent is the actual control. Both
-        are required.
+        The scope each operation requires is given by `x-required-scope`. It is an
+        extension rather than a formal OpenAPI construct because scopes are only modelled
+        natively for OAuth2 and OpenID Connect, and neither applies here (ADR-0006).
 
-  # Schemas land alongside the operations that use them. The conventions they must
-  # follow, fixed now:
-  #
-  #   * Health separates REACHABILITY from REPORTED STATUS. "We could not reach
-  #     qBittorrent" and "qBittorrent reports itself degraded" are different facts,
-  #     and a console that conflates them is lying to the operator.
-  #
-  #   * `unknown` is a first-class status, not an error. Before the first poll
-  #     completes, and whenever state is stale, the honest answer is "I don't know".
-  #     Showing a stale green light is worse than showing nothing.
-  #
-  #   * Every state payload carries the timestamp it was observed, so clients can
-  #     render staleness rather than presenting cached data as current.
-  #
-  #   * Actions are DATA, not enum cases: each carries an id, a display label and a
-  #     risk level, so a client can gate a destructive action without knowing what
-  #     that action does. Hardcoding action lists in a client discards the whole
-  #     point of capability discovery.
-  #
-  #   * Capabilities carry a human-readable display label alongside the id, so a
-  #     client that predates a capability can say "Immich Jobs — update CueSeek to
-  #     view this" instead of rendering an empty box.
-  schemas: {}
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      description: Opaque device identifier.
+      schema: { type: string }
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      description: Stable service identifier, e.g. `jellyfin`.
+      schema: { type: string }
+    ActionId:
+      name: actionId
+      in: path
+      required: true
+      description: Action identifier as advertised in the service's `actions` list.
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: The request was malformed.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Unauthorized:
+      description: Missing, invalid or revoked token.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: The token is valid but lacks the scope this operation requires.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: No such resource.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    TooManyRequests:
+      description: Rate limited. Retry after backoff.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  schemas:
+    # ---------------------------------------------------------------- errors
+    Problem:
+      type: object
+      description: |
+        Error payload following RFC 9457 (problem+json). One error shape across the whole
+        API means clients write one error mapper rather than one per endpoint.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: URI reference identifying the problem type.
+          example: "https://cueseek.dev/problems/insufficient-scope"
+        title:
+          type: string
+          description: Short, human-readable summary. Stable for a given type.
+          example: "Insufficient scope"
+        status:
+          type: integer
+          description: HTTP status code.
+          example: 403
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence.
+        instance:
+          type: string
+          description: URI reference identifying this specific occurrence.
+
+    # ---------------------------------------------------------------- system
+    System:
+      type: object
+      required: [host_id, hostname, agent_version, api_version, started_at]
+      properties:
+        host_id:
+          type: string
+          description: |
+            Stable, opaque identifier for this host. Clients key their multi-host data
+            model on it, so it must survive restarts, hostname changes and IP changes
+            (ADR-0008).
+        hostname:
+          type: string
+          description: Human-readable host name, for display only. May change.
+        agent_version:
+          type: string
+          description: Version of cueseekd.
+          example: "0.1.0"
+        api_version:
+          type: string
+          description: |
+            Version of this contract that the agent implements. Lets a client report
+            that the agent is behind, rather than silently mis-rendering.
+          example: "0.1.0"
+        started_at:
+          type: string
+          format: date-time
+          description: When the agent process started.
+
+    # --------------------------------------------------------------- pairing
+    Scope:
+      type: string
+      description: An independently grantable permission.
+      enum: [read, service.control, host.power]
+
+    Platform:
+      type: string
+      description: Client platform, recorded for display in the device list.
+      enum: [android, wearos, ios, web, desktop, cli, unknown]
+
+    PairRequest:
+      type: object
+      required: [code, device_name, platform]
+      properties:
+        code:
+          type: string
+          description: The single-use pairing code displayed by the agent.
+          example: "7F2K-90QX"
+        device_name:
+          type: string
+          description: Human-readable name shown in the device list.
+          example: "Pixel 8"
+          maxLength: 64
+        platform: { $ref: "#/components/schemas/Platform" }
+
+    PairResponse:
+      type: object
+      required: [token, device]
+      properties:
+        token:
+          type: string
+          description: |
+            The bearer token. Returned once and never recoverable — the agent stores
+            only its hash. Clients must persist it in platform-secure storage.
+        device: { $ref: "#/components/schemas/Device" }
+
+    Device:
+      type: object
+      required: [id, name, platform, scopes, created_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        platform: { $ref: "#/components/schemas/Platform" }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/Scope" }
+        created_at: { type: string, format: date-time }
+        last_seen_at:
+          type: string
+          format: date-time
+          description: Absent if the device has not made a request since pairing.
+
+    # ---------------------------------------------------------------- health
+    HealthStatus:
+      type: string
+      description: |
+        A closed set, shared by the API, both clients and the design system's status
+        language. Adding a fifth value is a contract change, not an implementation
+        detail (ADR-0008, ADR-0010).
+
+        `unknown` is a real state, not an error: before the first poll completes, and
+        whenever cached state has aged past tolerance, the honest answer is "I don't
+        know". Showing stale green while the agent cannot reach a service is worse than
+        showing nothing, because it is confidently wrong.
+      enum: [healthy, degraded, unreachable, unknown]
+
+    HealthReason:
+      type: object
+      description: |
+        Why a service is in its current state. "Degraded" alone is not actionable;
+        "degraded: unreachable for 4m" is, and it is also what a notification would say.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable identifier, safe to branch on.
+          example: "unreachable"
+        message:
+          type: string
+          description: Human-readable explanation.
+          example: "No response for 4m12s"
+
+    Health:
+      type: object
+      required: [status, reachable, observed_at, reasons]
+      properties:
+        status: { $ref: "#/components/schemas/HealthStatus" }
+        reachable:
+          type: boolean
+          description: |
+            Whether the agent could reach the service at `observed_at`.
+
+            Deliberately separate from `status` and from `reported_status`. "We could not
+            reach qBittorrent" and "qBittorrent reports itself degraded" are different
+            facts, and a console that conflates them lies to its operator (ADR-0005).
+        reported_status:
+          type: string
+          description: |
+            What the service says about itself, verbatim and unmapped. Absent when the
+            service was unreachable or reports nothing.
+        reasons:
+          type: array
+          items: { $ref: "#/components/schemas/HealthReason" }
+        observed_at:
+          type: string
+          format: date-time
+          description: |
+            When this state was actually observed — not when it was served. Clients
+            render staleness from this rather than presenting cached data as current.
+
+    # -------------------------------------------------------------- services
+    Capability:
+      type: object
+      description: |
+        A capability a service supports. Clients hold a map of capability id to renderer
+        and look it up; they must never branch on service id (ADR-0007).
+      required: [id, label]
+      properties:
+        id:
+          type: string
+          description: |
+            Stable capability identifier. Not an enum: capabilities are added by agent
+            updates, and a client must tolerate ids it has never heard of.
+          example: "now_playing"
+        label:
+          type: string
+          description: |
+            Human-readable name. Exists so a client that predates a capability can render
+            "Immich Jobs — update CueSeek to view this" rather than an empty box.
+          example: "Now Playing"
+
+    ActionRisk:
+      type: string
+      description: |
+        How much care an action warrants. Clients gate on this without knowing what the
+        action does — which is what lets a new action ship to an existing client with a
+        confirmation prompt already attached.
+      enum: [safe, disruptive, destructive]
+
+    Action:
+      type: object
+      description: |
+        An action descriptor. Actions are DATA, not enum cases — hardcoding an action
+        list in a client discards capability discovery entirely (ADR-0005).
+      required: [id, label, risk]
+      properties:
+        id: { type: string, example: "restart" }
+        label: { type: string, example: "Restart Jellyfin" }
+        risk: { $ref: "#/components/schemas/ActionRisk" }
+        description:
+          type: string
+          description: Optional longer explanation, shown in a confirmation dialog.
+
+    Service:
+      type: object
+      required: [id, name, capabilities, health, actions]
+      properties:
+        id:
+          type: string
+          description: Stable service identifier.
+          example: "jellyfin"
+        name:
+          type: string
+          description: Display name.
+          example: "Jellyfin"
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+        health: { $ref: "#/components/schemas/Health" }
+        actions:
+          type: array
+          description: Empty if the service does not implement the `control` capability.
+          items: { $ref: "#/components/schemas/Action" }
+
+    # --------------------------------------------------------------- actions
+    ActionStatus:
+      type: string
+      enum: [pending, running, succeeded, failed]
+
+    ActionAccepted:
+      type: object
+      required: [action_id, service_id, action, status, accepted_at]
+      properties:
+        action_id:
+          type: string
+          description: Correlates this invocation with `action_progress` stream events.
+        service_id: { type: string }
+        action: { type: string }
+        status: { $ref: "#/components/schemas/ActionStatus" }
+        accepted_at: { type: string, format: date-time }
+
+    ActionProgress:
+      type: object
+      required: [action_id, service_id, action, status, at]
+      properties:
+        action_id: { type: string }
+        service_id: { type: string }
+        action: { type: string }
+        status: { $ref: "#/components/schemas/ActionStatus" }
+        at: { type: string, format: date-time }
+        error:
+          type: string
+          description: Present when `status` is `failed`.
+
+    # ---------------------------------------------------------------- stream
+    # These payloads are transport-agnostic ON PURPOSE. They are referenced by the SSE
+    # endpoint today, but if A7 changes the transport they carry over unchanged.
+    StreamEventType:
+      type: string
+      enum: [snapshot, service_updated, action_progress, heartbeat]
+
+    StreamEnvelope:
+      type: object
+      description: |
+        One event. `schema_version` is versioned independently of the URL path, because
+        client releases and agent releases drift apart — a Wear build will routinely be
+        older than the agent it talks to.
+      required: [type, seq, emitted_at, schema_version]
+      properties:
+        type: { $ref: "#/components/schemas/StreamEventType" }
+        seq:
+          type: integer
+          format: int64
+          description: |
+            Monotonic per connection, starting at 0 for the snapshot. Lets a client
+            detect a gap. It is not a resume token — reconnecting yields a fresh
+            snapshot and a reset sequence.
+        emitted_at: { type: string, format: date-time }
+        schema_version:
+          type: string
+          description: Version of the event payload schema.
+          example: "1"
+        snapshot: { $ref: "#/components/schemas/Snapshot" }
+        service:
+          allOf: [{ $ref: "#/components/schemas/Service" }]
+          description: Present when `type` is `service_updated`.
+        action_progress:
+          allOf: [{ $ref: "#/components/schemas/ActionProgress" }]
+          description: Present when `type` is `action_progress`.
+
+    Snapshot:
+      type: object
+      description: |
+        Complete current state. Sent as the first event on every connection, which is
+        what removes the need for a replay buffer.
+      required: [system, services]
+      properties:
+        system: { $ref: "#/components/schemas/System" }
+        services:
+          type: array
+          items: { $ref: "#/components/schemas/Service" }

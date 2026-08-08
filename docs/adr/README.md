@@ -27,11 +27,15 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 1. **One decision per record.** If it needs "and", it is two ADRs.
 2. **Write it when the decision is made**, not afterwards. A retroactive ADR documents;
    a contemporaneous one reasons. The difference is visible.
-3. **ADRs are immutable once accepted.** Changing your mind means writing a new record
-   that supersedes the old one. The record of a decision that turned out badly is more
-   valuable than its absence — deleting it hides the very thing worth learning from.
-4. **State the cost.** Every decision closed a door. Say which one.
-5. **Number sequentially, never reuse a number.**
+3. **An accepted decision is never rewritten.** Changing your mind means writing a new
+   record that supersedes the old one. The record of a decision that turned out badly is
+   more valuable than its absence — deleting it hides the very thing worth learning from.
+4. **Amend when the decision stands but a constraint changed.** A tooling limitation or a
+   pinned external version gets a dated entry in a `## Amendments` section at the end of
+   the record, stating what did *not* change. Test: would you decide differently today?
+   If yes, supersede. If not, amend — see ADR-0004's Amendment 1 for the shape.
+5. **State the cost.** Every decision closed a door. Say which one.
+6. **Number sequentially, never reuse a number.**
 
 ## Index
 
@@ -41,7 +45,7 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | [0001](0001-vpn-only-remote-access.md) | VPN-only remote access | Accepted |
 | [0002](0002-host-privilege-dbus-polkit.md) | Unprivileged agent via D-Bus and polkit | Accepted |
 | [0003](0003-agent-runtime-go.md) | Go for the agent runtime | Accepted |
-| [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI 3.1 with SSE | Accepted |
+| [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended 2026-08-08 |
 | [0005](0005-capability-based-adapters.md) | Capability-based adapters | Accepted |
 | [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted |
 | [0007](0007-client-capability-registry.md) | Client-side capability registry | Accepted |

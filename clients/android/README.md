@@ -1,6 +1,6 @@
 # CueSeek for Android
 
-> **Placeholder.** The Gradle project lands in M3. This file records what will be built
+> **Placeholder.** The Gradle project lands in M2. This file records what will be built
 > here and the constraints it must respect, so the structure is reviewable first.
 
 ## Planned modules

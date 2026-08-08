@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent:
+    name: Agent
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read the version from go.mod rather than pinning it here, so there is one
+          # place to change it.
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # ---------------------------------------------------------------------------
+      # The contract-drift gate. This is the job that makes ADR-0009 real.
+      #
+      # api/openapi.yaml is the single source of truth; the Go server interfaces are
+      # generated from it. Regenerating and then failing on any diff means the two
+      # cannot silently disagree. Without this step, "spec-first" is a convention
+      # maintained by discipline — and conventions lose to whichever file is faster to
+      # edit under deadline.
+      #
+      # It also catches the subtler direction: a hand-edit to generated code. Those
+      # survive review easily and are erased by the next regeneration, taking whatever
+      # behaviour depended on them with it.
+      # ---------------------------------------------------------------------------
+      - name: Regenerate from the contract
+        working-directory: agent
+        run: go generate ./...
+
+      - name: Fail if generated code has drifted from the contract
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::Generated code does not match api/openapi.yaml."
+            echo "::error::Run 'cd agent && go generate ./...' and commit the result."
+            exit 1
+          fi
+
+      - name: gofmt
+        working-directory: agent
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::Not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: agent
+        run: go vet ./...
+
+      - name: Test
+        working-directory: agent
+        run: go test -race ./...
+
+      - name: Build
+        working-directory: agent
+        run: go build ./...
+
+      # The agent is developed on Windows and deployed to Linux. Building only for the
+      # host would let a Linux-only regression reach the target undetected — and once
+      # the D-Bus host layer lands, that is exactly where platform-specific code lives.
+      - name: Cross-compile for the deployment target
+        working-directory: agent
+        env:
+          GOOS: linux
+          GOARCH: amd64
+        run: go build -o /tmp/cueseekd ./cmd/cueseekd

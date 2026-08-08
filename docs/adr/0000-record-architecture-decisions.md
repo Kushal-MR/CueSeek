@@ -23,8 +23,20 @@ Record every significant architectural decision as an ADR in `docs/adr/`, using
 [Michael Nygard's format](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions):
 Context, Decision, Consequences.
 
-Records are written **when the decision is made**, are immutable once accepted, and are
-superseded by new records rather than edited. Every record states its cost.
+Records are written **when the decision is made**. Every record states its cost.
+
+A decision, once accepted, is **never rewritten**. Reversing or replacing it means writing
+a new record that supersedes the old one; the original stays as it was.
+
+A record may be **amended** when the decision still stands but a constraint on how it is
+carried out has changed — a tooling limitation discovered later, a version pinned by an
+external dependency. Amendments are appended in a dated `## Amendments` section, never
+folded into the original prose, and must state explicitly what did *not* change.
+
+The distinction is whether you would decide differently today. If yes, supersede. If the
+decision holds and only its expression is constrained, amend — burying that constraint in
+a separate record would separate it from the decision it qualifies, which is precisely
+what these records exist to prevent.
 
 ## Consequences
 

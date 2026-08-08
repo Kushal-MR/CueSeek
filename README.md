@@ -128,7 +128,7 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | [0001](docs/adr/0001-vpn-only-remote-access.md) | VPN-only remote access; no relay, no public exposure |
 | [0002](docs/adr/0002-host-privilege-dbus-polkit.md) | Unprivileged agent; systemd/logind via D-Bus + polkit |
 | [0003](docs/adr/0003-agent-runtime-go.md) | Go for the agent |
-| [0004](docs/adr/0004-contract-openapi-sse.md) | Spec-first OpenAPI 3.1 + SSE |
+| [0004](docs/adr/0004-contract-openapi-sse.md) | Spec-first OpenAPI (3.0.3) + SSE |
 | [0005](docs/adr/0005-capability-based-adapters.md) | Capability interfaces with runtime discovery |
 | [0006](docs/adr/0006-device-pairing-scoped-tokens.md) | Device pairing with per-device scoped tokens |
 | [0007](docs/adr/0007-client-capability-registry.md) | Client-side capability registry, not server-driven UI |
@@ -144,18 +144,21 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
-| **M1** | Repository skeleton, ADRs, contract placeholder | ✅ Done |
-| **M0** | De-risking spike: prove polkit + D-Bus, and SSE over a tailnet | 🟡 polkit/D-Bus proven — [findings](docs/m0-findings.md); SSE test outstanding |
-| **M2** | Agent: pairing, scoped tokens, Jellyfin health + restart | ⬜ |
-| **M3** | Android: pair by QR, one capability-driven card, one action | ⬜ |
-| **M4** | qBittorrent, `now_playing`, host metrics, power actions, design system | ⬜ |
-| **M5** | Wear OS standalone client, tiles and complications | ⬜ |
-| **M6** | A third adapter, used to measure whether the abstraction held | ⬜ |
+| **Setup** | Repository skeleton, ADRs, contract placeholder | ✅ Done |
+| **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | 🟡 polkit/D-Bus proven — [findings](docs/m0-findings.md); SSE test (A7) outstanding |
+| **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | 🟡 in progress — contract and CI drift gate landed |
+| **M2** | Android client: pair by QR, one capability-driven card, one action | ⬜ |
+| **M3** | qBittorrent, `now_playing`, host metrics, power actions, design system | ⬜ |
+| **M4** | Wear OS standalone client, tiles and complications | ⬜ |
+| **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
 
-M0 runs *after* the skeleton and *before* the agent, deliberately: it is throwaway code
-whose only job is to prove that a polkit rule really does grant an unprivileged daemon
-`RestartUnit` and `PowerOff` on a real machine. If that assumption is wrong, several
-decisions change, and the cheapest moment to discover it is before anything depends on it.
+**Setup** is unnumbered on purpose: it produced structure and decisions, but no behaviour.
+Numbering starts where the software does.
+
+**M0 runs before the agent, deliberately.** It is throwaway code whose only job is to prove
+that a polkit rule really does grant an unprivileged daemon `RestartUnit` and `PowerOff` on
+a real machine. If that assumption were wrong, several decisions would change — and the
+cheapest moment to discover it is before anything depends on it.
 
 ---
 

@@ -1,6 +1,6 @@
 # Deployment
 
-> **Placeholder.** Real artifacts land alongside the agent in M2, validated by the M0
+> **Placeholder.** Real artifacts land alongside the agent in M1, validated by the M0
 > spike.
 
 ## Planned contents
