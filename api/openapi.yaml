@@ -1,0 +1,151 @@
+# =============================================================================
+# CueSeek API — the contract.
+#
+# This file is HAND-AUTHORED and is the single source of truth for the agent and
+# every client. Server interfaces (Go) and client SDKs (Kotlin/Swift/TS) are
+# GENERATED FROM IT. Never generate this file from handler code: a spec derived
+# from an implementation is a description, not a contract. See ADR-0004.
+#
+# STATUS: skeleton. No operations are defined yet — they land with the agent
+# milestone. The structure below fixes the conventions those operations must follow.
+# =============================================================================
+openapi: 3.1.0
+
+info:
+  title: CueSeek Agent API
+  version: 0.0.0
+  summary: Health, activity and control for a self-hosted server.
+  description: |
+    The API exposed by `cueseekd`, the CueSeek host agent.
+
+    ## Transport and exposure
+
+    This API is **not designed to be exposed to the public internet**. It assumes the
+    client can already reach the host over a private network (Tailscale, WireGuard or
+    LAN), and therefore performs no TLS termination of its own. See ADR-0001.
+
+    Network reachability is not authorisation: every request is authenticated with a
+    per-device token carrying explicit scopes. See ADR-0006.
+
+    ## Reads are a stream; writes are RPCs
+
+    Live state (`GET /v1/stream`) arrives over Server-Sent Events: a full snapshot as
+    the first event, then deltas. Reconnecting yields a new full snapshot — there is
+    no replay buffer, because the state is small and correctness beats bandwidth.
+
+    `GET /v1/services` exists for cold start and for clients that cannot hold a stream
+    open. Wear OS uses it exclusively: a held SSE connection does not survive Doze, so
+    nothing background-critical may depend on the stream.
+
+    ## Actions are asynchronous
+
+    Actions return `202 Accepted` with an action id; progress and terminal state arrive
+    over the stream. This is not ceremony. `POST /v1/host/actions/reboot` races the
+    machine going down — a synchronous response would surface a *successful* reboot to
+    the client as a network error. Destructive host actions are therefore acknowledged
+    first and executed after a short delay.
+
+    ## Capabilities
+
+    Services advertise capabilities (`health`, `control`, `now_playing`, `transfers`, …)
+    rather than being identified by type. Clients render per capability and must never
+    branch on service id. Capability names are public API: once `now_playing` ships it
+    is a semantic contract shared by Jellyfin, Plex and Emby, not a reflection of any
+    one service's data model. See ADR-0005 and ADR-0007.
+  contact:
+    name: CueSeek
+    url: https://github.com/Kushal-MR/CueSeek
+  license:
+    name: TBD
+
+servers:
+  - url: http://{host}:{port}/
+    description: A cueseekd instance, reachable over a private network.
+    variables:
+      host:
+        default: localhost
+        description: Hostname or tailnet address of the server running cueseekd.
+      port:
+        default: "7777"
+
+tags:
+  - name: services
+    description: Managed services and their capabilities.
+  - name: host
+    description: The machine itself — metrics and power control.
+  - name: stream
+    description: Live state over Server-Sent Events.
+  - name: pairing
+    description: Device enrolment and token issuance.
+  - name: devices
+    description: Paired device management and revocation.
+
+security:
+  - deviceToken: []
+
+paths: {}
+  # -------------------------------------------------------------------------
+  # Planned surface. Each lands with the milestone that implements it, together
+  # with its schemas and its generated client. Listed here so the shape of the
+  # API is reviewable before any of it is built.
+  #
+  #   POST   /v1/pair                              pairing   redeem a pairing code
+  #   GET    /v1/devices                           devices   list paired devices
+  #   DELETE /v1/devices/{deviceId}                devices   revoke a device
+  #
+  #   GET    /v1/stream                            stream    SSE: snapshot, then deltas
+  #   GET    /v1/services                          services  all services + capabilities
+  #   GET    /v1/services/{serviceId}              services  one service
+  #   POST   /v1/services/{serviceId}/actions/{actionId}
+  #                                                services  202 + action id
+  #
+  #   GET    /v1/host                              host      metrics + overall health
+  #   POST   /v1/host/actions/{actionId}           host      reboot / poweroff
+  # -------------------------------------------------------------------------
+
+components:
+  securitySchemes:
+    deviceToken:
+      type: http
+      scheme: bearer
+      description: |
+        A per-device token issued at pairing time. Tokens are stored by the agent as
+        hashes only, are individually revocable, and carry independent scopes:
+
+        | Scope | Grants |
+        | --- | --- |
+        | `read` | Read state: services, capabilities, host metrics, the stream. |
+        | `service.control` | Invoke service-level actions, e.g. restart Jellyfin. |
+        | `host.power` | Reboot or shut down the machine. |
+
+        Scopes are separate grants, not tiers. A paired watch is typically issued
+        `read` and `service.control` but not `host.power`, making it structurally
+        incapable of powering off the server regardless of what its UI offers.
+
+        Client-side confirmation (a biometric prompt before a destructive action) is
+        user-experience. Scope enforcement in the agent is the actual control. Both
+        are required.
+
+  # Schemas land alongside the operations that use them. The conventions they must
+  # follow, fixed now:
+  #
+  #   * Health separates REACHABILITY from REPORTED STATUS. "We could not reach
+  #     qBittorrent" and "qBittorrent reports itself degraded" are different facts,
+  #     and a console that conflates them is lying to the operator.
+  #
+  #   * `unknown` is a first-class status, not an error. Before the first poll
+  #     completes, and whenever state is stale, the honest answer is "I don't know".
+  #     Showing a stale green light is worse than showing nothing.
+  #
+  #   * Every state payload carries the timestamp it was observed, so clients can
+  #     render staleness rather than presenting cached data as current.
+  #
+  #   * Actions are DATA, not enum cases: each carries an id, a display label and a
+  #     risk level, so a client can gate a destructive action without knowing what
+  #     that action does. Hardcoding action lists in a client discards the whole
+  #     point of capability discovery.
+  #
+  #   * Capabilities carry a human-readable display label alongside the id, so a
+  #     client that predates a capability can say "Immich Jobs — update CueSeek to
+  #     view this" instead of rendering an empty box.
+  schemas: {}

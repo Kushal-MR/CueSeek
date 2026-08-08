@@ -1,0 +1,72 @@
+# Line endings are a property of this repository, not of each contributor's git
+# config. Without this file, normalisation depends on core.autocrlf being set
+# correctly on every machine — and the failure mode is remote: a shell script or
+# systemd unit authored on Windows reaches a Linux host with CRLF and dies as
+# "bad interpreter: /bin/bash^M", which does not look like a line-ending problem.
+
+# Normalise everything git detects as text; check out with LF everywhere.
+* text=auto eol=lf
+
+# ---------- Files that MUST be LF, because Linux executes them ----------
+*.sh        text eol=lf
+*.service   text eol=lf
+*.rules     text eol=lf
+*.socket    text eol=lf
+*.timer     text eol=lf
+
+# ---------- Source & config ----------
+*.go        text eol=lf
+*.kt        text eol=lf
+*.kts       text eol=lf
+*.java      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.xml       text eol=lf
+*.md        text eol=lf
+*.pro       text eol=lf
+*.properties text eol=lf
+go.mod      text eol=lf
+go.sum      text eol=lf
+Makefile    text eol=lf
+
+# ---------- Windows-only files that must keep CRLF ----------
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# ---------- Gradle wrapper (arrives with the Android client) ----------
+gradlew     text eol=lf
+gradlew.bat text eol=crlf
+gradle-wrapper.jar binary
+
+# ---------- Binary: never normalise, never diff ----------
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.webp   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.jar    binary
+*.so     binary
+*.dll    binary
+*.exe    binary
+*.apk    binary
+*.aab    binary
+*.jks    binary
+*.keystore binary
+*.db     binary
+*.sqlite binary
+
+# ---------- Generated code ----------
+# ADR-0009 commits code generated from api/openapi.yaml so the CI drift gate can
+# diff it. Marking it generated collapses it in review and keeps GitHub's language
+# statistics honest — without it, generated Kotlin would misrepresent what was
+# actually written by hand. These paths activate when codegen lands.
+clients/android/core/api/build/generated/**  linguist-generated=true
+agent/internal/api/gen/**                    linguist-generated=true
+
+# ---------- Screenshot-test goldens ----------
+# Committed on purpose (ADR-0010), but they are images: no diff, no merge.
+**/src/test/snapshots/**/*.png binary

@@ -1,0 +1,75 @@
+# ---------- Machine-local tooling ----------
+# Per-machine Claude Code settings: permission allowlists containing absolute
+# paths and local usernames. Shared project config (.claude/settings.json,
+# .claude/agents/, .claude/commands/) is deliberately NOT ignored — it belongs
+# in the repository.
+.claude/settings.local.json
+.claude/*.local.json
+
+# ---------- Secrets & local config ----------
+# The agent's runtime state (device registry, token hashes, audit log) and any
+# real service credentials must never be committed. See ADR-0006.
+*.local.yaml
+*.local.yml
+config.yaml
+!config.example.yaml
+secrets/
+*.pem
+*.key
+!**/testdata/**/*.pem
+!**/testdata/**/*.key
+
+# ---------- Go ----------
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/agent/bin/
+/agent/dist/
+/dist/
+go.work
+go.work.sum
+coverage.out
+coverage.html
+
+# ---------- Android / Gradle / Kotlin ----------
+.gradle/
+build/
+captures/
+local.properties
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.jks
+*.keystore
+!debug.keystore
+.cxx/
+lint-results*.html
+lint-results*.xml
+# Screenshot-test output (Paparazzi). Golden images ARE committed; failures are not.
+**/src/test/snapshots/**/*_delta.png
+out/
+
+# ---------- Generated code ----------
+# Generated from api/openapi.yaml. Committed deliberately so the CI drift gate can
+# diff regenerated output against the tree — see ADR-0009. Nothing is ignored here
+# on purpose; this block is a signpost, not a rule.
+
+# ---------- IDE & editors ----------
+.idea/
+!.idea/codeStyles/
+*.iml
+.vscode/
+!.vscode/extensions.json
+*.swp
+*~
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
