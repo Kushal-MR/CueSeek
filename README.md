@@ -145,7 +145,7 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | **M1** | Repository skeleton, ADRs, contract placeholder | ✅ Done |
-| **M0** | De-risking spike: prove polkit + D-Bus, and SSE over a tailnet | ⬜ Next |
+| **M0** | De-risking spike: prove polkit + D-Bus, and SSE over a tailnet | 🟡 polkit/D-Bus proven — [findings](docs/m0-findings.md); SSE test outstanding |
 | **M2** | Agent: pairing, scoped tokens, Jellyfin health + restart | ⬜ |
 | **M3** | Android: pair by QR, one capability-driven card, one action | ⬜ |
 | **M4** | qBittorrent, `now_playing`, host metrics, power actions, design system | ⬜ |
