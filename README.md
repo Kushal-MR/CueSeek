@@ -102,6 +102,8 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | --- | --- |
 | `api/openapi.yaml` | The contract. Single source of truth for every client and the agent. |
 | `agent/` | `cueseekd`, the Go host agent. |
+| `agent/internal/domain/` | Shared vocabulary: scopes, devices, audit entries. Depends on nothing. |
+| `agent/internal/config/` | Configuration loading and validation, incl. the managed-unit allowlist. |
 | `agent/internal/api/` | HTTP + SSE transport, auth middleware, scope enforcement. |
 | `agent/internal/adapters/` | Capability interfaces, adapter registry, per-service adapters. |
 | `agent/internal/health/` | Derives overall status from unit state, reachability, metrics. |
