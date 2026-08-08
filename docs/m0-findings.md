@@ -61,16 +61,21 @@ inactive — so a rule can pass interactive testing and fail in production.
 | A5 | unit state readable over D-Bus | ✅ | `ActiveState`, `SubState`, `ActiveEnterTimestamp` |
 | A6 | power actions grantable | ✅ | `CanReboot`/`CanPowerOff` → `"yes"` |
 | A6b | real reboot executes | ✅ | `Broadcast message from cueseek@…: The system will reboot now!` |
-| A7 | SSE survives a tailnet on mobile data | ⬜ | not run — Tailscale not installed |
+| A7 | SSE survives a tailnet on mobile data | ⚠️ | viable, but the failure mode is not the one ADR-0004 assumed — see below |
 
 A6b's broadcast names `cueseek@`, not root: an unprivileged system user with no session,
 no shell and no sudo rights power-cycled the machine through one polkit rule.
 
 ## Consequences for ADRs
 
-**None.** ADR-0002 stands as written. Its central claim — that a single short polkit rule
-can state the complete per-unit ceiling for an unprivileged agent — is now demonstrated on
-the target host rather than argued.
+**ADR-0002 stands as written.** Its central claim — that a single short polkit rule can
+state the complete per-unit ceiling for an unprivileged agent — is now demonstrated on the
+target host rather than argued.
+
+**ADR-0004 gained Amendment 2**, from A7. Its decision holds: SSE is the transport, and
+reconnect-with-full-snapshot needs no replay buffer. But its stated failure mode was wrong,
+and the wrong reason concealed a missing requirement — clients must derive staleness from
+the clock rather than from the connection.
 
 ## Constraints this imposes on M1
 
@@ -107,6 +112,59 @@ common conventions and the error is silent.
 despite the unit's description being "qBittorrent-nox". The allowlist must be configuration,
 not a compiled-in guess.
 
+## A7 — SSE over a tailnet, run 2026-08-08
+
+Deferred from the original M0 run because Tailscale was not installed, and executed
+immediately before M1.7 rather than being allowed to lapse.
+
+**Method.** The M0 SSE spike, extended with a self-recording browser client so the phone
+could be locked and the whole history read afterwards. Every event carries a server
+sequence number, so gaps are arithmetic rather than impressions. Server bound to the
+tailnet address, not `0.0.0.0`, so the test exercised tailnet routing rather than the LAN.
+
+| Phase | Condition | Result |
+| --- | --- | --- |
+| A | Wi-Fi, screen on | Flawless. Gaps 1.9–2.0s against a 2s tick. |
+| B | Wi-Fi, screen **off** | Normal for ~75s, then **108s of silence**, then error and reconnect. |
+| C | **Mobile data**, screen on | Flawless. Gaps 1.9–2.1s, zero missed, zero reconnects. |
+| D | Mobile data, screen **off** | Normal for ~59s, then **168s of silence**, then error and reconnect. |
+| E | Mobile data, 15min untouched | Not run. See Limitations. |
+
+### The finding
+
+The stream does not die when the screen goes off. It **freezes silently while continuing
+to report itself as connected**:
+
+```
+19:52:48  tick seq=120 gap=2.0s     last normal event
+                                    108 seconds of nothing
+19:54:36  tick seq=135 gap=0.0s     burst delivery of everything queued
+19:54:36  ERROR / disconnected      the failure is admitted only now
+19:54:39  OPEN + SNAPSHOT           recovered, 3 seconds later
+```
+
+The `ERROR` fires *after* the silence, not at its start. For the whole stall the client
+believed it had a live stream. `gap=0.0s` shows the events were never lost — Android froze
+the radio, TCP backpressured, and the queue flushed on wake.
+
+This is the dangerous shape of failure. A stream that dies loudly is something a client
+reconnects from; a stream that lies leaves an operations console showing a green dot for a
+service that crashed three minutes ago. It is precisely what ADR-0008 calls "confidently
+wrong".
+
+### Consequences
+
+- **The transport choice is sound.** Phase C is decisive: mobile data, foreground, zero
+  missed events. ADR-0004's use of SSE stands.
+- **Reconnect-with-full-snapshot is validated.** Both recoveries took 3–4 seconds and
+  delivered a fresh snapshot. No replay buffer was needed, exactly as designed.
+- **ADR-0004's stated failure mode was wrong**, and the wrong reason hid a missing
+  requirement. Recorded as Amendment 2 to that ADR.
+- **The server's own sequence stalled too** — seq advanced 120→135 across 108 seconds
+  instead of the ~54 events that elapsed. The blocked write backpressured the sending
+  goroutine. M1.7's stream handler needs write deadlines, or one frozen phone parks a
+  goroutine until TCP eventually gives up.
+
 ## Limitations
 
 Stated so the results are not over-read:
@@ -122,8 +180,10 @@ Stated so the results are not over-read:
   `login1.reboot` and `login1.reboot-multiple-sessions`; which one logind actually consulted
   is not determinable from the evidence. Including both was defensive, and cannot be
   claimed to have been necessary.
-- **A7 is untested.** ADR-0004's stream design remains unvalidated on a real mobile network.
-  Worth closing before M1 commits to the stream shape.
+- **A7's deep-Doze case was not measured.** The 15-minute stationary phase was skipped once
+  the pattern proved identical on Wi-Fi and cellular. It would refine how long a stall can
+  get; it would not change the conclusion, because the required client behaviour — stop
+  trusting the connection, trust the clock — is the same at three minutes or thirty.
 
 ## Corrections made during the run
 

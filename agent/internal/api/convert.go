@@ -41,3 +41,55 @@ func toGenScopes(scopes []domain.Scope) []gen.Scope {
 	}
 	return out
 }
+
+// ---------------------------------------------------------------- services
+
+func toGenHealth(h domain.Health) gen.Health {
+	out := gen.Health{
+		Status:     gen.HealthStatus(h.Status),
+		Reachable:  h.Reachable,
+		ObservedAt: h.ObservedAt,
+		Reasons:    toGenReasons(h.Reasons),
+	}
+	// Absent rather than empty when the service reports nothing about itself. The
+	// contract defines this field as verbatim and unmapped, and an empty string would
+	// read as "the service said nothing" rather than "the service says nothing".
+	if h.ReportedStatus != "" {
+		reported := h.ReportedStatus
+		out.ReportedStatus = &reported
+	}
+	return out
+}
+
+func toGenReasons(reasons []domain.HealthReason) []gen.HealthReason {
+	out := make([]gen.HealthReason, 0, len(reasons))
+	for _, r := range reasons {
+		out = append(out, gen.HealthReason{Code: r.Code, Message: r.Message})
+	}
+	return out
+}
+
+func toGenCapabilities(caps []domain.Capability) []gen.Capability {
+	out := make([]gen.Capability, 0, len(caps))
+	for _, c := range caps {
+		out = append(out, gen.Capability{Id: c.ID, Label: c.Label})
+	}
+	return out
+}
+
+func toGenActions(actions []domain.Action) []gen.Action {
+	out := make([]gen.Action, 0, len(actions))
+	for _, a := range actions {
+		action := gen.Action{
+			Id:    a.ID,
+			Label: a.Label,
+			Risk:  gen.ActionRisk(a.Risk),
+		}
+		if a.Description != "" {
+			description := a.Description
+			action.Description = &description
+		}
+		out = append(out, action)
+	}
+	return out
+}

@@ -22,6 +22,8 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
@@ -29,6 +31,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/builtin"
 	"github.com/Kushal-MR/CueSeek/agent/internal/api"
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
@@ -108,9 +112,37 @@ func runServe(args []string) error {
 		return fmt.Errorf("resolve host id: %w", err)
 	}
 
+	// The host layer. Built even when no service is controllable, because its
+	// construction is what reports a broken D-Bus environment at startup rather than the
+	// first time somebody taps "restart".
+	hostController, err := host.New(cfg.ManagedUnits())
+	if err != nil {
+		return fmt.Errorf("host layer: %w", err)
+	}
+	defer hostController.Close()
+	slog.Info("host control ready",
+		"platform", hostController.Platform(), "managed_units", hostController.ManagedUnits())
+
+	// Adapters. Registry construction validates every service's configuration, so a
+	// missing API key or an unknown type fails startup instead of surfacing as a
+	// permanently degraded service half an hour later.
+	registry, err := builtin.NewRegistry()
+	if err != nil {
+		return err
+	}
+	if err := registry.Build(cfg, adapters.Deps{
+		HTTPClient: newUpstreamClient(),
+		Units:      hostController,
+	}); err != nil {
+		return err
+	}
+
+	poller := adapters.NewPoller(registry, cfg)
+
 	server, err := api.New(api.Options{
 		Store:        st,
-		Config:       cfg,
+		Registry:     registry,
+		Cache:        poller.Cache(),
 		AgentVersion: version,
 		HostID:       hostID,
 	})
@@ -123,11 +155,53 @@ func runServe(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := server.ListenAndServe(ctx, cfg.Bind); err != nil {
+	// Started before the listener so the first client request is answered from real
+	// state rather than from `unknown`.
+	poller.Start(ctx)
+
+	err = server.ListenAndServe(ctx, cfg.Bind)
+
+	// Polling goroutines observe the same cancelled context; waiting for them here means
+	// none is midway through a cache write when the process exits.
+	poller.Wait()
+
+	if err != nil {
 		return err
 	}
 	slog.Info("stopped")
 	return nil
+}
+
+// newUpstreamClient builds the HTTP client every adapter shares.
+//
+// Shared rather than one per adapter, so connections to a service are reused across
+// polls. Opening a fresh TCP connection — and a TLS handshake, once anything is behind
+// HTTPS — every thirty seconds for the life of the process is pure waste.
+//
+// Client.Timeout is deliberately NOT set. It would cap the whole request including the
+// body read, and would silently override the per-service deadline the poller derives from
+// configuration. Deadlines belong in the context, where one service's budget cannot be
+// spent by another.
+func newUpstreamClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+
+	// The agent talks to a handful of services on one machine. The stdlib default of 2
+	// idle connections per host is tuned for a browser talking to the wider internet and
+	// would close and reopen connections between polls.
+	transport.MaxIdleConns = 32
+	transport.MaxIdleConnsPerHost = 4
+	transport.IdleConnTimeout = 90 * time.Second
+
+	// Bounds the TCP handshake specifically, so an unreachable host fails fast instead of
+	// consuming the whole per-request budget waiting for a connection that will not open.
+	transport.DialContext = (&net.Dialer{
+		Timeout:   3 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+	transport.TLSHandshakeTimeout = 5 * time.Second
+	transport.ExpectContinueTimeout = 1 * time.Second
+
+	return &http.Client{Transport: transport}
 }
 
 // ---------------------------------------------------------------- pair

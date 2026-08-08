@@ -63,6 +63,25 @@ var (
 		Type:   problemBase + "not-found",
 		Title:  "Not found",
 	}
+	// errActionInProgress is the contract's 409 for invokeServiceAction: "not currently
+	// possible, e.g. already in progress". Queuing a second restart behind the first is
+	// never what somebody tapping twice wanted.
+	errActionInProgress = &Error{
+		Status: http.StatusConflict,
+		Type:   problemBase + "action-in-progress",
+		Title:  "Action already in progress",
+	}
+	// errActionUnavailable covers a host that cannot perform the action — an unlisted
+	// unit, a missing polkit grant, an unsupported platform.
+	//
+	// 409 rather than 500, because every one of those is a configuration problem an
+	// operator can fix, and a bare 500 would send them looking for a bug instead. Not
+	// 403: the caller's token was fine, the agent's own permissions were not.
+	errActionUnavailable = &Error{
+		Status: http.StatusConflict,
+		Type:   problemBase + "action-unavailable",
+		Title:  "Action not possible on this host",
+	}
 	errInternal = &Error{
 		Status: http.StatusInternalServerError,
 		Type:   problemBase + "internal",

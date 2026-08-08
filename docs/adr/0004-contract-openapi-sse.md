@@ -2,7 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-08
-- **Amended:** 2026-08-08 — specification version fixed at 3.0.3 (see [Amendments](#amendments))
+- **Amended:** 2026-08-08 — specification version fixed at 3.0.3; SSE failure mode corrected
+  after A7 (see [Amendments](#amendments))
 
 > The title deliberately carries no version number. The decision is *spec-first OpenAPI*;
 > which minor version is a constraint recorded below, and it is expected to change.
@@ -101,3 +102,49 @@ clients, CI drift enforcement, reads-as-stream and writes-as-async-RPC all stand
 as originally recorded. This amendment records a tooling constraint on how that decision
 is expressed, not a reversal of it — which is why it is an amendment rather than a
 superseding record. See ADR-0000.
+
+### Amendment 2 — 2026-08-08: Doze freezes the stream, it does not kill it
+
+**What changed.** This record originally stated that "Android Doze kills held streams", and
+concluded from that the stream is foreground-only. Assumption A7 was measured on the target
+phone and tailnet (`docs/m0-findings.md`), and the conclusion is right for the wrong reason.
+
+**What was measured.** Foreground behaviour is excellent — on mobile data, screen on, the
+stream ran with zero missed events and zero reconnects. With the screen off, on both Wi-Fi
+and cellular, it ran normally for roughly a minute and then went silent for **108 and 168
+seconds** respectively, before erroring and recovering in 3–4 seconds.
+
+**The correction.** Doze does not close the connection. It freezes the radio, TCP
+backpressures, and the stream **continues to report itself as connected** for the whole
+stall. The error surfaces only when the queue flushes on wake. No events are lost; they
+arrive late, in a burst.
+
+The distinction matters because the two failures need different handling. A stream that
+dies loudly is something a client reconnects from. A stream that lies leaves a console
+showing a green dot for a service that crashed three minutes earlier — which is exactly
+what ADR-0008 calls "confidently wrong", and the state that ADR's `unknown` exists to
+prevent.
+
+**Requirements this adds.**
+
+1. **Clients must not trust connection state.** A client treats data as stale when no event
+   has arrived within roughly twice the heartbeat interval, regardless of whether the
+   transport claims to be connected, and renders `unknown` (ADR-0008) rather than the last
+   known values. The mechanism already exists; A7 established that stream silence must feed
+   it, not only poll failure.
+2. **The stream must carry a periodic heartbeat**, so silence is unambiguous. Without one, a
+   quiet system is indistinguishable from a frozen one.
+3. **The server needs write deadlines.** A7 showed the agent's own sequence counter stalling
+   in step with the client — the blocked write backpressured the sending goroutine. Without
+   a deadline, one frozen phone parks a goroutine until TCP gives up on its own schedule.
+
+**What did not change.** Everything else. SSE remains the transport: the foreground case,
+which is the case CueSeek is for, was flawless over a real cellular tailnet. Reconnect
+delivering a full snapshot with no replay buffer was exercised twice and worked, so that
+choice is now measured rather than assumed. "Foreground-only, nothing background-critical
+depends on the stream" stands — the reasoning behind it is simply now correct.
+
+**What this does not settle.** Deep Doze was not measured; the 15-minute stationary phase
+was skipped once the pattern proved identical across two networks. It would refine how long
+a stall can last. It would not change any requirement above, because all three hold at three
+minutes and at thirty.

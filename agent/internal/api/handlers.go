@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/api/gen"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
+	"github.com/Kushal-MR/CueSeek/agent/internal/host"
 	"github.com/Kushal-MR/CueSeek/agent/internal/store"
 )
 
@@ -132,74 +135,230 @@ func (s *Server) RevokeDevice(ctx context.Context, request gen.RevokeDeviceReque
 
 // ---------------------------------------------------------------- services
 
-// ListServices reports the configured services.
+// ListServices reports every managed service, served entirely from cache.
 //
-// Health is `unknown` for all of them, which is the honest answer rather than a
-// placeholder: no adapter exists yet, so nothing has been observed. ADR-0008 makes
-// `unknown` a first-class state precisely for this — reporting `healthy` before the first
-// poll would be confidently wrong, which is worse than admitting ignorance.
-//
-// Capabilities and actions are empty until M1.5 registers adapters.
+// No upstream call happens here. The poller refreshes each service on its own schedule
+// and this reads what it last saw (ADR-0003). That is what stops a wedged qBittorrent
+// from hanging the dashboard, and what stops a watch glance from fanning out one request
+// per service.
 func (s *Server) ListServices(ctx context.Context, _ gen.ListServicesRequestObject) (gen.ListServicesResponseObject, error) {
-	out := make([]gen.Service, 0, len(s.services))
-	for _, svc := range s.services {
-		out = append(out, s.unpolledService(svc.ID, svc.Name))
+	services := s.registry.Services()
+	out := make([]gen.Service, 0, len(services))
+	for _, svc := range services {
+		out = append(out, s.describeService(svc))
 	}
 	return gen.ListServices200JSONResponse(out), nil
 }
 
 func (s *Server) GetService(ctx context.Context, request gen.GetServiceRequestObject) (gen.GetServiceResponseObject, error) {
-	for _, svc := range s.services {
-		if svc.ID == request.ServiceId {
-			return gen.GetService200JSONResponse(s.unpolledService(svc.ID, svc.Name)), nil
-		}
+	svc, ok := s.registry.Service(request.ServiceId)
+	if !ok {
+		return nil, errNotFound.withDetail("no service with id %q", request.ServiceId)
 	}
-	return nil, errNotFound.withDetail("no service with id %q", request.ServiceId)
+	return gen.GetService200JSONResponse(s.describeService(svc)), nil
 }
 
-func (s *Server) unpolledService(id, name string) gen.Service {
-	return gen.Service{
-		Id:           id,
-		Name:         name,
-		Capabilities: []gen.Capability{},
+// describeService joins three sources: identity and capabilities from the adapter, health
+// from the cache, and actions from the Controllable capability if the adapter has it.
+func (s *Server) describeService(svc adapters.Service) gen.Service {
+	out := gen.Service{
+		Id:           svc.ID(),
+		Name:         svc.Name(),
+		Capabilities: toGenCapabilities(adapters.CapabilitiesOf(svc)),
 		Actions:      []gen.Action{},
-		Health: gen.Health{
-			Status:     gen.HealthStatusUnknown,
-			Reachable:  false,
-			ObservedAt: s.now(),
-			Reasons: []gen.HealthReason{{
-				Code:    "not_polled",
-				Message: "No adapter is configured for this service yet.",
-			}},
-		},
 	}
+
+	if controllable, ok := svc.(adapters.Controllable); ok {
+		out.Actions = toGenActions(controllable.Actions())
+	}
+
+	if snapshot, ok := s.cache.Get(svc.ID()); ok {
+		out.Health = toGenHealth(snapshot.Health)
+	} else {
+		// Registered but untracked. Should not happen — the poller tracks everything the
+		// registry built — so say so honestly rather than inventing a status.
+		out.Health = toGenHealth(domain.UnknownHealth(s.now(), domain.HealthReason{
+			Code:    domain.ReasonNotPolled,
+			Message: "This service is not being polled.",
+		}))
+	}
+	return out
 }
 
-// InvokeServiceAction is reachable but has nothing to invoke: no service advertises
-// actions until adapters land in M1.5, so every action id is genuinely unknown. A 404
-// here is accurate rather than a stub.
+// InvokeServiceAction starts an action and returns immediately.
+//
+// The response is 202 plus an action id, never a result, because the agent has no result
+// to give: M0 established that systemd's RestartUnit returns once the job is *queued*.
+// The outcome is resolved by a background goroutine and will be published over the stream
+// in M1.7 (ADR-0004).
 func (s *Server) InvokeServiceAction(ctx context.Context, request gen.InvokeServiceActionRequestObject) (gen.InvokeServiceActionResponseObject, error) {
-	for _, svc := range s.services {
-		if svc.ID == request.ServiceId {
-			return nil, errNotFound.withDetail(
-				"service %q advertises no action %q", request.ServiceId, request.ActionId)
+	actor, err := deviceFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	svc, ok := s.registry.Service(request.ServiceId)
+	if !ok {
+		return nil, errNotFound.withDetail("no service with id %q", request.ServiceId)
+	}
+
+	controllable, ok := svc.(adapters.Controllable)
+	if !ok {
+		return nil, errNotFound.withDetail(
+			"service %q does not support actions", request.ServiceId)
+	}
+
+	// The action must be one the adapter advertises. Invoking something absent from
+	// Actions() would let a client reach behaviour that never appeared in the descriptor
+	// list a UI gates on.
+	var descriptor *domain.Action
+	for _, candidate := range controllable.Actions() {
+		if candidate.ID == request.ActionId {
+			action := candidate
+			descriptor = &action
+			break
 		}
 	}
-	return nil, errNotFound.withDetail("no service with id %q", request.ServiceId)
+	if descriptor == nil {
+		return nil, errNotFound.withDetail(
+			"service %q advertises no action %q", request.ServiceId, request.ActionId)
+	}
+
+	tracked, started := s.actions.begin(request.ServiceId, request.ActionId)
+	if tracked == nil {
+		return nil, errInternal
+	}
+	if !started {
+		s.audit(ctx, actor, "service.action", request.ServiceId, domain.OutcomeDenied,
+			fmt.Sprintf("%s already in progress", request.ActionId))
+		return nil, errActionInProgress.withDetail(
+			"%q is already running on %q; wait for it to finish",
+			request.ActionId, request.ServiceId)
+	}
+
+	// Invoked with a context that is NOT the request's. The request ends the moment the
+	// 202 is written, and cancelling the systemd job at that point is exactly the wrong
+	// behaviour — the whole design is that the work outlives the call.
+	invokeCtx, cancel := context.WithTimeout(context.Background(), actionInvokeTimeout)
+	job, err := controllable.Invoke(invokeCtx, request.ActionId)
+	if err != nil {
+		cancel()
+		s.actions.finish(tracked.ID, err)
+		s.audit(ctx, actor, "service.action", request.ServiceId, domain.OutcomeFailed,
+			fmt.Sprintf("%s: %v", request.ActionId, err))
+		return nil, s.actionError(request.ServiceId, request.ActionId, err)
+	}
+
+	s.actions.markRunning(tracked.ID)
+	s.audit(ctx, actor, "service.action", request.ServiceId, domain.OutcomeAccepted,
+		fmt.Sprintf("%s (action %s)", request.ActionId, tracked.ID))
+	slog.InfoContext(ctx, "action accepted",
+		"service", request.ServiceId, "action", request.ActionId,
+		"action_id", tracked.ID, "device", actor.ID, "risk", descriptor.Risk)
+
+	s.awaitAction(invokeCtx, cancel, tracked.ID, actor, request.ServiceId, request.ActionId, job)
+
+	return gen.InvokeServiceAction202JSONResponse(gen.ActionAccepted{
+		ActionId:   tracked.ID,
+		ServiceId:  request.ServiceId,
+		Action:     request.ActionId,
+		Status:     gen.ActionStatus(actionRunning),
+		AcceptedAt: tracked.AcceptedAt,
+	}), nil
 }
 
-// StreamEvents is declared in the contract but not implemented.
+// awaitAction resolves the job's outcome after the HTTP response has been sent.
 //
-// Deliberate: assumption A7 of the M0 spike — that an SSE stream survives a tailnet on
-// mobile data — has not been tested. ADR-0004 marks the transport provisional and the
-// contract carries x-provisional on this operation. Building it now would put the agent's
-// primary read path on the one architectural assumption still unproven, which is exactly
-// the mistake M0 exists to prevent.
+// Detached on purpose. Audit entries are written with a fresh context for the same
+// reason: the request's context is cancelled the instant the 202 is written, and using it
+// here would abort the very record that explains what happened.
+func (s *Server) awaitAction(
+	ctx context.Context, cancel context.CancelFunc,
+	trackedID string, actor domain.Device, serviceID, actionID string, job *host.Job,
+) {
+	s.background.Add(1)
+	go func() {
+		defer s.background.Done()
+		defer cancel()
+
+		if job == nil {
+			// An adapter may complete an action synchronously and return no job.
+			s.actions.finish(trackedID, nil)
+			s.audit(context.Background(), actor, "service.action", serviceID,
+				domain.OutcomeSucceeded, actionID)
+			return
+		}
+
+		result, err := job.Wait(ctx)
+		switch {
+		case err != nil:
+			s.actions.finish(trackedID, err)
+			slog.Error("action did not complete",
+				"service", serviceID, "action", actionID, "action_id", trackedID, "error", err)
+			s.audit(context.Background(), actor, "service.action", serviceID,
+				domain.OutcomeFailed, fmt.Sprintf("%s: %v", actionID, err))
+
+		case !result.Succeeded():
+			failure := fmt.Errorf("systemd reported %q", result)
+			s.actions.finish(trackedID, failure)
+			slog.Warn("action failed",
+				"service", serviceID, "action", actionID, "action_id", trackedID, "result", result)
+			s.audit(context.Background(), actor, "service.action", serviceID,
+				domain.OutcomeFailed, fmt.Sprintf("%s: %v", actionID, failure))
+
+		default:
+			s.actions.finish(trackedID, nil)
+			slog.Info("action completed",
+				"service", serviceID, "action", actionID, "action_id", trackedID)
+			s.audit(context.Background(), actor, "service.action", serviceID,
+				domain.OutcomeSucceeded, actionID)
+		}
+	}()
+}
+
+// actionError maps a host-layer failure onto the contract's declared responses.
+func (s *Server) actionError(serviceID, actionID string, err error) error {
+	switch {
+	case errors.Is(err, host.ErrUnitNotManaged):
+		// The adapter offered an action whose unit is not in the allowlist — a
+		// configuration mistake on this host, not a client error.
+		return errActionUnavailable.withDetail(
+			"%q cannot be performed: the unit behind service %q is not in this agent's "+
+				"managed list", actionID, serviceID)
+
+	case errors.Is(err, host.ErrUnauthorized):
+		// The caller did everything right; the agent is not permitted. Reporting 403
+		// would blame the client's token, and a bare 500 would hide a problem the
+		// operator can fix in one file.
+		return errActionUnavailable.withDetail(
+			"the agent is not authorised to perform %q on this host; check that the "+
+				"polkit rule in deploy/ is installed and names this unit", actionID)
+
+	case errors.Is(err, host.ErrUnitNotFound):
+		return errActionUnavailable.withDetail(
+			"the unit behind service %q does not exist on this host", serviceID)
+
+	case errors.Is(err, host.ErrUnsupportedPlatform):
+		return errActionUnavailable.withDetail(
+			"host control is not supported on this platform")
+	}
+	return errInternal
+}
+
+// StreamEvents is declared in the contract but not implemented. M1.7 replaces this.
 //
-// A7 runs immediately before M1.7, which replaces this.
+// A7 has now closed (docs/m0-findings.md): SSE over a cellular tailnet is viable, and the
+// transport choice in ADR-0004 stands. It also produced three requirements the
+// implementation must satisfy, recorded as Amendment 2 to that ADR:
+//
+//   - a periodic heartbeat, so silence is unambiguous;
+//   - write deadlines, because A7 showed a frozen phone backpressuring the sending
+//     goroutine — without one, a locked screen parks a goroutine until TCP gives up;
+//   - registration with httpServer.RegisterOnShutdown, since a stream is an in-flight
+//     request that never ends and would otherwise stall every graceful restart.
 func (s *Server) StreamEvents(ctx context.Context, _ gen.StreamEventsRequestObject) (gen.StreamEventsResponseObject, error) {
 	return nil, errNotImplemented.withDetail(
-		"the event stream lands in M1.7, after its transport is validated on a real mobile network")
+		"the event stream lands in M1.7")
 }
 
 // ---------------------------------------------------------------- audit

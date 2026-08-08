@@ -78,7 +78,9 @@ tags:
   - name: services
     description: Managed services, their capabilities and their actions.
   - name: stream
-    description: Live state. Transport provisional — see the endpoint description.
+    description: |
+      Live state over SSE. Validated on a cellular tailnet (A7); see the endpoint
+      description for the staleness handling every client must implement.
 
 security:
   - deviceToken: []
@@ -268,24 +270,31 @@ paths:
         and periodic `heartbeat` events. Reconnecting yields a new full snapshot; there
         is no `Last-Event-ID` replay buffer.
 
-        ## Transport is provisional
+        ## Clients must not trust the connection state
 
-        The default transport is Server-Sent Events (`text/event-stream`). That choice
-        is **not yet validated** on a real mobile network — assumption A7 of the M0
-        spike remains open, and is scheduled immediately before the stream is
-        implemented.
+        Assumption A7 was measured on a real phone over a cellular tailnet
+        (`docs/m0-findings.md`). Foreground behaviour was flawless. With the screen off,
+        the stream did **not** disconnect: Android froze the radio and the connection
+        went silent for up to 168 seconds while still reporting itself as connected,
+        then delivered everything in a burst on wake.
 
-        The event payloads below are therefore defined as standalone components rather
-        than inline. If A7 shows SSE behaves badly on mobile data, the transport can
-        change — to WebSocket, or to a `since`-parameterised poll — while every payload
-        schema, and therefore every generated client type, carries over unchanged. The
-        envelope's `schema_version` is versioned independently of the URL path for the
-        same reason: old Wear builds outlive refactors.
+        A client that believes "connected" therefore shows data minutes old with no
+        indication anything is wrong. Every consumer of this endpoint **must**:
 
-        Consumers should treat this endpoint's *framing* as unstable until A7 closes,
-        and its *payloads* as stable.
+        - treat state as stale when no event has arrived within roughly twice the
+          heartbeat interval, whatever the transport claims, and render `unknown`
+          (ADR-0008) rather than the last known values;
+        - reconnect on its own schedule rather than waiting to be told to.
+
+        Nothing background-critical may depend on this stream. Alerting is a separate
+        problem with a separate answer (ADR-0012).
+
+        The event payloads are defined as standalone components rather than inline, so
+        that a future change of framing — to WebSocket, or to a `since`-parameterised
+        poll — carries every payload schema, and therefore every generated client type,
+        across unchanged. The envelope's `schema_version` is versioned independently of
+        the URL path for the same reason: old Wear builds outlive refactors.
       x-required-scope: read
-      x-provisional: true
       responses:
         "200":
           description: |

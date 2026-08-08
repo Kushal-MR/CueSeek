@@ -2,17 +2,21 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
+	"github.com/Kushal-MR/CueSeek/agent/internal/host"
 	"github.com/Kushal-MR/CueSeek/agent/internal/store"
 )
 
@@ -25,8 +29,61 @@ import (
 // and prove nothing about the chain.
 
 type testEnv struct {
-	server *httptest.Server
-	store  *store.Store
+	server   *httptest.Server
+	store    *store.Store
+	api      *Server
+	cache    *adapters.Cache
+	adapter  *stubAdapter
+	registry *adapters.Registry
+}
+
+// stubAdapter stands in for a real service. It implements Controllable so action tests
+// exercise the real dispatch path, and records what it was asked to do.
+type stubAdapter struct {
+	id, name string
+
+	mu        sync.Mutex
+	invoked   []string
+	invokeErr error
+	block     chan struct{} // when non-nil, Invoke waits on it before returning
+}
+
+func (s *stubAdapter) ID() string   { return s.id }
+func (s *stubAdapter) Name() string { return s.name }
+
+func (s *stubAdapter) Health(context.Context) (domain.Health, error) {
+	return domain.Health{Status: domain.StatusHealthy, Reachable: true}, nil
+}
+
+func (s *stubAdapter) Actions() []domain.Action {
+	return []domain.Action{{
+		ID: "restart", Label: "Restart Jellyfin",
+		Description: "Restarts the service.", Risk: domain.RiskDisruptive,
+	}}
+}
+
+func (s *stubAdapter) Invoke(_ context.Context, actionID string) (*host.Job, error) {
+	s.mu.Lock()
+	s.invoked = append(s.invoked, actionID)
+	block, err := s.block, s.invokeErr
+	s.mu.Unlock()
+
+	if block != nil {
+		<-block
+	}
+	return nil, err
+}
+
+func (s *stubAdapter) invocations() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.invoked...)
+}
+
+func (s *stubAdapter) failWith(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.invokeErr = err
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -38,13 +95,32 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	t.Cleanup(func() { st.Close() })
 
+	stub := &stubAdapter{id: "jellyfin", name: "Jellyfin"}
+
+	registry := adapters.NewRegistry()
+	if err := registry.RegisterFactory("stub", func(cfg config.Service, _ adapters.Deps) (adapters.Service, error) {
+		return stub, nil
+	}); err != nil {
+		t.Fatalf("RegisterFactory: %v", err)
+	}
+	cfg := config.Config{Services: []config.Service{
+		{ID: "jellyfin", Name: "Jellyfin", Type: "stub", Unit: "jellyfin.service"},
+	}}
+	if err := registry.Build(cfg, adapters.Deps{}); err != nil {
+		t.Fatalf("registry.Build: %v", err)
+	}
+
+	// A cache, not a poller: these tests control what the API sees rather than racing a
+	// background goroutine to put it there.
+	cache := adapters.NewCache()
+	cache.Track("jellyfin", time.Minute)
+
 	srv, err := New(Options{
 		Store:        st,
+		Registry:     registry,
+		Cache:        cache,
 		AgentVersion: "test",
 		HostID:       "test-host",
-		Config: config.Config{Services: []config.Service{
-			{ID: "jellyfin", Name: "Jellyfin", Type: "jellyfin", Unit: "jellyfin.service"},
-		}},
 	})
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
@@ -52,7 +128,11 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
-	return &testEnv{server: ts, store: st}
+
+	return &testEnv{
+		server: ts, store: st, api: srv,
+		cache: cache, adapter: stub, registry: registry,
+	}
 }
 
 // do issues a request. An empty token means no Authorization header at all, which is a
@@ -557,9 +637,9 @@ func TestGetSystem(t *testing.T) {
 	}
 }
 
-// TestServicesReportUnknownBeforePolling: no adapter exists yet, so "unknown" is the only
-// honest answer. ADR-0008 makes it a first-class state precisely so the agent never has
-// to invent a status it has not observed.
+// TestServicesReportUnknownBeforePolling: the service is registered and tracked, but the
+// poller has not observed it yet. ADR-0008 makes `unknown` a first-class state precisely
+// so the agent never invents a status it has not observed.
 func TestServicesReportUnknownBeforePolling(t *testing.T) {
 	env := newTestEnv(t)
 	token := env.pairDevice(t, "Phone")

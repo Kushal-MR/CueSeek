@@ -8,10 +8,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/api/gen"
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
+	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
+	"github.com/Kushal-MR/CueSeek/agent/internal/health"
 	"github.com/Kushal-MR/CueSeek/agent/internal/store"
 )
 
@@ -36,11 +40,35 @@ const (
 	pairAttemptWindow = time.Minute
 )
 
+// actionInvokeTimeout bounds how long the agent waits for an action to reach a terminal
+// state before giving up on it.
+//
+// Generous: a systemd restart of a large media server can take a while, and abandoning a
+// job that is still progressing would leave the action recorded as failed when it
+// actually succeeded.
+const actionInvokeTimeout = 5 * time.Minute
+
+// actionDrainTimeout bounds how long shutdown waits for in-flight action bookkeeping.
+//
+// Much shorter than actionInvokeTimeout: systemd's default TimeoutStopSec is 90 seconds,
+// and a graceful stop that blocked for five minutes would be escalated to SIGKILL long
+// before it finished waiting.
+const actionDrainTimeout = 5 * time.Second
+
 // Server is the HTTP boundary: it implements gen.StrictServerInterface and owns the
 // listener.
 type Server struct {
-	store    *store.Store
-	services []config.Service
+	store *store.Store
+
+	// registry and cache are the read path. Every services response is assembled from
+	// these two and never from a live upstream call (ADR-0003).
+	registry *adapters.Registry
+	cache    *adapters.Cache
+
+	actions *actionTracker
+	// background tracks detached goroutines resolving action outcomes, so shutdown can
+	// wait for them instead of killing an in-flight restart's bookkeeping.
+	background sync.WaitGroup
 
 	requirements requirements
 	pairLimiter  *rateLimiter
@@ -59,8 +87,15 @@ type Server struct {
 
 // Options configures a Server. Everything not set falls back to a sensible default.
 type Options struct {
-	Store        *store.Store
-	Config       config.Config
+	Store *store.Store
+
+	// Registry holds the built adapters. An empty registry is valid — an agent managing
+	// no services still pairs devices and reports system information.
+	Registry *adapters.Registry
+
+	// Cache is what the poller fills. Required whenever Registry has services in it.
+	Cache *adapters.Cache
+
 	AgentVersion string
 	HostID       string
 	Now          func() time.Time
@@ -96,9 +131,22 @@ func New(opts Options) (*Server, error) {
 		agentVersion = "0.0.0-dev"
 	}
 
+	// Both default to empty rather than being required, so a Server can be constructed
+	// before any adapter exists — and so a nil here is never a panic at request time.
+	registry := opts.Registry
+	if registry == nil {
+		registry = adapters.NewRegistry()
+	}
+	cache := opts.Cache
+	if cache == nil {
+		cache = adapters.NewCache()
+	}
+
 	return &Server{
 		store:        opts.Store,
-		services:     opts.Config.Services,
+		registry:     registry,
+		cache:        cache,
+		actions:      newActionTracker(now),
 		requirements: reqs,
 		pairLimiter:  newRateLimiter(pairAttemptLimit, pairAttemptWindow),
 		hostID:       opts.HostID,
@@ -108,6 +156,49 @@ func New(opts Options) (*Server, error) {
 		startedAt:    now(),
 		now:          now,
 	}, nil
+}
+
+// OverallHealth is the agent's single answer for the whole host, computed from every
+// service's cached state (ADR-0008).
+//
+// Exposed because M1.7's stream snapshot needs it, and because computing it in one place
+// is the entire point — two callers deriving it separately would be the client-side
+// divergence this decision exists to prevent.
+func (s *Server) OverallHealth() domain.Health {
+	services := s.registry.Services()
+	inputs := make([]health.ServiceHealth, 0, len(services))
+	for _, svc := range services {
+		snapshot, ok := s.cache.Get(svc.ID())
+		if !ok {
+			continue
+		}
+		inputs = append(inputs, health.ServiceHealth{
+			ServiceID: svc.ID(), Name: svc.Name(), Health: snapshot.Health,
+		})
+	}
+	return health.Overall(inputs, s.now())
+}
+
+// waitForActions blocks until every detached action-resolution goroutine has finished,
+// or until a bounded grace period expires.
+//
+// Bounded because an action's own deadline is generous — a large media server can take a
+// while to restart — and a shutdown must not inherit that budget. If the wait expires,
+// the outcome is simply never recorded, which is the same position the agent would be in
+// had it crashed.
+func (s *Server) waitForActions() {
+	done := make(chan struct{})
+	go func() {
+		s.background.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(actionDrainTimeout):
+		slog.Warn("shutting down with actions still in flight; " +
+			"their outcomes will not be recorded")
+	}
 }
 
 // Handler assembles the full middleware chain and returns the root http.Handler.
@@ -205,7 +296,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		"address", listener.Addr().String(),
 		"agent_version", s.agentVersion,
 		"api_version", s.apiVersion,
-		"services", len(s.services))
+		"services", len(s.registry.IDs()))
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -244,6 +335,11 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 
 		cancelServe() // release anything still holding a request context
 		serveErr := <-errCh
+
+		// Actions outlive the request that started them, so they also outlive the drain.
+		// Waiting here means a restart accepted moments before shutdown still gets its
+		// outcome written to the audit log instead of vanishing.
+		s.waitForActions()
 
 		if shutdownErr != nil {
 			return fmt.Errorf("graceful shutdown incomplete: %w", shutdownErr)

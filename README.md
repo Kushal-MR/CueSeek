@@ -148,7 +148,7 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | **Setup** | Repository skeleton, ADRs, contract placeholder | ✅ Done |
-| **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | 🟡 polkit/D-Bus proven — [findings](docs/m0-findings.md); SSE test (A7) outstanding |
+| **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | ✅ Done — [findings](docs/m0-findings.md). A7 closed: SSE viable, but Doze freezes it silently rather than killing it (ADR-0004 Amendment 2) |
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | 🟡 in progress — contract and CI drift gate landed |
 | **M2** | Android client: pair by QR, one capability-driven card, one action | ⬜ |
 | **M3** | qBittorrent, `now_playing`, host metrics, power actions, design system | ⬜ |
