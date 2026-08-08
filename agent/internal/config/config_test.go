@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -191,5 +193,167 @@ services:
 func TestLoadMissingFile(t *testing.T) {
 	if _, err := Load("/does/not/exist/config.yaml"); err == nil {
 		t.Error("missing config file did not produce an error")
+	}
+}
+
+// ---------------------------------------------------------------- adapter fields
+
+func TestServiceAdapterFields(t *testing.T) {
+	cfg, err := Parse([]byte(`
+services:
+  - id: jellyfin
+    type: jellyfin
+    unit: jellyfin.service
+    base_url: http://127.0.0.1:8096
+    poll_interval: 30s
+    timeout: 5s
+    api_key: abc123
+`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	svc := cfg.Services[0]
+	if svc.BaseURL != "http://127.0.0.1:8096" || svc.APIKey != "abc123" {
+		t.Errorf("service = %+v", svc)
+	}
+	if svc.Timeout != 5*time.Second {
+		t.Errorf("timeout = %v, want 5s", svc.Timeout)
+	}
+}
+
+// TestTimeoutMustBeShorterThanInterval: a request budget at or beyond the poll interval
+// lets one slow poll still be running when the next begins, and they accumulate.
+func TestTimeoutMustBeShorterThanInterval(t *testing.T) {
+	for name, yaml := range map[string]string{
+		"equal": "services:\n  - id: j\n    type: jellyfin\n    unit: j.service\n" +
+			"    poll_interval: 10s\n    timeout: 10s\n",
+		"longer": "services:\n  - id: j\n    type: jellyfin\n    unit: j.service\n" +
+			"    poll_interval: 10s\n    timeout: 30s\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse([]byte(yaml))
+			if err == nil {
+				t.Fatal("accepted a timeout at or beyond the poll interval")
+			}
+			if !strings.Contains(err.Error(), "shorter than poll_interval") {
+				t.Errorf("error does not explain the constraint: %v", err)
+			}
+		})
+	}
+}
+
+func TestBaseURLMustBeAbsolute(t *testing.T) {
+	for name, value := range map[string]string{
+		"relative":  "/jellyfin",
+		"no scheme": "127.0.0.1:8096",
+		"bare host": "jellyfin",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse([]byte(
+				"services:\n  - id: j\n    type: jellyfin\n    unit: j.service\n" +
+					"    base_url: \"" + value + "\"\n"))
+			if err == nil || !strings.Contains(err.Error(), "base_url") {
+				t.Errorf("err = %v, want a base_url error", err)
+			}
+		})
+	}
+
+	// base_url is optional at the config layer: whether a service needs one is a property
+	// of its adapter, and the factory enforces that.
+	if _, err := Parse([]byte(
+		"services:\n  - id: j\n    type: jellyfin\n    unit: j.service\n")); err != nil {
+		t.Errorf("a service without base_url was rejected by config: %v", err)
+	}
+}
+
+func TestAPIKeyAndAPIKeyFileAreMutuallyExclusive(t *testing.T) {
+	_, err := Parse([]byte(`
+services:
+  - id: j
+    type: jellyfin
+    unit: j.service
+    api_key: abc
+    api_key_file: /etc/cueseek/jellyfin.key
+`))
+	if err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Errorf("err = %v, want a mutual-exclusion error", err)
+	}
+}
+
+// TestLoadResolvesAPIKeyFile covers the whole point of api_key_file: the key lives
+// somewhere with its own permissions, and the config file stays safe to share.
+func TestLoadResolvesAPIKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "jellyfin.key")
+	// Trailing newline included on purpose: almost every key file has one, and an
+	// untrimmed \n in an Authorization header fails as a bafflingly generic 401.
+	if err := os.WriteFile(keyPath, []byte("secret-key-value\n"), 0o600); err != nil {
+		t.Fatalf("write key file: %v", err)
+	}
+
+	configPath := filepath.Join(dir, "config.yaml")
+	body := "storage:\n  path: " + filepath.ToSlash(dir) + "/c.db\n" +
+		"services:\n  - id: jellyfin\n    type: jellyfin\n    unit: jellyfin.service\n" +
+		"    base_url: http://127.0.0.1:8096\n" +
+		"    api_key_file: " + filepath.ToSlash(keyPath) + "\n"
+	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Services[0].APIKey; got != "secret-key-value" {
+		t.Errorf("APIKey = %q, want the trimmed file contents", got)
+	}
+}
+
+func TestLoadRejectsUnreadableOrEmptyKeyFile(t *testing.T) {
+	dir := t.TempDir()
+
+	writeConfig := func(t *testing.T, keyPath string) string {
+		t.Helper()
+		configPath := filepath.Join(dir, "config-"+filepath.Base(keyPath)+".yaml")
+		body := "storage:\n  path: " + filepath.ToSlash(dir) + "/c.db\n" +
+			"services:\n  - id: jellyfin\n    type: jellyfin\n    unit: jellyfin.service\n" +
+			"    api_key_file: " + filepath.ToSlash(keyPath) + "\n"
+		if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+		return configPath
+	}
+
+	t.Run("missing", func(t *testing.T) {
+		path := writeConfig(t, filepath.Join(dir, "absent.key"))
+		if _, err := Load(path); err == nil {
+			t.Error("a missing api_key_file was accepted")
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		empty := filepath.Join(dir, "empty.key")
+		if err := os.WriteFile(empty, []byte("   \n"), 0o600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		path := writeConfig(t, empty)
+		// An empty key file would otherwise become an empty header and a confusing 401.
+		if _, err := Load(path); err == nil {
+			t.Error("an empty api_key_file was accepted")
+		}
+	})
+}
+
+// TestParseDoesNotTouchTheFilesystem: Parse is a pure function of its input, so a config
+// cannot cause a file read merely by being parsed.
+func TestParseDoesNotTouchTheFilesystem(t *testing.T) {
+	cfg, err := Parse([]byte(
+		"services:\n  - id: j\n    type: jellyfin\n    unit: j.service\n" +
+			"    api_key_file: /does/not/exist.key\n"))
+	if err != nil {
+		t.Fatalf("Parse tried to read the file: %v", err)
+	}
+	if cfg.Services[0].APIKey != "" {
+		t.Error("Parse resolved a secret; that belongs to Load")
 	}
 }

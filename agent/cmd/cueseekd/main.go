@@ -9,9 +9,11 @@
 //
 // Usage:
 //
-//	cueseekd [-config PATH]        run the agent
-//	cueseekd pair [flags]          mint a pairing code for a new device
-//	cueseekd -version              print version and exit
+//	cueseekd [-config PATH]         run the agent
+//	cueseekd pair [flags]           mint a pairing code for a new device
+//	cueseekd host status <unit>     inspect a managed unit
+//	cueseekd host restart <unit>    restart a managed unit
+//	cueseekd -version               print version and exit
 package main
 
 import (
@@ -25,10 +27,12 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Kushal-MR/CueSeek/agent/internal/api"
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
+	"github.com/Kushal-MR/CueSeek/agent/internal/host"
 	"github.com/Kushal-MR/CueSeek/agent/internal/store"
 )
 
@@ -38,13 +42,22 @@ import (
 var version = "0.0.0-dev"
 
 func main() {
-	// Subcommand dispatch before flag parsing: `pair` has its own flags.
-	if len(os.Args) > 1 && os.Args[1] == "pair" {
-		if err := runPair(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "cueseekd pair: %v\n", err)
-			os.Exit(1)
+	// Subcommand dispatch before flag parsing: subcommands have their own flags.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "pair":
+			if err := runPair(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "cueseekd pair: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "host":
+			if err := runHost(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "cueseekd host: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		}
-		return
 	}
 	if err := runServe(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "cueseekd: %v\n", err)
@@ -204,6 +217,149 @@ func hasScope(scopes []domain.Scope, want domain.Scope) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------- host
+
+// runHost exercises the host control layer directly, without going through the API.
+//
+// Two audiences. During development it verifies the systemd/polkit path on a real machine
+// before the API is wired to it. In production it is the first thing to reach for when a
+// restart fails: it distinguishes "the allowlist does not contain this unit" from "polkit
+// refused" from "systemd could not restart it" — three problems with identical symptoms
+// through the API.
+//
+//	cueseekd host status  <unit>
+//	cueseekd host restart <unit>
+func runHost(args []string) error {
+	if len(args) == 0 {
+		return errors.New(
+			"usage: cueseekd host <status|restart> [-config PATH] [-timeout D] <unit>\n" +
+				"       flags must precede the unit name")
+	}
+	action := args[0]
+
+	fs := flag.NewFlagSet("cueseekd host", flag.ExitOnError)
+	configPath := fs.String("config", config.DefaultPath, "path to the configuration file")
+	timeout := fs.Duration("timeout", 60*time.Second, "how long to wait for a restart to finish")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return fmt.Errorf(
+			"exactly one unit name is required, got %d (%v)\n"+
+				"  usage: cueseekd host %s [-config PATH] [-timeout D] <unit>\n"+
+				"  note:  flags must come BEFORE the unit name",
+			fs.NArg(), fs.Args(), action)
+	}
+	unit := fs.Arg(0)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return err
+	}
+
+	// The allowlist comes from configuration, never from a compiled-in list (ADR-0002).
+	controller, err := host.New(cfg.ManagedUnits())
+	if err != nil {
+		return err
+	}
+	defer controller.Close()
+
+	fmt.Printf("platform: %s\n", controller.Platform())
+	fmt.Printf("managed:  %s\n\n", strings.Join(controller.ManagedUnits(), ", "))
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+
+	switch action {
+	case "status":
+		return hostStatus(ctx, controller, unit)
+	case "restart":
+		return hostRestart(ctx, controller, unit)
+	default:
+		return fmt.Errorf("unknown action %q (want status or restart)", action)
+	}
+}
+
+func hostStatus(ctx context.Context, controller *host.Controller, unit string) error {
+	state, err := controller.UnitState(ctx, unit)
+	if err != nil {
+		return describeHostError(unit, err)
+	}
+	fmt.Printf("unit:          %s\n", state.Name)
+	fmt.Printf("load state:    %s\n", state.LoadState)
+	fmt.Printf("active state:  %s\n", state.ActiveState)
+	fmt.Printf("sub state:     %s\n", state.SubState)
+	if state.ActiveEnterTime.IsZero() {
+		fmt.Printf("active since:  never\n")
+	} else {
+		fmt.Printf("active since:  %s (%s ago)\n",
+			state.ActiveEnterTime.Format(time.RFC3339),
+			time.Since(state.ActiveEnterTime).Round(time.Second))
+	}
+	return nil
+}
+
+func hostRestart(ctx context.Context, controller *host.Controller, unit string) error {
+	before, err := controller.UnitState(ctx, unit)
+	if err != nil {
+		return describeHostError(unit, err)
+	}
+
+	job, err := controller.RestartUnit(ctx, unit)
+	if err != nil {
+		return describeHostError(unit, err)
+	}
+	// This is the moment the API returns 202: the job exists, its outcome does not yet.
+	fmt.Printf("job %d enqueued for %s — waiting for JobRemoved...\n", job.ID, unit)
+
+	result, err := job.Wait(ctx)
+	if err != nil {
+		return fmt.Errorf("waiting for job %d: %w", job.ID, err)
+	}
+	fmt.Printf("job result:    %s\n", result)
+
+	after, err := controller.UnitState(ctx, unit)
+	if err != nil {
+		return describeHostError(unit, err)
+	}
+
+	// A completed job is not proof the unit restarted. M0 established that RestartUnit
+	// returns once the job is queued, and confirmed the restart only by watching this
+	// timestamp advance.
+	fmt.Printf("active since:  %s -> %s\n",
+		before.ActiveEnterTime.Format(time.RFC3339),
+		after.ActiveEnterTime.Format(time.RFC3339))
+	if after.ActiveEnterTime.After(before.ActiveEnterTime) {
+		fmt.Printf("verified:      the unit genuinely restarted\n")
+	} else {
+		fmt.Printf("WARNING:       the job reported %s but the unit's start time did not move\n", result)
+	}
+
+	if !result.Succeeded() {
+		return fmt.Errorf("systemd reported %q", result)
+	}
+	return nil
+}
+
+// describeHostError turns the package's error vocabulary into advice, because these three
+// failures look identical from the outside and have completely different fixes.
+func describeHostError(unit string, err error) error {
+	switch {
+	case errors.Is(err, host.ErrUnitNotManaged):
+		return fmt.Errorf("%w\n  -> add it to `services:` in the config file", err)
+	case errors.Is(err, host.ErrUnauthorized):
+		return fmt.Errorf("%w\n  -> polkit refused. Check that the rule in deploy/ is installed "+
+			"and names this user and unit", err)
+	case errors.Is(err, host.ErrUnitNotFound):
+		return fmt.Errorf("%w\n  -> systemd has no unit %q. Check the exact name with "+
+			"`systemctl list-units --type=service`", err, unit)
+	case errors.Is(err, host.ErrUnsupportedPlatform):
+		return fmt.Errorf("%w\n  -> host control requires a systemd Linux host", err)
+	default:
+		return err
+	}
 }
 
 // ---------------------------------------------------------------- logging

@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,6 +82,24 @@ type Service struct {
 	// polls on its own schedule and serves cached state; client requests never trigger
 	// upstream calls (ADR-0003).
 	PollInterval time.Duration `yaml:"poll_interval"`
+
+	// Timeout bounds a single upstream request. Must be shorter than PollInterval, or
+	// slow polls pile up on each other.
+	Timeout time.Duration `yaml:"timeout"`
+
+	// APIKey authenticates to the service's own API.
+	//
+	// Putting a secret in the configuration file means the file itself is a secret: the
+	// packaged install must ship it 0640, owned by the cueseek user. Prefer APIKeyFile
+	// where the deployment has somewhere better to keep it.
+	APIKey string `yaml:"api_key"`
+
+	// APIKeyFile reads the key from a separate file, trimmed of whitespace.
+	//
+	// Exists so the key can live somewhere with its own permissions and its own backup
+	// policy — and so a config file can be committed to a private repo or pasted into a
+	// support request without leaking a credential. Takes precedence over APIKey.
+	APIKeyFile string `yaml:"api_key_file"`
 }
 
 // Defaults returns a Config with every optional field populated.
@@ -96,13 +115,47 @@ func Defaults() Config {
 
 const defaultPollInterval = 30 * time.Second
 
-// Load reads, parses and validates the configuration file at path.
+// Load reads, parses and validates the configuration file at path, then resolves any
+// secrets held in separate files.
+//
+// Secret resolution happens here rather than in Parse so that Parse stays a pure function
+// of its input — testable without a filesystem, and incapable of reading a file because
+// of something a config said.
 func Load(path string) (Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config %s: %w", path, err)
 	}
-	return Parse(raw)
+
+	cfg, err := Parse(raw)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := cfg.resolveSecrets(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func (c *Config) resolveSecrets() error {
+	for i, svc := range c.Services {
+		if svc.APIKeyFile == "" {
+			continue
+		}
+		raw, err := os.ReadFile(svc.APIKeyFile)
+		if err != nil {
+			return fmt.Errorf("services[%d] (%q): read api_key_file: %w", i, svc.ID, err)
+		}
+		// Trimmed because a key file almost always ends with a newline, and a trailing
+		// \n in an Authorization header fails as a bafflingly generic 401.
+		key := strings.TrimSpace(string(raw))
+		if key == "" {
+			return fmt.Errorf("services[%d] (%q): api_key_file %s is empty",
+				i, svc.ID, svc.APIKeyFile)
+		}
+		c.Services[i].APIKey = key
+	}
+	return nil
 }
 
 // Parse validates configuration from raw YAML bytes.
@@ -235,6 +288,29 @@ func (s Service) validate(i int) []error {
 		errs = append(errs, fmt.Errorf(
 			"services[%d]: poll_interval %s is too aggressive; minimum is 1s",
 			i, s.PollInterval))
+	}
+	if s.Timeout < 0 {
+		errs = append(errs, fmt.Errorf("services[%d]: timeout must not be negative", i))
+	}
+	// A request budget at or beyond the poll interval lets one slow poll still be running
+	// when the next begins, and they accumulate.
+	if s.Timeout > 0 && s.PollInterval > 0 && s.Timeout >= s.PollInterval {
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: timeout %s must be shorter than poll_interval %s",
+			i, s.Timeout, s.PollInterval))
+	}
+	if s.APIKey != "" && s.APIKeyFile != "" {
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: set api_key or api_key_file, not both", i))
+	}
+	// base_url is not required here: whether a service needs one is a property of its
+	// adapter, not of configuration. The factory validates that (see internal/adapters).
+	if s.BaseURL != "" {
+		if u, err := url.Parse(s.BaseURL); err != nil || u.Scheme == "" || u.Host == "" {
+			errs = append(errs, fmt.Errorf(
+				"services[%d]: base_url %q must be an absolute URL like http://127.0.0.1:8096",
+				i, s.BaseURL))
+		}
 	}
 	return errs
 }

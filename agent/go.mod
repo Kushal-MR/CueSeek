@@ -6,22 +6,30 @@ go 1.25.0
 // v1.56.0 requires 1.25. Anything building this agent needs at least that.
 //
 // Still expected, per the architecture:
-//   github.com/godbus/dbus/v5          systemd + logind          (ADR-0002)
-//   github.com/coreos/go-systemd/v22   unit state helpers        (ADR-0002)
 //   github.com/shirou/gopsutil/v4      host metrics              (ADR-0008)
 //
-// Already present:
+// Present:
 //   modernc.org/sqlite                 device registry + audit   (ADR-0006)
 //                                      cgo-free, so the agent stays a single static
 //                                      binary with no libsqlite3 on the target host
 //   gopkg.in/yaml.v3                   configuration
+//   github.com/coreos/go-systemd/v22   unit state + control      (ADR-0002)
+//                                      also owns the JobRemoved listener, so a restart's
+//                                      terminal state does not need hand-rolled D-Bus
+//                                      signal matching
+//   github.com/godbus/dbus/v5          D-Bus error names, for classifying polkit denials
+//
+// Both systemd packages are imported ONLY from files tagged //go:build linux, so a
+// Windows or macOS build never compiles them.
 
 // Pinned so that `go generate` produces byte-identical output here and in CI.
 // An unpinned generator turns the drift gate into a source of spurious failures.
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 
 require (
+	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/getkin/kin-openapi v0.127.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/oapi-codegen/runtime v1.6.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.56.0
