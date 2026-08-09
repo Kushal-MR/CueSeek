@@ -29,7 +29,7 @@ func newServeEnv(t *testing.T) (addr string, sigterm context.CancelFunc, serveEr
 		t.Fatalf("api.New: %v", err)
 	}
 
-	listener, err := srv.Listen(config.Bind{Address: "127.0.0.1:0"})
+	listener, err := srv.Listen(t.Context(), config.Bind{Address: "127.0.0.1:0"})
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestServeReturnsListenerErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}
-	listener, err := srv.Listen(config.Bind{Address: "127.0.0.1:0"})
+	listener, err := srv.Listen(t.Context(), config.Bind{Address: "127.0.0.1:0"})
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestListenRejectsUnavailablePort(t *testing.T) {
 	}
 	defer held.Close()
 
-	if _, err := srv.Listen(config.Bind{Address: held.Addr().String()}); err == nil {
+	if _, err := srv.Listen(t.Context(), config.Bind{Address: held.Addr().String()}); err == nil {
 		t.Error("Listen succeeded on an already-bound port")
 	}
 }

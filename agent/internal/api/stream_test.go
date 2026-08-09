@@ -485,7 +485,7 @@ func TestShutdownClosesLiveStreams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}
-	listener, err := srv.Listen(config.Bind{Address: "127.0.0.1:0"})
+	listener, err := srv.Listen(t.Context(), config.Bind{Address: "127.0.0.1:0"})
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
 	}

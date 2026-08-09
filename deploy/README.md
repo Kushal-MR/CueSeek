@@ -91,9 +91,25 @@ is not built to be exposed to the internet
 ([ADR-0001](../docs/adr/0001-vpn-only-remote-access.md)). Binding broadly and relying on
 "it's only on my LAN" is how self-hosted tools end up indexed by scanners.
 
-If you bind to a tailnet address, that interface does not exist at early boot. Uncomment
-the `After=tailscaled.service` lines in the unit, or rely on `Restart=on-failure` to
-recover.
+### Binding to a VPN address at boot
+
+The agent handles this itself. On a cold boot, `tailscaled` creates the interface
+immediately but assigns the address only after authenticating, tens of seconds later — so
+`bind()` fails with `EADDRNOTAVAIL`. Rather than treating a normal condition as a crash,
+`Listen` waits up to 90 seconds for the address to appear, retrying every 2 seconds, and
+logs `bind address is not present yet, waiting for it`. A port conflict or permission
+error still fails immediately, because those never resolve on their own.
+
+No unit ordering is required. `After=tailscaled.service` is available commented out and
+only makes the boot sequence tidier.
+
+**Do not add `tailscale0.device` to `After=` or `Wants=`.** systemd resolves any `*.device`
+unit name back to a device path, reads it as a device node at `/tailscale0`, and blocks
+for the full `DefaultTimeoutStartSec` waiting for something that never appears — measured
+at 89 seconds on the target host. It appears to fix the race because a 90-second delay
+guarantees the VPN is up by then. Ordering on the real unit
+(`sys-subsystem-net-devices-tailscale0.device`) is also insufficient: it signals that the
+interface exists, not that the address has been assigned.
 
 ## Diagnosing a refused restart
 

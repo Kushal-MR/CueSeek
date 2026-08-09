@@ -17,11 +17,21 @@ Requires=dbus.socket
 After=dbus.socket network-online.target
 Wants=network-online.target
 
-# If bind.address is a Tailscale address (100.x.y.z), that interface does not
-# exist until tailscaled has come up, and the listener will fail. Restart=
-# below recovers from it, but ordering avoids the noise. Uncomment if needed:
+# If bind.address is a VPN address, the agent handles the startup race itself: it
+# waits up to 90s for the address to appear before giving up, so no ordering is
+# strictly required here. Uncommenting these only makes the boot sequence tidier.
 # After=tailscaled.service
 # Wants=tailscaled.service
+#
+# DO NOT add `tailscale0.device`. systemd resolves any *.device unit name back to a
+# device path, so it reads that as a device node at /tailscale0, which never appears.
+# The job then blocks for the full DefaultTimeoutStartSec — measured at 89 seconds on
+# the target host — before timing out and letting this unit start. It looks like it
+# fixed the race, because a 90-second delay guarantees the VPN is up by then.
+#
+# Ordering on the real device unit (sys-subsystem-net-devices-tailscale0.device) is
+# also insufficient: it signals that the *interface* exists, while bind() needs the
+# *address*, which tailscaled assigns seconds later after authenticating.
 
 [Service]
 # exec rather than simple: systemd waits for execve to succeed, so a missing

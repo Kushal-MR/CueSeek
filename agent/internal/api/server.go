@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
@@ -47,6 +48,21 @@ const (
 // job that is still progressing would leave the action recorded as failed when it
 // actually succeeded.
 const actionInvokeTimeout = 5 * time.Minute
+
+// Listen retry, for a bind address that does not exist yet.
+//
+// The window is 90s because that is how long a cold Tailscale login takes in the worst
+// case observed on the target host, and because it is bounded: a genuinely wrong
+// bind.address must eventually surface as a startup failure rather than a process that
+// waits forever. systemd's Restart=on-failure then retries the whole cycle, so a VPN that
+// is down for ten minutes still recovers on its own.
+//
+// It does not collide with systemd's DefaultTimeoutStartSec. Type=exec considers the
+// service started once execve succeeds, which happens long before this runs.
+const (
+	listenRetryInterval = 2 * time.Second
+	listenRetryWindow   = 90 * time.Second
+)
 
 // actionDrainTimeout bounds how long shutdown waits for in-flight action bookkeeping.
 //
@@ -87,8 +103,19 @@ type Server struct {
 	// now is injectable so tests can assert on timestamps without racing the clock.
 	now func() time.Time
 
+	// listen is injectable so the retry loop can be tested deterministically, without
+	// needing a network interface to appear and disappear on the test machine.
+	listen listenFunc
+	// listenWindow and listenInterval are fields rather than constants so a test can
+	// exercise the give-up path in milliseconds instead of ninety seconds.
+	listenWindow   time.Duration
+	listenInterval time.Duration
+
 	httpServer *http.Server
 }
+
+// listenFunc matches net.ListenConfig.Listen.
+type listenFunc func(ctx context.Context, network, address string) (net.Listener, error)
 
 // Options configures a Server. Everything not set falls back to a sensible default.
 type Options struct {
@@ -148,20 +175,23 @@ func New(opts Options) (*Server, error) {
 	}
 
 	server := &Server{
-		store:        opts.Store,
-		registry:     registry,
-		cache:        cache,
-		actions:      newActionTracker(now),
-		hub:          newHub(),
-		heartbeat:    streamHeartbeat,
-		requirements: reqs,
-		pairLimiter:  newRateLimiter(pairAttemptLimit, pairAttemptWindow),
-		hostID:       opts.HostID,
-		hostname:     hostname,
-		agentVersion: agentVersion,
-		apiVersion:   APIVersion,
-		startedAt:    now(),
-		now:          now,
+		store:          opts.Store,
+		registry:       registry,
+		cache:          cache,
+		actions:        newActionTracker(now),
+		hub:            newHub(),
+		heartbeat:      streamHeartbeat,
+		requirements:   reqs,
+		pairLimiter:    newRateLimiter(pairAttemptLimit, pairAttemptWindow),
+		hostID:         opts.HostID,
+		hostname:       hostname,
+		agentVersion:   agentVersion,
+		apiVersion:     APIVersion,
+		startedAt:      now(),
+		now:            now,
+		listen:         (&net.ListenConfig{}).Listen,
+		listenWindow:   listenRetryWindow,
+		listenInterval: listenRetryInterval,
 	}
 
 	// Deltas leave the agent the moment the poller records a change, rather than the
@@ -249,32 +279,117 @@ func (s *Server) Handler() http.Handler {
 
 // ListenAndServe binds and serves until ctx is cancelled, then shuts down gracefully.
 func (s *Server) ListenAndServe(ctx context.Context, bind config.Bind) error {
-	listener, err := s.Listen(bind)
+	listener, err := s.Listen(ctx, bind)
 	if err != nil {
 		return err
 	}
 	return s.Serve(ctx, listener)
 }
 
-// Listen binds the configured address.
+// Listen binds the configured address, waiting for it to appear if it has not yet.
 //
 // Separate from Serve so that a failure to claim the port is reported before anything
 // else starts, and so tests can bind an ephemeral port and discover which one they got.
-func (s *Server) Listen(bind config.Bind) (net.Listener, error) {
-	listener, err := net.Listen("tcp", bind.Address)
-	if err != nil {
-		return nil, fmt.Errorf("listen on %s: %w", bind.Address, err)
+//
+// # Why this waits
+//
+// ADR-0001 has the agent bind to a specific private-network address rather than to
+// 0.0.0.0. On a VPN that address does not exist at boot: tailscaled creates the interface
+// immediately but assigns the address only after it has authenticated, tens of seconds
+// later. An unconditional bind therefore fails on a cold boot with EADDRNOTAVAIL.
+//
+// That is a normal condition, not a crash. Treating it as one — exiting and leaning on
+// systemd's Restart=on-failure — logs a failure for something expected, and can exhaust
+// StartLimitBurst if the VPN is slow enough. Ordering the unit after the VPN's service
+// does not help either: it starts the daemon, not the address.
+//
+// Waiting here also keeps deploy/cueseekd.service generic. The alternative was an
+// ExecStartPre polling loop, which would hard-code an interface name into a unit that
+// should work for Tailscale, WireGuard or a plain LAN address alike.
+func (s *Server) Listen(ctx context.Context, bind config.Bind) (net.Listener, error) {
+	window, interval := s.listenWindow, s.listenInterval
+	if window <= 0 {
+		window = listenRetryWindow
+	}
+	if interval <= 0 {
+		interval = listenRetryInterval
 	}
 
-	if bind.AllowUnrestricted {
-		// config.Validate already refused this unless explicitly opted into. Saying so at
-		// every start means a machine left in that state cannot be quietly forgotten.
-		slog.Warn("listening on ALL network interfaces",
-			"address", bind.Address,
-			"warning", "CueSeek can power off this machine and terminates no TLS; "+
-				"it must not be reachable from untrusted networks (ADR-0001)")
+	started := time.Now()
+	deadline := started.Add(window)
+
+	for attempt := 1; ; attempt++ {
+		listener, err := s.listen(ctx, "tcp", bind.Address)
+		if err == nil {
+			if attempt > 1 {
+				slog.Info("bind address became available",
+					"address", bind.Address,
+					"waited", time.Since(started).Round(time.Second),
+					"attempts", attempt)
+			}
+			s.warnIfUnrestricted(bind)
+			return listener, nil
+		}
+
+		// Only a missing address is worth waiting for. A port already in use, a
+		// permission failure or a malformed address will never resolve on their own, and
+		// retrying them would turn a clear startup error into a silent 90-second hang.
+		if !isAddressUnavailable(err) {
+			return nil, fmt.Errorf("listen on %s: %w", bind.Address, err)
+		}
+
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf(
+				"listen on %s: address still not present after %s — is the VPN up, and is "+
+					"bind.address correct for this host? %w",
+				bind.Address, window, err)
+		}
+
+		if attempt == 1 {
+			slog.Info("bind address is not present yet, waiting for it",
+				"address", bind.Address,
+				"giving_up_after", window,
+				"hint", "normal at boot while a VPN interface is still coming up")
+		}
+
+		select {
+		case <-ctx.Done():
+			// Shutdown during the wait. Without this, SIGTERM at boot would be ignored
+			// until the window expired and systemd would escalate to SIGKILL.
+			//
+			// Wrapped rather than returned bare: "context canceled" alone gives an
+			// operator nothing to act on. errors.Is still matches through the wrap.
+			return nil, fmt.Errorf("listen on %s: gave up waiting for the address: %w",
+				bind.Address, ctx.Err())
+		case <-time.After(interval):
+		}
 	}
-	return listener, nil
+}
+
+func (s *Server) warnIfUnrestricted(bind config.Bind) {
+	if !bind.AllowUnrestricted {
+		return
+	}
+	// config.Validate already refused this unless explicitly opted into. Saying so at
+	// every start means a machine left in that state cannot be quietly forgotten.
+	slog.Warn("listening on ALL network interfaces",
+		"address", bind.Address,
+		"warning", "CueSeek can power off this machine and terminates no TLS; "+
+			"it must not be reachable from untrusted networks (ADR-0001)")
+}
+
+// isAddressUnavailable reports whether a listen failed because the address is not
+// present on this host yet.
+//
+// EADDRNOTAVAIL specifically. Deliberately not EADDRINUSE — a port conflict is a real
+// misconfiguration that must surface immediately rather than after a long wait.
+//
+// The constant exists on every platform Go supports, so this compiles everywhere, but
+// Windows reports WSAEADDRNOTAVAIL instead and will not match. That is acceptable: the
+// agent deploys to Linux, and on a development machine the effect is simply that a bad
+// bind fails fast rather than waiting.
+func isAddressUnavailable(err error) bool {
+	return errors.Is(err, syscall.EADDRNOTAVAIL)
 }
 
 // Serve handles requests on listener until ctx is cancelled, then drains gracefully.
