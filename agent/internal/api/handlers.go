@@ -82,8 +82,12 @@ func (s *Server) PairDevice(ctx context.Context, request gen.PairDeviceRequestOb
 
 	s.audit(ctx, device, "device.pair", device.ID, domain.OutcomeSucceeded,
 		"scopes: "+formatScopes(scopes))
+	// The fingerprint is the first 16 hex characters of the stored token_hash. Logging it
+	// lets an operator confirm that the token they are holding is the one this device was
+	// issued, without reading the database and without the token itself ever appearing.
 	slog.InfoContext(ctx, "device paired",
-		"device_id", device.ID, "name", device.Name, "scopes", formatScopes(scopes))
+		"device_id", device.ID, "name", device.Name, "scopes", formatScopes(scopes),
+		"token_fingerprint", store.TokenFingerprint(token))
 
 	// The only time the plaintext token exists outside the client. Never logged.
 	return gen.PairDevice201JSONResponse(gen.PairResponse{

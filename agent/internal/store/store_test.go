@@ -321,3 +321,31 @@ func TestTimeRoundTrip(t *testing.T) {
 		t.Errorf("CreatedAt location = %v, want UTC", got.CreatedAt.Location())
 	}
 }
+
+// TestTokenFingerprintMatchesStoredHash: the fingerprint logged at pairing must be a
+// prefix of the value actually written to token_hash, or comparing it against a rejected
+// token's fingerprint proves nothing.
+func TestTokenFingerprintMatchesStoredHash(t *testing.T) {
+	s := newTestStore(t)
+	_, token := createTestDevice(t, s, "Phone")
+
+	var stored string
+	if err := s.db.QueryRow(`SELECT token_hash FROM devices`).Scan(&stored); err != nil {
+		t.Fatalf("read token_hash: %v", err)
+	}
+
+	fingerprint := TokenFingerprint(token)
+	if len(fingerprint) != 16 {
+		t.Errorf("fingerprint %q is not 16 characters", fingerprint)
+	}
+	if !strings.HasPrefix(stored, fingerprint) {
+		t.Errorf("fingerprint %q is not a prefix of the stored hash %q", fingerprint, stored)
+	}
+	// Never the token itself, and never enough to reconstruct it.
+	if strings.Contains(token, fingerprint) {
+		t.Error("the fingerprint leaks part of the token")
+	}
+	if TokenFingerprint("") != "none" {
+		t.Error("an empty token should fingerprint as \"none\", not as a hash of nothing")
+	}
+}

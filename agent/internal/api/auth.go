@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -72,6 +73,14 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			// re-pair, when the real problem is the agent.
 			result.err = err
 		}
+		if errors.Is(err, store.ErrInvalidToken) {
+			// The counterpart to the fingerprint logged at pairing. Comparing the two
+			// answers "wrong token" versus "broken lookup" without touching the database.
+			// Debug level: a client retrying with a stale token must not fill the journal.
+			slog.DebugContext(r.Context(), "token rejected",
+				"presented_fingerprint", store.TokenFingerprint(token),
+				"path", r.URL.Path)
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(ctx, deviceContextKey, result)))
 	})
 }
@@ -109,7 +118,12 @@ func deviceFromContext(ctx context.Context) (domain.Device, error) {
 	switch {
 	case result.err == nil:
 		return result.device, nil
-	case errors.Is(result.err, errNoCredentials), errors.Is(result.err, store.ErrInvalidToken):
+	case errors.Is(result.err, errNoCredentials):
+		// Nothing was sent, or the header carried no credential after the scheme. Said
+		// plainly, because the caller cannot debug "invalid token" when its own variable
+		// was empty.
+		return domain.Device{}, errMissingCredentials
+	case errors.Is(result.err, store.ErrInvalidToken):
 		return domain.Device{}, errUnauthorized
 	default:
 		return domain.Device{}, errInternal

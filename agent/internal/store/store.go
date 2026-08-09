@@ -215,6 +215,25 @@ func hashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// TokenFingerprint returns a short, non-reversible identifier for a token, for logs.
+//
+// The first 16 hex characters of the same SHA-256 that is stored in token_hash. Safe to
+// log and safe to paste into a bug report: it is a truncated hash of 256 bits of
+// randomness, so it cannot be turned back into a token, and knowing it does not help
+// produce one — authentication compares the full hash.
+//
+// It exists because of a real debugging session. A device was paired, a token was
+// returned, and authentication failed; the log recorded the device id but nothing that
+// tied it to the token, so there was no way to tell a wrong token from a broken lookup
+// without opening the database by hand. Printing this at pairing and again on rejection
+// makes that a one-line comparison.
+func TokenFingerprint(token string) string {
+	if token == "" {
+		return "none"
+	}
+	return hashToken(token)[:16]
+}
+
 func newDeviceID() (string, error) {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {

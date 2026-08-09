@@ -35,11 +35,28 @@ const problemBase = "https://cueseek.dev/problems/"
 // learned something about the token space, and a caller who learns that a pairing code
 // was "already used" has learned that it was once real.
 var (
+	// errMissingCredentials means no usable bearer token was presented at all.
+	//
+	// Deliberately distinct from errUnauthorized. Telling a caller that it sent nothing
+	// leaks no information — it already knows what it put in its own request — and
+	// conflating the two is not a security measure, it is a diagnostic dead end. A
+	// truncated token, an empty shell variable and a rejected credential all produced the
+	// same sentence, which sent a real debugging session looking for a fault in the token
+	// path when nothing had been sent.
+	//
+	// What stays vague is why a *presented* token failed. That distinction — unknown
+	// versus revoked versus malformed — is the one that helps an attacker.
+	errMissingCredentials = &Error{
+		Status: http.StatusUnauthorized,
+		Type:   problemBase + "unauthorized",
+		Title:  "Unauthorized",
+		Detail: "No bearer token was presented. Send `Authorization: Bearer <device token>`.",
+	}
 	errUnauthorized = &Error{
 		Status: http.StatusUnauthorized,
 		Type:   problemBase + "unauthorized",
 		Title:  "Unauthorized",
-		Detail: "A valid device token is required.",
+		Detail: "The device token was not accepted. Pair the device again to obtain a new one.",
 	}
 	errForbidden = &Error{
 		Status: http.StatusForbidden,
@@ -134,6 +151,11 @@ func writeProblem(w http.ResponseWriter, r *http.Request, err error) {
 	}
 
 	w.Header().Set("Content-Type", "application/problem+json")
+	// RFC 7235 requires this on a 401. Beyond compliance it tells a generic HTTP client
+	// which scheme to use, rather than leaving it to infer one from prose.
+	if apiErr.Status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="cueseek"`)
+	}
 	w.WriteHeader(apiErr.Status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		slog.ErrorContext(r.Context(), "write problem response", "error", err)
