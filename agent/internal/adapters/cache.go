@@ -32,6 +32,13 @@ type Cache struct {
 
 	// now is injectable so staleness tests advance a clock instead of sleeping.
 	now func() time.Time
+
+	// observer is notified after every Put, so the event stream can emit a delta the
+	// moment state changes rather than polling this cache on its own timer.
+	//
+	// One observer, not a list: there is exactly one stream hub, and a second
+	// broadcaster layered on this one would be a second place for fan-out bugs to live.
+	observer func(Snapshot)
 }
 
 type cacheEntry struct {
@@ -63,8 +70,29 @@ func (c *Cache) Track(serviceID string, staleAfter time.Duration) {
 	c.entries[serviceID] = &cacheEntry{staleAfter: staleAfter}
 }
 
+// SetObserver registers a callback invoked after every Put.
+//
+// The callback must not block: it runs on the polling goroutine, so a slow observer would
+// delay the next poll of that service.
+func (c *Cache) SetObserver(fn func(Snapshot)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.observer = fn
+}
+
 // Put records a fresh observation.
 func (c *Cache) Put(serviceID string, health domain.Health) {
+	snapshot, observer := c.put(serviceID, health)
+
+	// Called outside the lock. Notifying while holding it would let an observer that
+	// touches this cache — which the stream's own snapshot builder does — deadlock
+	// against the poller that triggered it.
+	if observer != nil {
+		observer(snapshot)
+	}
+}
+
+func (c *Cache) put(serviceID string, health domain.Health) (Snapshot, func(Snapshot)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -87,6 +115,7 @@ func (c *Cache) Put(serviceID string, health domain.Health) {
 
 	entry.snapshot = Snapshot{ServiceID: serviceID, Health: health, StatusSince: statusSince}
 	entry.observed = true
+	return entry.snapshot, c.observer
 }
 
 // Get returns the current belief about a service, downgrading it to unknown if the

@@ -66,6 +66,11 @@ type Server struct {
 	cache    *adapters.Cache
 
 	actions *actionTracker
+	// hub fans stream events out to every connected client.
+	hub *hub
+	// heartbeat is the stream's idle pulse interval. A field rather than a constant so
+	// tests can shorten it without mutating global state and interfering with each other.
+	heartbeat time.Duration
 	// background tracks detached goroutines resolving action outcomes, so shutdown can
 	// wait for them instead of killing an in-flight restart's bookkeeping.
 	background sync.WaitGroup
@@ -142,11 +147,13 @@ func New(opts Options) (*Server, error) {
 		cache = adapters.NewCache()
 	}
 
-	return &Server{
+	server := &Server{
 		store:        opts.Store,
 		registry:     registry,
 		cache:        cache,
 		actions:      newActionTracker(now),
+		hub:          newHub(),
+		heartbeat:    streamHeartbeat,
 		requirements: reqs,
 		pairLimiter:  newRateLimiter(pairAttemptLimit, pairAttemptWindow),
 		hostID:       opts.HostID,
@@ -155,15 +162,26 @@ func New(opts Options) (*Server, error) {
 		apiVersion:   APIVersion,
 		startedAt:    now(),
 		now:          now,
-	}, nil
+	}
+
+	// Deltas leave the agent the moment the poller records a change, rather than the
+	// stream re-reading this cache on a timer of its own.
+	cache.SetObserver(server.onServiceUpdate)
+
+	return server, nil
 }
 
 // OverallHealth is the agent's single answer for the whole host, computed from every
 // service's cached state (ADR-0008).
 //
-// Exposed because M1.7's stream snapshot needs it, and because computing it in one place
-// is the entire point — two callers deriving it separately would be the client-side
-// divergence this decision exists to prevent.
+// Currently called only by its own test. It was written for M1.7's stream snapshot, but
+// the contract's Snapshot schema carries `system` and `services` and no host-level health
+// field, so the stream has nothing to put it in.
+//
+// Kept rather than deleted because ADR-0008 commits to the agent computing this, and M3
+// adds host metrics — the input this is missing — at which point it needs a contract
+// field and a caller. If M3 arrives and still has no use for it, delete it: an unused
+// exported method that looks load-bearing is worse than no method.
 func (s *Server) OverallHealth() domain.Health {
 	services := s.registry.Services()
 	inputs := make([]health.ServiceHealth, 0, len(services))
@@ -291,6 +309,11 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		IdleTimeout:       idleTimeout,
 		BaseContext:       func(net.Listener) context.Context { return serveCtx },
 	}
+
+	// An event stream is an in-flight request that never ends on its own, so Shutdown
+	// would wait out its entire grace period on every restart. This closes every stream
+	// the moment draining begins (ADR-0004, A7).
+	s.httpServer.RegisterOnShutdown(s.hub.closeAll)
 
 	slog.Info("api listening",
 		"address", listener.Addr().String(),

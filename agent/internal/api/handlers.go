@@ -286,6 +286,7 @@ func (s *Server) awaitAction(
 			s.actions.finish(trackedID, nil)
 			s.audit(context.Background(), actor, "service.action", serviceID,
 				domain.OutcomeSucceeded, actionID)
+			s.publishActionProgress(trackedID, serviceID, actionID, actionSucceeded, nil)
 			return
 		}
 
@@ -297,6 +298,7 @@ func (s *Server) awaitAction(
 				"service", serviceID, "action", actionID, "action_id", trackedID, "error", err)
 			s.audit(context.Background(), actor, "service.action", serviceID,
 				domain.OutcomeFailed, fmt.Sprintf("%s: %v", actionID, err))
+			s.publishActionProgress(trackedID, serviceID, actionID, actionFailed, err)
 
 		case !result.Succeeded():
 			failure := fmt.Errorf("systemd reported %q", result)
@@ -305,6 +307,7 @@ func (s *Server) awaitAction(
 				"service", serviceID, "action", actionID, "action_id", trackedID, "result", result)
 			s.audit(context.Background(), actor, "service.action", serviceID,
 				domain.OutcomeFailed, fmt.Sprintf("%s: %v", actionID, failure))
+			s.publishActionProgress(trackedID, serviceID, actionID, actionFailed, failure)
 
 		default:
 			s.actions.finish(trackedID, nil)
@@ -312,6 +315,7 @@ func (s *Server) awaitAction(
 				"service", serviceID, "action", actionID, "action_id", trackedID)
 			s.audit(context.Background(), actor, "service.action", serviceID,
 				domain.OutcomeSucceeded, actionID)
+			s.publishActionProgress(trackedID, serviceID, actionID, actionSucceeded, nil)
 		}
 	}()
 }
@@ -345,21 +349,7 @@ func (s *Server) actionError(serviceID, actionID string, err error) error {
 	return errInternal
 }
 
-// StreamEvents is declared in the contract but not implemented. M1.7 replaces this.
-//
-// A7 has now closed (docs/m0-findings.md): SSE over a cellular tailnet is viable, and the
-// transport choice in ADR-0004 stands. It also produced three requirements the
-// implementation must satisfy, recorded as Amendment 2 to that ADR:
-//
-//   - a periodic heartbeat, so silence is unambiguous;
-//   - write deadlines, because A7 showed a frozen phone backpressuring the sending
-//     goroutine — without one, a locked screen parks a goroutine until TCP gives up;
-//   - registration with httpServer.RegisterOnShutdown, since a stream is an in-flight
-//     request that never ends and would otherwise stall every graceful restart.
-func (s *Server) StreamEvents(ctx context.Context, _ gen.StreamEventsRequestObject) (gen.StreamEventsResponseObject, error) {
-	return nil, errNotImplemented.withDetail(
-		"the event stream lands in M1.7")
-}
+// StreamEvents lives in stream.go.
 
 // ---------------------------------------------------------------- audit
 

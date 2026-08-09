@@ -688,17 +688,8 @@ func TestGetUnknownService(t *testing.T) {
 	}
 }
 
-// TestStreamIsNotImplemented documents a deliberate gap: the transport is unvalidated
-// until A7 runs, so the endpoint declares itself unavailable rather than guessing.
-func TestStreamIsNotImplemented(t *testing.T) {
-	env := newTestEnv(t)
-	token := env.pairDevice(t, "Phone")
-
-	resp := env.do(t, http.MethodGet, "/v1/stream", token, nil)
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("status = %d, want 503", resp.StatusCode)
-	}
-}
+// The stream's own behaviour is covered in stream_test.go. A7 closed, so it is no longer
+// a declared-but-unimplemented endpoint.
 
 // ---------------------------------------------------------------- errors
 
@@ -716,7 +707,6 @@ func TestProblemResponsesAreWellFormed(t *testing.T) {
 		"401 no token":   {http.MethodGet, "/v1/devices", "", 401},
 		"403 no scope":   {http.MethodPost, "/v1/services/jellyfin/actions/restart", token, 403},
 		"404 no service": {http.MethodGet, "/v1/services/nope", token, 404},
-		"503 stream":     {http.MethodGet, "/v1/stream", token, 503},
 	}
 
 	for name, tc := range cases {
