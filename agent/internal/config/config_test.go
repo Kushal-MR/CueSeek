@@ -357,3 +357,50 @@ func TestParseDoesNotTouchTheFilesystem(t *testing.T) {
 		t.Error("Parse resolved a secret; that belongs to Load")
 	}
 }
+
+// TestShippedExampleConfigIsValid parses deploy/config.example.yaml.
+//
+// A shipped example that fails validation breaks every fresh install, and the
+// failure surfaces on someone else's machine rather than in CI. Parse rather than
+// Load: api_key_file names a path that exists only on a deployed host.
+func TestShippedExampleConfigIsValid(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "deploy", "config.example.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	cfg, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("the shipped example config does not validate: %v", err)
+	}
+
+	// The defaults it ships with are the ones the documentation promises.
+	if cfg.Bind.Address != "127.0.0.1:7777" {
+		t.Errorf("example binds to %q; the safe default is loopback", cfg.Bind.Address)
+	}
+	if cfg.Bind.AllowUnrestricted {
+		t.Error("the example ships with allow_unrestricted enabled")
+	}
+	if cfg.Storage.Path != "/var/lib/cueseek/cueseek.db" {
+		t.Errorf("storage.path = %q, want the unit's StateDirectory", cfg.Storage.Path)
+	}
+
+	if len(cfg.Services) != 1 {
+		t.Fatalf("example defines %d services, want 1 (qbittorrent stays commented "+
+			"until its adapter exists)", len(cfg.Services))
+	}
+	svc := cfg.Services[0]
+	if svc.Type != "jellyfin" || svc.Unit != "jellyfin.service" {
+		t.Errorf("example service = %+v", svc)
+	}
+
+	// No secret may be committed. The example names a path; it never carries a key.
+	if svc.APIKey != "" {
+		t.Errorf("the example config contains an inline api_key: %q", svc.APIKey)
+	}
+	if svc.APIKeyFile == "" {
+		t.Error("the example does not point at an api_key_file, so a fresh install " +
+			"has no documented way to supply credentials")
+	}
+}

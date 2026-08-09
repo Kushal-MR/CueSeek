@@ -1,0 +1,96 @@
+# CueSeek host agent.
+#
+# Install to:  /etc/systemd/system/cueseekd.service   (root:root, 0644)
+#
+# Runs as its own unprivileged user and holds no capabilities. Everything
+# privileged is a request to systemd or logind over D-Bus, authorised by
+# /etc/polkit-1/rules.d/10-cueseek.rules (ADR-0002). If that rule is absent the
+# agent still starts and still serves health — it simply cannot restart anything.
+
+[Unit]
+Description=CueSeek host agent
+Documentation=https://github.com/Kushal-MR/CueSeek
+
+# D-Bus is not optional: it is how the agent reads unit state and requests
+# restarts. Without it the host layer fails at startup rather than at first use.
+Requires=dbus.socket
+After=dbus.socket network-online.target
+Wants=network-online.target
+
+# If bind.address is a Tailscale address (100.x.y.z), that interface does not
+# exist until tailscaled has come up, and the listener will fail. Restart=
+# below recovers from it, but ordering avoids the noise. Uncomment if needed:
+# After=tailscaled.service
+# Wants=tailscaled.service
+
+[Service]
+# exec rather than simple: systemd waits for execve to succeed, so a missing
+# binary or unreadable config is reported as a start failure instead of the unit
+# briefly appearing to run.
+Type=exec
+User=cueseek
+Group=cueseek
+
+ExecStart=/usr/local/bin/cueseekd -config /etc/cueseek/config.yaml
+
+# SIGTERM is what the agent traps. It drains in-flight requests, closes event
+# streams and waits for action bookkeeping — measured at well under two seconds
+# with a stream open. 30s is generous headroom without approaching systemd's
+# 90s default, after which it would escalate to SIGKILL mid-write.
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+Restart=on-failure
+RestartSec=5s
+
+# /var/lib/cueseek, created and chowned by systemd. The SQLite database and its
+# -wal/-shm companions live here; it is the only writable path the agent has.
+StateDirectory=cueseek
+StateDirectoryMode=0750
+
+# ---------------------------------------------------------------- hardening
+#
+# The agent needs three things: the D-Bus system socket, outbound TCP to
+# services on this host, and its state directory. Everything else is removed.
+#
+# If the service fails to start after a distribution upgrade, relax in this
+# order — SystemCallFilter first, then MemoryDenyWriteExecute — and report it
+# rather than deleting the whole block.
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProcSubset=pid
+
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# AF_UNIX for the D-Bus system socket, AF_INET/AF_INET6 for the API listener and
+# for polling service HTTP endpoints. Nothing else — no raw sockets, no netlink.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+# The database and any key files are created 0600/0700 rather than group- or
+# world-readable.
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

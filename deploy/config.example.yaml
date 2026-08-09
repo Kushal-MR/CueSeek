@@ -1,0 +1,106 @@
+# CueSeek agent configuration — annotated reference.
+#
+# Install to:  /etc/cueseek/config.yaml   (root:cueseek, 0640)
+#
+# 0640 matters: this file may name a secret. Even using api_key_file, it names
+# the path to one. It is not world-readable.
+#
+# Unknown keys are rejected at startup. A typo like `adress:` fails loudly rather
+# than being ignored and silently leaving you on a default.
+
+# ---------------------------------------------------------------- bind
+bind:
+  # Where the API listens, as host:port.
+  #
+  # Loopback by default, which is the only choice that is safe for someone who
+  # installs this and skips the documentation. It means the agent is reachable
+  # only from the machine itself.
+  #
+  # To reach it from your phone, bind to your VPN interface's address. Find
+  # yours with `tailscale ip -4` — it will be somewhere in 100.64.0.0/10:
+  #
+  #   address: "100.64.0.5:7777"    # <- yours will differ
+  #
+  # Never a public address. CueSeek terminates no TLS of its own and will be able
+  # to power off this machine; ADR-0001 delegates transport security entirely to
+  # the VPN. If you bind to a tailnet address, add `After=tailscaled.service` to
+  # the systemd unit — the interface does not exist at early boot.
+  address: "127.0.0.1:7777"
+
+  # Permits binding to 0.0.0.0 or [::]. Startup refuses a wildcard bind without
+  # this, on purpose: widening should be a decision visible in a config diff,
+  # not something that happens by accident. Leave it false.
+  allow_unrestricted: false
+
+# ---------------------------------------------------------------- storage
+storage:
+  # SQLite database: paired devices, hashed tokens, the audit log.
+  #
+  # Must be absolute. /var/lib/cueseek is created by the unit's StateDirectory=
+  # and is the only path the agent can write to.
+  #
+  # Back this up and you keep your pairings. Delete it and every device must
+  # pair again — which is also the recovery route if you lose every token.
+  path: /var/lib/cueseek/cueseek.db
+
+# ---------------------------------------------------------------- services
+#
+# Each entry is one managed service. `type` selects the adapter implementation;
+# `id` names this instance. Two Jellyfin servers on one host are two entries of
+# type `jellyfin` with different ids — not a special case anywhere in the code.
+#
+# `unit` is the systemd unit the agent may restart. It is ALSO listed in
+# /etc/polkit-1/rules.d/10-cueseek.rules, and both must agree. The duplication is
+# deliberate defence in depth (ADR-0002): the agent refuses an unlisted unit
+# before D-Bus is touched, and polkit refuses it again behind that.
+#
+# Use the exact unit name. Check it rather than assuming:
+#   systemctl list-units --type=service | grep -i jellyfin
+services:
+  - id: jellyfin
+    name: Jellyfin
+    type: jellyfin
+    unit: jellyfin.service
+
+    # Where the adapter reaches Jellyfin's own API. Loopback: the agent runs on
+    # the same host as the service it manages.
+    base_url: http://127.0.0.1:8096
+
+    # The agent authenticates to Jellyfin with an API key.
+    # Create one: Jellyfin Dashboard > API Keys > +
+    #
+    # Two ways to supply it. Prefer the file — a config that names a secret can
+    # be pasted into a support request, one that contains it cannot.
+    #
+    #   printf '%s' 'YOUR_KEY_HERE' | sudo tee /etc/cueseek/jellyfin.key
+    #   sudo chown root:cueseek /etc/cueseek/jellyfin.key
+    #   sudo chmod 0640 /etc/cueseek/jellyfin.key
+    #
+    # The file's contents are trimmed, so a trailing newline is harmless.
+    api_key_file: /etc/cueseek/jellyfin.key
+    #
+    # Or inline, if you would rather have one file to manage. Set one or the
+    # other, never both — startup rejects that:
+    # api_key: YOUR_KEY_HERE
+
+    # How often the agent refreshes this service's state. The agent polls on its
+    # own schedule and serves cached results; a client request never triggers an
+    # upstream call, so a wedged Jellyfin cannot hang your dashboard (ADR-0003).
+    poll_interval: 30s
+
+    # Budget for a single request to base_url. Must be shorter than
+    # poll_interval, or slow polls pile up on each other.
+    timeout: 5s
+
+  # qBittorrent — the adapter lands in M3. Uncomment then, not before: startup
+  # rejects a service whose `type` this build does not implement, which is
+  # correct but will stop the agent from running.
+  #
+  # - id: qbittorrent
+  #   name: qBittorrent
+  #   type: qbittorrent
+  #   unit: qbittorrent.service
+  #   base_url: http://127.0.0.1:8080
+  #   api_key_file: /etc/cueseek/qbittorrent.key
+  #   poll_interval: 30s
+  #   timeout: 5s

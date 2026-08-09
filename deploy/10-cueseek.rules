@@ -1,0 +1,95 @@
+/*
+ * CueSeek — polkit authorisation rule.
+ *
+ * This file is the complete statement of what CueSeek may do to this machine.
+ * An operator should be able to read it and know the ceiling without reading any
+ * Go (ADR-0002). Keep it short. Never widen it for convenience.
+ *
+ * Install to:  /etc/polkit-1/rules.d/10-cueseek.rules   (root:root, 0644)
+ *
+ * REQUIRES polkit >= 0.106. Older polkit uses .pkla files, which cannot inspect
+ * action details, which makes the per-unit allowlist below unenforceable — the
+ * rule would degrade to "cueseek may restart ANY unit". install.sh refuses to
+ * install on such a host rather than silently granting more than this file says.
+ *
+ * Everything returns NOT_HANDLED rather than NO, so this rule only ever adds
+ * permissions and never revokes ones another rule granted.
+ */
+
+polkit.addRule(function (action, subject) {
+    /* Nothing here applies to any user but the agent's own. */
+    if (subject.user !== "cueseek") {
+        return polkit.Result.NOT_HANDLED;
+    }
+
+    /* ---------------------------------------------------------------- units
+     *
+     * EDIT THIS LIST to match the units in your /etc/cueseek/config.yaml.
+     *
+     * The allowlist is deliberately duplicated: the agent enforces it too, from
+     * its config file. Two independent copies is cheap defence in depth, and it
+     * is why this file must NOT be generated from the config (ADR-0002). If the
+     * two disagree, the narrower one wins, which is the safe direction.
+     *
+     * Use the exact unit name. M0 found the real name can differ from the one a
+     * unit's description implies — qBittorrent's unit is `qbittorrent.service`,
+     * not `qbittorrent-nox.service`. Check with:
+     *
+     *   systemctl list-units --type=service | grep -i <name>
+     */
+    if (action.id === "org.freedesktop.systemd1.manage-units") {
+        var allowedUnits = [
+            "jellyfin.service",
+            "qbittorrent.service"
+        ];
+
+        /* The agent only ever calls RestartUnit, which systemd reports to polkit
+         * as the "restart" verb. The other two are listed because a future
+         * ReloadOrRestart would otherwise fail as an authorisation error, which
+         * looks like a misconfigured user rather than a missing verb.
+         *
+         * Note what is absent: start, stop, enable, disable, mask. The agent
+         * cannot leave a service switched off. */
+        var allowedVerbs = ["restart", "try-restart", "reload-or-restart"];
+
+        if (allowedUnits.indexOf(action.lookup("unit")) >= 0 &&
+            allowedVerbs.indexOf(action.lookup("verb")) >= 0) {
+            return polkit.Result.YES;
+        }
+
+        /* Visible only at raised polkit verbosity. M0 confirmed these do not
+         * appear in the journal at default settings, so do not rely on them
+         * when debugging — use `cueseekd host restart <unit>`, which reports
+         * whether the refusal came from the agent's allowlist or from polkit. */
+        polkit.log("cueseek: DENY " + action.lookup("verb") + " " +
+                   action.lookup("unit") + " (not in this rule's allowlist)");
+        return polkit.Result.NOT_HANDLED;
+    }
+
+    /* ---------------------------------------------------------------- power
+     *
+     * DELIBERATELY DISABLED. Uncomment when host power actions ship in M3.
+     *
+     * M0 proved these work — an unprivileged, session-less cueseek genuinely
+     * rebooted the target host. They are commented out anyway because the agent
+     * currently has no code path that calls logind: the `host.power` scope is
+     * wired to nothing, and granting a service permission to reboot a machine it
+     * cannot ask to reboot is a standing risk with no benefit.
+     *
+     * The *-multiple-sessions variants are consulted when other users are logged
+     * in. Omitting them is a classic cause of "works alone, fails in practice",
+     * so enable all four together or none.
+     *
+     * var powerActions = [
+     *     "org.freedesktop.login1.reboot",
+     *     "org.freedesktop.login1.reboot-multiple-sessions",
+     *     "org.freedesktop.login1.power-off",
+     *     "org.freedesktop.login1.power-off-multiple-sessions"
+     * ];
+     * if (powerActions.indexOf(action.id) >= 0) {
+     *     return polkit.Result.YES;
+     * }
+     */
+
+    return polkit.Result.NOT_HANDLED;
+});
