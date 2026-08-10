@@ -148,3 +148,32 @@ depends on the stream" stands — the reasoning behind it is simply now correct.
 was skipped once the pattern proved identical across two networks. It would refine how long
 a stall can last. It would not change any requirement above, because all three hold at three
 minutes and at thirty.
+
+### Amendment 3 — 2026-08-09: on clients, types are generated and transport is not
+
+**What changed.** This record says "Go server interfaces and all client SDKs are generated
+from it". For the Android client that is narrowed: **Kotlin wire types are generated from
+`api/openapi.yaml` and committed, with a Gradle drift check mirroring the Go one. The eight
+REST calls and the stream reader are hand-written.**
+
+**Why.** The property this decision exists to protect is that a client cannot silently
+disagree with the contract about the shape of what crosses the wire. Generated DTOs plus a
+drift gate preserve that entirely. Generating the transport as well would add an
+openapi-generator toolchain to CI and a wrapper over exceptions-as-errors output, in
+exchange for eight function signatures over a surface small enough to read in one sitting.
+
+It also could not cover the endpoint that matters most. **No OpenAPI generator models
+`text/event-stream`**, so `GET /v1/stream` — where the freshness rules from Amendment 2 live
+— would be hand-written regardless. The Go server hand-wrote its side of the stream for
+precisely this reason, which makes this the second time the same limitation has shaped an
+implementation rather than a new argument.
+
+**Where the line is.** Generated types stay internal to `:core:api`; the module exposes
+domain types and a `Result`-style error model, per ADR-0009. The threshold at which this
+trade flips is roughly thirty endpoints, or a second hand-written client — whichever comes
+first.
+
+**What did not change.** Spec-first, hand-authored, single source of truth, CI drift
+enforcement, reads-as-stream and writes-as-async-RPC. The contract still cannot disagree
+with any client about shapes; a generator simply stopped being the way that guarantee is
+obtained for the parts where it was buying nothing.

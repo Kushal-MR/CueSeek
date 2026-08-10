@@ -64,8 +64,8 @@ gradle-wrapper.jar binary
 # diff it. Marking it generated collapses it in review and keeps GitHub's language
 # statistics honest — without it, generated Kotlin would misrepresent what was
 # actually written by hand. These paths activate when codegen lands.
-clients/android/core/api/build/generated/**  linguist-generated=true
-agent/internal/api/gen/**                    linguist-generated=true
+clients/android/core/api/src/main/kotlin/dev/cueseek/core/api/wire/** linguist-generated=true
+agent/internal/api/gen/**                                             linguist-generated=true
 
 # ---------- Screenshot-test goldens ----------
 # Committed on purpose (ADR-0010), but they are images: no diff, no merge.

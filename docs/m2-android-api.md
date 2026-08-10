@@ -25,9 +25,16 @@ that is a Tailscale address, e.g. `http://100.92.18.125:7777`.
   security is delegated entirely to the VPN (ADR-0001).
 - The phone must be on the same tailnet. If Tailscale is off, the host is simply
   unreachable — there is no fallback path, no relay, no cloud.
-- Android blocks cleartext HTTP by default from API 28. The app will need a
-  `network_security_config.xml` permitting cleartext to the agent's address, or to the
-  `100.64.0.0/10` CGNAT range Tailscale uses.
+- Android blocks cleartext HTTP by default from API 28. The app needs a
+  `network_security_config.xml` permitting cleartext.
+
+  > **Correction (2026-08-09, M2 P0).** An earlier version of this line suggested
+  > allowlisting "the agent's address, or the `100.64.0.0/10` CGNAT range Tailscale uses".
+  > Neither is expressible. `network_security_config` matches hostnames and single IP
+  > literals — it has no CIDR syntax — and the agent's address is typed in by the user at
+  > pairing time, so it is not known when the file is compiled. Android offers no runtime
+  > equivalent. The client therefore permits cleartext on the base config and narrows
+  > behaviourally instead: it only ever issues requests to the address the user entered.
 - Port is whatever `bind.address` in the agent's config says. `7777` on the reference
   deployment, but it is configuration, not a constant — the user must be able to enter it.
 
@@ -65,10 +72,15 @@ Pairing is the only unauthenticated operation.
 
 ### QR codes
 
-`clients/android/README.md` plans "pair by QR". **NOT YET DEFINED**: the agent does not
+`clients/android/README.md` planned "pair by QR". **NOT YET DEFINED**: the agent does not
 emit a QR code, and no QR payload format exists anywhere in the codebase. The CLI prints
 plain text only. Whoever builds the QR path must define that payload — presumably host
 address plus code — and it is a client-side decision until the agent grows an equivalent.
+
+**Resolved for M2 (2026-08-09):** the Android client pairs by typed host address and code.
+A candidate payload format is recorded as future work in
+[ADR-0006, Amendment 3](adr/0006-device-pairing-scoped-tokens.md), to be implemented on
+both sides together or not at all.
 
 ### `POST /v1/pair`
 

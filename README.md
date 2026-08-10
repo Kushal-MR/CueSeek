@@ -140,6 +140,7 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | [0010](docs/adr/0010-design-system-m3-expressive.md) | Material 3 Expressive + owned token layer |
 | [0011](docs/adr/0011-sequencing-spike-then-slice.md) | De-risking spike, then thin end-to-end slice |
 | [0012](docs/adr/0012-alerting-vs-vpn-only-access.md) | *(Proposed)* Alerting reopens the access model |
+| [0013](docs/adr/0013-android-client-architecture.md) | Four shared `core` modules; features are packages |
 
 ---
 
@@ -150,7 +151,7 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | **Setup** | Repository skeleton, ADRs, contract placeholder | ✅ Done |
 | **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | ✅ Done — [findings](docs/m0-findings.md). A7 closed: SSE viable, but Doze freezes it silently rather than killing it (ADR-0004 Amendment 2) |
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
-| **M2** | Android client: pair by QR, one capability-driven card, one action | ⬜ |
+| **M2** | Android client: pair by entering host address + code, one capability-driven card, one action | ⬜ |
 | **M3** | qBittorrent, `now_playing`, host metrics, power actions, design system | ⬜ |
 | **M4** | Wear OS standalone client, tiles and complications | ⬜ |
 | **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
@@ -162,6 +163,12 @@ Numbering starts where the software does.
 that a polkit rule really does grant an unprivileged daemon `RestartUnit` and `PowerOff` on
 a real machine. If that assumption were wrong, several decisions would change — and the
 cheapest moment to discover it is before anything depends on it.
+
+**M2 pairs by typed code, not by QR.** This milestone previously said "pair by QR". The
+agent emits no QR and no payload format exists on either side, so shipping a scanner would
+have meant adding server work in service of a client convenience, inside the milestone
+whose entire purpose is to prove the path end to end. The payload format is recorded as
+future work in [ADR-0006, Amendment 3](docs/adr/0006-device-pairing-scoped-tokens.md).
 
 ---
 

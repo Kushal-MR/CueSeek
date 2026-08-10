@@ -82,3 +82,89 @@ jobs:
           GOOS: linux
           GOARCH: amd64
         run: go build -o /tmp/cueseekd ./cmd/cueseekd
+
+  # ---------------------------------------------------------------------------------
+  # The Android client. Until now nothing in CI compiled it, and the scaffold committed
+  # in c836142 did not in fact build: its androidx versions required AGP 9.1+ and
+  # compileSdk 37 against an AGP 9.0.1 / compileSdk 36 project. A build that nothing runs
+  # is a build that is already broken and not yet known to be.
+  #
+  # `build` is deliberately the whole of it — assemble, unit tests and lint for every
+  # module. Instrumented tests need an emulator and are not worth the CI minutes until
+  # there is UI to instrument (M2 phase P5).
+  # ---------------------------------------------------------------------------------
+  android:
+    name: Android client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/android
+    steps:
+      - uses: actions/checkout@v4
+
+      # The wrapper jar is committed, so its checksum is worth verifying: it is executable
+      # code that runs before any of our own build logic does.
+      - uses: gradle/actions/wrapper-validation@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # -------------------------------------------------------------------------------
+      # No SDK installation step, and no setup-android action.
+      #
+      # The first version of this job ran `sdkmanager "platforms;android-37"` and failed
+      # with "Failed to find package". That package has never existed: Android now
+      # versions platforms by major *and minor*, so the ids are `android-36.1`,
+      # `android-37.0`, `android-37.1`. Only `repository2-3.xml` lists them at all —
+      # `repository2-1.xml` and `repository2-2.xml`, which older sdkmanager builds read,
+      # still stop at `android-36`. Correcting the id alone would therefore have swapped
+      # one failure for a dependency on which cmdline-tools version the action installed.
+      #
+      # None of it is needed. The ubuntu-latest image already ships android-37.0 and
+      # android-37.1, build-tools 37.0.0 and 36.x, and ANDROID_HOME. AGP downloads what
+      # it lacks through its own resolver, not through sdkmanager — verified locally,
+      # where the SDK has no cmdline-tools at all and the build succeeds regardless.
+      #
+      # What is kept is the intent of the original step: fail here, legibly, rather than
+      # somewhere inside a Gradle task graph. The check matches `android-37*` rather than
+      # an exact minor, because which minor `compileSdk release(37)` resolves to is AGP's
+      # decision and duplicating it here is how this file goes stale again.
+      # -------------------------------------------------------------------------------
+      - name: Check the runner provides a compile SDK
+        working-directory: .
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms"
+          if ! ls -d "$ANDROID_HOME"/platforms/android-37* >/dev/null 2>&1; then
+            echo "::error::The runner image has no android-37 platform."
+            echo "::error::Platforms are minor-versioned: expect android-37.0, not android-37."
+            exit 1
+          fi
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # -------------------------------------------------------------------------------
+      # The client's half of the contract-drift gate, and the reason ADR-0009's claim is
+      # tested rather than asserted: the same property is now enforced in two languages.
+      #
+      # Types are generated and committed; the calls are hand-written (ADR-0004
+      # Amendment 3). This step regenerates the types and fails on any diff, so the app
+      # cannot disagree with api/openapi.yaml about the shape of what crosses the wire,
+      # and a hand-edit to generated code cannot survive review.
+      # -------------------------------------------------------------------------------
+      - name: Regenerate the wire types from the contract
+        run: ./gradlew :core:api:generateApiTypes
+
+      - name: Fail if generated types have drifted from the contract
+        working-directory: .
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::Generated wire types do not match api/openapi.yaml."
+            echo "::error::Run 'cd clients/android && ./gradlew :core:api:generateApiTypes' and commit the result."
+            exit 1
+          fi
+
+      - name: Build, test and lint every module
+        run: ./gradlew build

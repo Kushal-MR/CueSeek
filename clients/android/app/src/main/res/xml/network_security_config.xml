@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  CueSeek talks to the agent over plain HTTP. The agent terminates no TLS and holds no
+  certificate: transport security is delegated entirely to the VPN, and the agent binds to
+  one specific address (usually a Tailscale one) rather than 0.0.0.0. See ADR-0001.
+
+  This is permitted for *all* cleartext rather than for the tailnet specifically, because
+  network_security_config cannot express what we would want:
+
+    - `<domain>` matches a hostname or a single IP literal. It does not accept a CIDR
+      range, so Tailscale's 100.64.0.0/10 cannot be allowlisted here.
+    - The agent's address and port are typed in by the user at pairing time, so they are
+      not known when this file is compiled.
+
+  The alternative — building the config at runtime — does not exist on Android. The
+  narrowing that matters is therefore behavioural, not declarative: the app only ever
+  issues requests to the host address the user entered.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
