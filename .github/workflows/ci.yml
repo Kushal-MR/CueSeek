@@ -111,12 +111,37 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
-      # Pinned rather than left to AGP's auto-download, so a missing platform fails here
-      # with an obvious message instead of somewhere inside a Gradle task graph.
-      - name: Install the compile SDK
-        run: sdkmanager "platforms;android-37"
+      # -------------------------------------------------------------------------------
+      # No SDK installation step, and no setup-android action.
+      #
+      # The first version of this job ran `sdkmanager "platforms;android-37"` and failed
+      # with "Failed to find package". That package has never existed: Android now
+      # versions platforms by major *and minor*, so the ids are `android-36.1`,
+      # `android-37.0`, `android-37.1`. Only `repository2-3.xml` lists them at all —
+      # `repository2-1.xml` and `repository2-2.xml`, which older sdkmanager builds read,
+      # still stop at `android-36`. Correcting the id alone would therefore have swapped
+      # one failure for a dependency on which cmdline-tools version the action installed.
+      #
+      # None of it is needed. The ubuntu-latest image already ships android-37.0 and
+      # android-37.1, build-tools 37.0.0 and 36.x, and ANDROID_HOME. AGP downloads what
+      # it lacks through its own resolver, not through sdkmanager — verified locally,
+      # where the SDK has no cmdline-tools at all and the build succeeds regardless.
+      #
+      # What is kept is the intent of the original step: fail here, legibly, rather than
+      # somewhere inside a Gradle task graph. The check matches `android-37*` rather than
+      # an exact minor, because which minor `compileSdk release(37)` resolves to is AGP's
+      # decision and duplicating it here is how this file goes stale again.
+      # -------------------------------------------------------------------------------
+      - name: Check the runner provides a compile SDK
+        working-directory: .
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms"
+          if ! ls -d "$ANDROID_HOME"/platforms/android-37* >/dev/null 2>&1; then
+            echo "::error::The runner image has no android-37 platform."
+            echo "::error::Platforms are minor-versioned: expect android-37.0, not android-37."
+            exit 1
+          fi
 
       - uses: gradle/actions/setup-gradle@v4
 
