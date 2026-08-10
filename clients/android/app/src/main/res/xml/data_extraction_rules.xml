@@ -1,19 +1,21 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31+. Governs both cloud backup and direct device-to-device transfer.
+
+  The pairing store is excluded from both. The device token is sealed with a key that never
+  leaves this device's Keystore, so a restored copy of that file is undecryptable by
+  construction — restoring it would produce a phone that believes it is paired and fails
+  every request with a 401 it cannot explain. Excluding the host records alongside it keeps
+  the two consistent: a restored device is honestly unpaired and pairs again, which costs
+  the operator one `cueseekd pair` and removes an entire class of confusing state.
+
+  See ADR-0006 and ADR-0013.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="datastore/" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="datastore/" />
     </device-transfer>
-    -->
 </data-extraction-rules>
