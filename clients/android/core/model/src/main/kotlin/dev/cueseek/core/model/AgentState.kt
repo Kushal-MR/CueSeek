@@ -1,0 +1,81 @@
+package dev.cueseek.core.model
+
+import java.time.Instant
+
+/**
+ * Everything a screen needs to know about one agent right now.
+ *
+ * [services] is **already degraded when [freshness] is stale**. That is deliberate: the
+ * requirement to render `unknown` rather than the last known values is the one this client
+ * is most likely to get wrong, and leaving it to each screen means every new screen is
+ * another chance to show stale green. A screen that ignores [freshness] entirely still
+ * renders honestly.
+ *
+ * The observed timestamps are preserved through degradation, so a screen can still say
+ * "last seen three minutes ago" — staleness is rendered from `observed_at`, never from
+ * arrival time.
+ */
+data class AgentState(
+    val host: PairedHost,
+    val system: SystemInfo?,
+    val services: List<Service>,
+    val status: StreamStatus,
+    val freshness: Freshness,
+    /**
+     * Terminal action outcomes seen on the current connection, newest last, bounded.
+     *
+     * The stream is the only delivery mechanism — there is no endpoint to ask an action
+     * how it went — so an outcome that arrives while nothing is collecting is simply lost.
+     * A reconnect delivers a fresh snapshot, not missed events.
+     */
+    val actionOutcomes: List<ActionProgress> = emptyList(),
+) {
+    fun outcomeOf(actionId: ActionInvocationId): ActionProgress? =
+        actionOutcomes.lastOrNull { it.actionId == actionId }
+
+    /**
+     * True when the agent implements a contract version this build was not written for.
+     *
+     * Reported honestly in both directions rather than silently mis-rendering (ADR-0007).
+     */
+    fun apiVersionSkew(expected: String): Boolean =
+        system != null && system.apiVersion != expected
+
+    companion object {
+        /** How many outcomes to keep. Enough to survive a burst after a Doze thaw. */
+        const val MAX_ACTION_OUTCOMES: Int = 16
+
+        fun initial(host: PairedHost) = AgentState(
+            host = host,
+            system = null,
+            services = emptyList(),
+            status = StreamStatus.Idle,
+            // Nothing has arrived yet, so nothing is known yet. Starting at Fresh would
+            // mean an empty service list briefly looked like a healthy empty server.
+            freshness = Freshness.Stale(lastEventAt = null),
+        )
+    }
+}
+
+/**
+ * Rewrites health as `unknown` while preserving when it was observed.
+ *
+ * `status` becomes [HealthStatus.Unknown] and a client-generated reason is prepended.
+ * `reachable`, `reported_status` and `observed_at` are left alone: they are timestamped
+ * statements about a moment that did happen, and discarding them would remove the
+ * information a user needs to judge how bad the silence is.
+ *
+ * The reason code is `client_stale`, not the agent's `stale`, so that nobody reading a bug
+ * report has to work out which side generated it.
+ */
+fun Service.degradedToUnknown(): Service = copy(
+    health = health.copy(
+        status = HealthStatus.Unknown,
+        reasons = listOf(
+            HealthReason(
+                code = "client_stale",
+                message = "No update from the agent recently; this may be out of date.",
+            )
+        ) + health.reasons,
+    )
+)
