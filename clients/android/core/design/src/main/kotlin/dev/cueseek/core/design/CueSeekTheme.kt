@@ -27,13 +27,22 @@ val LocalStatusColors = staticCompositionLocalOf { CueSeekStatusColors.Light }
 /**
  * CueSeek's theme.
  *
+ * Dynamic colour is **off by default**. M3 offers it and CueSeek declines it, which is a
+ * decision rather than an oversight: the sage/eucalyptus palette is the product's identity,
+ * and letting a wallpaper repaint every surface would mean the app looks different on every
+ * device and like itself on none. The rule the palette is built on — chroma means
+ * attention, so healthy is nearly achromatic — also stops holding once an arbitrary hue is
+ * tinting the surfaces the status colours sit on.
+ *
+ * The parameter stays so this is one line to revisit, not a rewrite.
+ *
  * @param dynamicColor when true and the device supports it (API 31+), **surfaces** follow
- *   the user's wallpaper. Status colours never do — see the note below.
+ *   the user's wallpaper. Status colours never do, at any setting.
  */
 @Composable
 fun CueSeekTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
