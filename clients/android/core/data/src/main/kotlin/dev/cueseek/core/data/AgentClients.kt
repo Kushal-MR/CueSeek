@@ -1,5 +1,6 @@
 package dev.cueseek.core.data
 
+import dev.cueseek.core.api.AgentStream
 import dev.cueseek.core.api.CueSeekApi
 import dev.cueseek.core.api.CueSeekApiFactory
 import dev.cueseek.core.api.TokenProvider
@@ -48,6 +49,22 @@ class AgentClients(
         )
         clients[key] = Entry(baseUrl, api)
         return api
+    }
+
+    /**
+     * Returns a stream client for [host], or `null` if there is no usable token.
+     *
+     * Not cached: a stream client is one connection with its own lifetime, created when
+     * something starts collecting and discarded when it stops. Caching it would outlive the
+     * collector that owns it.
+     */
+    suspend fun streamFor(host: PairedHost): AgentStream? {
+        hosts.token(host.hostId) ?: return null
+        return CueSeekApiFactory.createStream(
+            address = host.address,
+            tokens = TokenProvider { hosts.cachedToken(host.hostId) },
+            http = http,
+        )
     }
 
     /** Drops a cached client, for use when a host is forgotten. */

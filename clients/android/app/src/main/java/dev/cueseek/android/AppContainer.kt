@@ -3,6 +3,7 @@ package dev.cueseek.android
 import android.content.Context
 import dev.cueseek.core.api.CueSeekApiFactory
 import dev.cueseek.core.data.AgentClients
+import dev.cueseek.core.data.AgentLiveState
 import dev.cueseek.core.data.HostRepository
 import dev.cueseek.core.data.PairingRepository
 import dev.cueseek.core.data.ServicesRepository
@@ -29,4 +30,14 @@ class AppContainer(context: Context) {
     val pairing: PairingRepository = PairingRepository(hosts, http)
 
     val services: ServicesRepository = ServicesRepository(clients)
+
+    /**
+     * Live state, as a cold flow.
+     *
+     * Nothing here starts a connection. The UI layer scopes collection to the lifecycle,
+     * which is what keeps the stream a foreground affordance: a held SSE connection does
+     * not survive Doze, so nothing background-critical may depend on it (ADR-0004
+     * Amendment 2).
+     */
+    val live: AgentLiveState = AgentLiveState(streams = clients::streamFor)
 }

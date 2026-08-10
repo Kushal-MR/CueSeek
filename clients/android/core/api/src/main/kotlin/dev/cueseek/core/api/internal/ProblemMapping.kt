@@ -20,10 +20,35 @@ private const val PROBLEM_PREFIX = "https://cueseek.dev/problems/"
  * header — a fact about what this client did, which no amount of server rewording can
  * change.
  */
-internal fun Response<*>.toApiError(json: Json): ApiError {
-    val problem = readProblem(json)
+internal fun Response<*>.toApiError(json: Json): ApiError = toApiError(
+    statusCode = code(),
+    body = errorBody()?.string(),
+    tokenWasSent = raw().request.header("Authorization") != null,
+    json = json,
+)
+
+/**
+ * The same mapping for a raw OkHttp response.
+ *
+ * The stream does not go through Retrofit - no generator and no call adapter models
+ * `text/event-stream` - but a 401 on the stream means exactly what a 401 anywhere else
+ * means, and a second mapper would be a second place for the two to drift apart.
+ */
+internal fun okhttp3.Response.toApiError(json: Json): ApiError = toApiError(
+    statusCode = code,
+    body = runCatching { body.string() }.getOrNull(),
+    tokenWasSent = request.header("Authorization") != null,
+    json = json,
+)
+
+private fun toApiError(
+    statusCode: Int,
+    body: String?,
+    tokenWasSent: Boolean,
+    json: Json,
+): ApiError {
+    val problem = decodeProblem(body, json)
     val detail = problem?.detail
-    val tokenWasSent = raw().request.header("Authorization") != null
 
     val slug = problem?.type?.removePrefix(PROBLEM_PREFIX)
 
@@ -45,15 +70,14 @@ internal fun Response<*>.toApiError(json: Json): ApiError {
         // went wrong".
         else -> ApiError.Unrecognised(
             type = problem?.type.orEmpty(),
-            title = problem?.title ?: "HTTP ${code()}",
-            status = problem?.status ?: code(),
+            title = problem?.title ?: "HTTP $statusCode",
+            status = problem?.status ?: statusCode,
             detail = detail,
         )
     }
 }
 
-private fun Response<*>.readProblem(json: Json): Problem? {
-    val body = errorBody()?.string().orEmpty()
-    if (body.isBlank()) return null
+private fun decodeProblem(body: String?, json: Json): Problem? {
+    if (body.isNullOrBlank()) return null
     return runCatching { json.decodeFromString<Problem>(body) }.getOrNull()
 }

@@ -14,6 +14,7 @@ import dev.cueseek.core.model.HostId
 import dev.cueseek.core.model.PairedHost
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -49,7 +50,7 @@ class HostRepository internal constructor(
     private val tokenCache = ConcurrentHashMap<String, DeviceToken>()
 
     val hosts: Flow<List<PairedHost>> =
-        store.data.map { HostRecords.decode(it[KEY_HOSTS]) }
+        store.data.map { HostRecords.decode(it[KEY_HOSTS]) }.distinctUntilChanged()
 
     /**
      * The host the UI is currently showing, or `null` before pairing.
@@ -63,6 +64,13 @@ class HostRepository internal constructor(
         val selected = prefs[KEY_SELECTED_HOST]
         all.firstOrNull { it.hostId.value == selected } ?: all.firstOrNull()
     }
+        // Load-bearing, not tidiness. DataStore re-emits on every write, and this flow
+        // feeds a flatMapLatest that opens the event stream - so an unrelated write would
+        // tear down a healthy connection and open a new one. That costs 3-4 seconds of
+        // data (A7) and, worse, the fresh snapshot resets the freshness timer, which is
+        // how a stale stream can be made to look live. Observed on a device before this
+        // line existed.
+        .distinctUntilChanged()
 
     suspend fun host(id: HostId): PairedHost? = hosts.first().firstOrNull { it.hostId == id }
 

@@ -2,6 +2,7 @@ package dev.cueseek.core.api
 
 import dev.cueseek.core.api.internal.AuthInterceptor
 import dev.cueseek.core.api.internal.CueSeekService
+import dev.cueseek.core.api.internal.OkHttpAgentStream
 import dev.cueseek.core.api.internal.RetrofitCueSeekApi
 import dev.cueseek.core.model.AgentAddress
 import java.util.concurrent.TimeUnit
@@ -67,6 +68,31 @@ object CueSeekApiFactory {
             .build()
 
         return RetrofitCueSeekApi(retrofit.create(CueSeekService::class.java), json)
+    }
+
+    /**
+     * A stream client for one agent.
+     *
+     * Built from the same pool as [create], but with **no read timeout**: a stream is
+     * meant to be silent between events, and a 15-second read timeout would sever it every
+     * time the agent had nothing to say. Silence is detected by the freshness watchdog on
+     * a clock, which is the only signal that survives Doze — `docs/m2-android-api.md` §8.
+     */
+    fun createStream(
+        address: AgentAddress,
+        tokens: TokenProvider = TokenProvider.None,
+        http: AgentHttp = sharedHttp(),
+    ): AgentStream {
+        val client = http.client.newBuilder()
+            .addInterceptor(AuthInterceptor(tokens))
+            .readTimeout(java.time.Duration.ZERO)
+            // A frozen connection must not be resurrected by OkHttp behind our back: the
+            // reconnect decision belongs to the collector, which is the only thing that
+            // knows whether the app is even in the foreground.
+            .retryOnConnectionFailure(false)
+            .build()
+
+        return OkHttpAgentStream(address, client, json)
     }
 
     private fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
