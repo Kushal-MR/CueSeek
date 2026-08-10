@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.paparazzi)
 }
 
 android {
@@ -25,7 +26,9 @@ android {
 // per form factor (ADR-0007). Paparazzi arrives with the status catalogue in P4 — there
 // is nothing worth pinning a golden image of yet.
 dependencies {
-    implementation(project(":core:model"))
+    // `api`, not `implementation`: composables here take HealthStatus and ActionRisk in
+    // their signatures, so consumers must see those types to call them.
+    api(project(":core:model"))
 
     implementation(platform(libs.androidx.compose.bom))
     api(libs.androidx.compose.material3)
