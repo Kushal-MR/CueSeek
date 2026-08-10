@@ -91,3 +91,44 @@ would fail.
 hash-only storage, immediate revocation, the audit log, and the principle that scopes are
 independent grants rather than tiers. This amendment applies that principle more
 faithfully than the original scope list did.
+
+### Amendment 2 — 2026-08-09: Android stores the token in DataStore sealed by a Keystore key
+
+**What changed.** This record specified `EncryptedSharedPreferences` (via the Jetpack
+Security library) as the Android side of "platform-secure storage". The M2 client instead
+holds the token as ciphertext in **DataStore, sealed with an AES-GCM key generated in and
+never leaving the Android Keystore**.
+
+**Why.** `androidx.security:security-crypto` is no longer maintained. Building the one
+credential that can restart services on a real machine onto an unmaintained dependency
+buys convenience now and an unpatchable migration later, at exactly the moment a
+vulnerability would make it urgent.
+
+**What this costs.** Roughly forty lines that the library used to own: key generation,
+initialisation-vector handling and the "key was invalidated" branch that occurs when the
+user changes their device lock. That branch is the interesting one, and it is better to
+have written it than to have inherited it — its correct handling is to drop the token and
+require re-pairing, which is a product decision the library would have made silently.
+
+**What did not change.** The property this record asked for: the token is never at rest in
+plaintext, and the key protecting it is held by hardware-backed storage rather than by the
+application. Only the library providing that property is different.
+
+### Amendment 3 — 2026-08-09: no QR exists yet, and M2 does not pretend otherwise
+
+**What changed.** The Decision above says the agent issues a pairing code "(with QR)". It
+does not. `cueseekd pair` prints text, no QR payload format is defined anywhere, and the
+M2 Android client therefore pairs by **typed host address and code**.
+
+**Why.** Implementing a scanner requires a producer, and the producer is server work —
+inside the milestone whose purpose is to validate the server that already exists (ADR-0011).
+The format is recorded here so that both sides can be built together later:
+
+```
+cueseek://pair?host=100.92.18.125&port=7777&code=D8JT-HUPV
+```
+
+**What did not change.** Everything about the pairing model: single-use short-lived codes,
+one redemption yielding a per-device scoped token, rate limiting, and the deliberate
+indistinguishability of unknown, expired and already-redeemed codes. QR was always a way
+of transporting the code, not part of what the code is.

@@ -6,7 +6,7 @@ plugins {
 android {
     namespace = "dev.cueseek.android"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
@@ -29,18 +29,28 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
     }
 }
 
+// Assembly, navigation and dependency wiring only. Feature areas live here as packages
+// (`pairing`, `dashboard`) rather than as modules until M3 — see ADR-0013.
 dependencies {
+    implementation(project(":core:model"))
+    implementation(project(":core:api"))
+    implementation(project(":core:data"))
+    implementation(project(":core:design"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

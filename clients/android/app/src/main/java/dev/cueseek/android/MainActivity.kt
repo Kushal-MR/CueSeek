@@ -4,14 +4,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import dev.cueseek.android.ui.theme.CueSeekTheme
+import dev.cueseek.core.design.CueSeekTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -19,29 +18,23 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CueSeekTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                CueSeekApp()
             }
         }
     }
 }
 
+/**
+ * The app shell. Navigation between pairing and the dashboard lands in P5; P0 establishes
+ * only that the modules assemble and the app runs.
+ */
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    CueSeekTheme {
-        Greeting("Android")
+private fun CueSeekApp(modifier: Modifier = Modifier) {
+    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        )
     }
 }

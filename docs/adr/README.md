@@ -45,12 +45,13 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | [0001](0001-vpn-only-remote-access.md) | VPN-only remote access | Accepted |
 | [0002](0002-host-privilege-dbus-polkit.md) | Unprivileged agent via D-Bus and polkit | Accepted |
 | [0003](0003-agent-runtime-go.md) | Go for the agent runtime | Accepted |
-| [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended ×2 (2026-08-08) |
+| [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended ×3 (latest 2026-08-09) |
 | [0005](0005-capability-based-adapters.md) | Capability-based adapters | Accepted |
-| [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended 2026-08-08 |
+| [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended ×3 (latest 2026-08-09) |
 | [0007](0007-client-capability-registry.md) | Client-side capability registry | Accepted |
 | [0008](0008-multi-host-and-computed-health.md) | Multi-host model and agent-computed health | Accepted |
 | [0009](0009-monorepo-contract-drift-gate.md) | Monorepo with a contract-drift gate | Accepted |
 | [0010](0010-design-system-m3-expressive.md) | M3 Expressive with an owned token layer | Accepted |
 | [0011](0011-sequencing-spike-then-slice.md) | De-risking spike, then thin slice | Accepted |
 | [0012](0012-alerting-vs-vpn-only-access.md) | Alerting reopens the access model | Proposed |
+| [0013](0013-android-client-architecture.md) | Four shared `core` modules; features are packages | Accepted |
