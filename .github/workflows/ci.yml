@@ -120,5 +120,26 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # -------------------------------------------------------------------------------
+      # The client's half of the contract-drift gate, and the reason ADR-0009's claim is
+      # tested rather than asserted: the same property is now enforced in two languages.
+      #
+      # Types are generated and committed; the calls are hand-written (ADR-0004
+      # Amendment 3). This step regenerates the types and fails on any diff, so the app
+      # cannot disagree with api/openapi.yaml about the shape of what crosses the wire,
+      # and a hand-edit to generated code cannot survive review.
+      # -------------------------------------------------------------------------------
+      - name: Regenerate the wire types from the contract
+        run: ./gradlew :core:api:generateApiTypes
+
+      - name: Fail if generated types have drifted from the contract
+        working-directory: .
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::Generated wire types do not match api/openapi.yaml."
+            echo "::error::Run 'cd clients/android && ./gradlew :core:api:generateApiTypes' and commit the result."
+            exit 1
+          fi
+
       - name: Build, test and lint every module
         run: ./gradlew build
