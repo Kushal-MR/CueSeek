@@ -11,12 +11,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.cueseek.android.ui.observedPhrase
 import dev.cueseek.core.design.status.StatusMark
 import dev.cueseek.core.design.token.CueSeekType
 import dev.cueseek.core.model.Capability
 import dev.cueseek.core.model.Service
-import java.time.Duration
-import java.time.Instant
 
 /** Renders one capability of one service. */
 typealias CapabilityContent = @Composable (service: Service, stale: Boolean) -> Unit
@@ -155,13 +154,3 @@ private fun ControlCapability(service: Service) {
 
 private fun stable(stale: Boolean) = !stale
 
-/** "4s ago", "3m ago", "06:32:03" — precision degrades as the fact ages. */
-fun observedPhrase(observedAt: Instant, now: Instant = Instant.now()): String {
-    val seconds = Duration.between(observedAt, now).seconds
-    return when {
-        seconds < 0 -> "just now"
-        seconds < 60 -> "${seconds}s ago"
-        seconds < 3600 -> "${seconds / 60}m ago"
-        else -> "at " + observedAt.toString().substringAfter('T').take(8)
-    }
-}

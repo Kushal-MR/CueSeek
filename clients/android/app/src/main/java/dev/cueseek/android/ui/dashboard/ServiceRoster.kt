@@ -30,7 +30,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.cueseek.android.ui.capability.observedPhrase
+import dev.cueseek.android.ui.localClock
+import dev.cueseek.android.ui.observedPhrase
 import dev.cueseek.core.design.icon.CueSeekIcons
 import dev.cueseek.core.design.status.StatusMark
 import dev.cueseek.core.design.status.statusStyle
@@ -124,8 +125,7 @@ private fun ServiceRow(
     val interaction = remember { MutableInteractionSource() }
 
     val supporting = when {
-        stale -> "Last verified " + service.health.observedAt.toString()
-            .substringAfter('T').take(8)
+        stale -> "Last verified " + localClock(service.health.observedAt)
 
         service.health.reasons.isNotEmpty() -> service.health.reasons.first().message
         else -> style.label

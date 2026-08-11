@@ -1,11 +1,11 @@
 package dev.cueseek.android.ui
 
 import dev.cueseek.android.ui.capability.CapabilityRegistry
-import dev.cueseek.android.ui.capability.observedPhrase
 import dev.cueseek.core.model.ApiError
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -146,7 +146,22 @@ class CapabilityAndCopyTest {
         val observed = Instant.parse("2026-08-10T06:00:00Z")
         assertEquals("4s ago", observedPhrase(observed, observed.plusSeconds(4)))
         assertEquals("3m ago", observedPhrase(observed, observed.plusSeconds(200)))
-        // Past an hour the exact clock time is more use than a growing number.
         assertTrue(observedPhrase(observed, observed.plusSeconds(7200)).startsWith("at "))
+    }
+
+    @Test
+    fun `absolute times are shown in the reader's timezone, not UTC`() {
+        // The bug this replaces: the app sliced observed_at's ISO string and printed
+        // 04:14:32 to someone whose phone said 09:45. A zone is passed explicitly here
+        // because CI runs in UTC, where the bug is invisible.
+        val observed = Instant.parse("2026-08-10T06:00:00Z")
+        val ist = ZoneId.of("Asia/Kolkata")
+
+        assertEquals("11:30:00", localClock(observed, ist))
+        assertEquals("06:00:00", localClock(observed, ZoneId.of("UTC")))
+        assertEquals(
+            "at 11:30:00",
+            observedPhrase(observed, observed.plusSeconds(7200), ist),
+        )
     }
 }
