@@ -89,6 +89,14 @@ object CueSeekSpacing {
     /** 16 margin + 32 mark + 16 gap. Dividers inset to exactly where text starts. */
     val textStart: Dp = 64.dp
 
+    /**
+     * Gap between the row's trailing action button and the roster's edge.
+     *
+     * Small because the button carries its own 48dp target: the visible glyph sits well
+     * inside that, so the optical margin is larger than this number looks.
+     */
+    val menuInset: Dp = 4.dp
+
     val markSize: Dp = 32.dp
     val beatSize: Dp = 6.dp
     val tallyHeight: Dp = 8.dp

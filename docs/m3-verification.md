@@ -75,3 +75,51 @@ What was established while it was happening:
 If it recurs, the three diagnostics that would settle it are: whether the phone reads
 "Stream open" or "Reconnecting", the raw event stream observed from the host with `curl -N`,
 and whether `journalctl -u cueseekd` shows `stream subscriber fell behind`.
+
+---
+
+## M3.3 — Android: the row interaction model ✅
+
+The service row became two targets. Its body *uses* the service; the trailing `⋮` *operates
+on* it. The dashboard was rebuilt onto the phone and exercised against the live agent on
+`kushal-HP-paviliong6` over Tailscale.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | The row exposes exactly two independent targets | Accessibility dump: body `[28,626]–[1062,864]`, button `[1062,661]–[1230,829]` — adjacent, non-overlapping |
+| 2 | The trailing target meets Material's minimum | 168px at 3.5× = **48dp square**, with the glyph at 18dp inside it |
+| 3 | The two are announced differently | "Jellyfin, Healthy" and "Actions for Jellyfin" |
+| 4 | The menu is built from the agent's actions, not from the service's identity | Offered **Restart Jellyfin** and **Stop Jellyfin**, the two verbs the agent advertised |
+| 5 | Risk gating survives the move off the sheet | Stop rendered in the error role, and opening it produced the hold-to-confirm dialog carrying the agent's own consequence text |
+| 6 | A service with no `web_ui` falls back to detail rather than to nothing | Body tap opened the sheet, showing health, its reason, and the `control` capability |
+
+### Found on the device, not in a test
+
+- **"Stop Jellyfin Jellyfin?"** — the confirmation title appended the service name to a label
+  that already contained it. The agent owns that copy; the dialog now prints it verbatim.
+- **The sheet duplicated the menu.** With actions in both, one screen offered the same two
+  verbs three times over: the `control` capability's summary, a pair of buttons, and the new
+  menu. The sheet is now detail-only, so a destructive verb has exactly one entry point to
+  keep gated correctly.
+
+Neither was visible from the source or from a unit test, which is the same lesson as M2's
+UTC timestamp bug: some defects only exist once the thing is in your hand.
+
+### Fixed in passing
+
+The row previously used `clearAndSetSemantics`, which collapses the row to one node **and
+erases the clickable's action** along with it. It read correctly to TalkBack while having
+nothing left to activate. It now merges instead, so the node keeps its action and announces
+the `onClickLabel` — which names the actual destination, browser or sheet, since the two
+differ enough that guessing would mislead exactly the users who depend on it.
+
+### Not claimed
+
+- **Opening a `web_ui` in the browser has not been exercised on real hardware.** The path is
+  covered by unit tests end to end — composition, rejection, and the destination decision —
+  but the host's `/etc/cueseek/config.yaml` carries no `web_ui:` block yet and still runs the
+  M3.1 binary, so the agent currently advertises no interface to open. Every device
+  observation above is therefore of the *fallback* path. Deploying M3.2 and configuring
+  Jellyfin's `web_ui` is what would close this, and it is the first step of M3.3's real-host
+  acceptance rather than something the client can prove alone.
+

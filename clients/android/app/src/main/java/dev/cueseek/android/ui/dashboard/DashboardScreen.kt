@@ -31,11 +31,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cueseek.android.ui.CueSeekViewModel
 import dev.cueseek.android.ui.SUPPORTED_API_VERSION
 import dev.cueseek.android.ui.explain
+import dev.cueseek.android.ui.RowDestination
+import dev.cueseek.android.ui.openWebUi
+import dev.cueseek.android.ui.rowDestination
 import dev.cueseek.core.model.ActionStatus
 import dev.cueseek.core.model.AgentState
 import kotlinx.coroutines.delay
@@ -64,6 +68,7 @@ fun DashboardScreen(
     }
 
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val snackbars = remember { SnackbarHostState() }
     val stale = state.freshness.isStale
     val open = viewModel.openServiceId?.let { id -> state.services.firstOrNull { it.id == id } }
@@ -91,7 +96,26 @@ fun DashboardScreen(
                 host = state.host,
                 stale = stale,
                 now = now,
-                onServiceClick = viewModel::openService,
+                // The row's two destinations, decided here rather than inside the roster:
+                // composing the URL needs the paired address, and launching it needs an
+                // Android context, neither of which a presentational list should hold.
+                //
+                // Falling back to the sheet — rather than to nothing — is the point. A
+                // service with no configured interface, or a phone with nothing that can
+                // open one, still answers the tap with something worth reading.
+                onServiceClick = { service ->
+                    when (val to = rowDestination(service, state.host.address)) {
+                        // Even a resolved URL can fail to launch on a device with nothing
+                        // that opens links, so the fallback covers that too.
+                        is RowDestination.WebUi ->
+                            if (!openWebUi(context, to.url)) viewModel.openService(service)
+
+                        RowDestination.Details -> viewModel.openService(service)
+                    }
+                },
+                onInvoke = { service, action ->
+                    viewModel.invoke(state.host, service.id, action.id, action.label)
+                },
             )
 
             Spacer(Modifier.height(24.dp))
@@ -103,12 +127,8 @@ fun DashboardScreen(
     open?.let { service ->
         ServiceSheet(
             service = service,
-            host = state.host,
             stale = stale,
             onDismiss = viewModel::closeService,
-            onInvoke = { action ->
-                viewModel.invoke(state.host, service.id, action.id, action.label)
-            },
         )
     }
 
