@@ -13,6 +13,14 @@ type Snapshot struct {
 	ServiceID string
 	Health    domain.Health
 
+	// Actions are those that applied at ObservedAt.
+	//
+	// Cached with the health rather than recomputed per request for two reasons: reading
+	// unit state is a D-Bus call, and the list a client is shown must be the same list
+	// the agent validates an invocation against. Deriving them separately would let a UI
+	// offer Start while the API rejected it.
+	Actions []domain.Action
+
 	// StatusSince is when the current status was first observed.
 	//
 	// Carried so reasons can say "unreachable for 4 minutes" rather than just
@@ -81,8 +89,8 @@ func (c *Cache) SetObserver(fn func(Snapshot)) {
 }
 
 // Put records a fresh observation.
-func (c *Cache) Put(serviceID string, health domain.Health) {
-	snapshot, observer := c.put(serviceID, health)
+func (c *Cache) Put(serviceID string, health domain.Health, actions []domain.Action) {
+	snapshot, observer := c.put(serviceID, health, actions)
 
 	// Called outside the lock. Notifying while holding it would let an observer that
 	// touches this cache — which the stream's own snapshot builder does — deadlock
@@ -92,7 +100,11 @@ func (c *Cache) Put(serviceID string, health domain.Health) {
 	}
 }
 
-func (c *Cache) put(serviceID string, health domain.Health) (Snapshot, func(Snapshot)) {
+func (c *Cache) put(
+	serviceID string,
+	health domain.Health,
+	actions []domain.Action,
+) (Snapshot, func(Snapshot)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -113,7 +125,12 @@ func (c *Cache) put(serviceID string, health domain.Health) (Snapshot, func(Snap
 		statusSince = health.ObservedAt
 	}
 
-	entry.snapshot = Snapshot{ServiceID: serviceID, Health: health, StatusSince: statusSince}
+	entry.snapshot = Snapshot{
+		ServiceID:   serviceID,
+		Health:      health,
+		Actions:     actions,
+		StatusSince: statusSince,
+	}
 	entry.observed = true
 	return entry.snapshot, c.observer
 }

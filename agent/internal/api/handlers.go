@@ -172,12 +172,13 @@ func (s *Server) describeService(svc adapters.Service) gen.Service {
 		Actions:      []gen.Action{},
 	}
 
-	if controllable, ok := svc.(adapters.Controllable); ok {
-		out.Actions = toGenActions(controllable.Actions())
-	}
-
+	// Actions come from the same snapshot as the health, not from a fresh call to the
+	// adapter. They are state-dependent now (ADR-0002 Amendment 1), so reading them
+	// separately would let this response offer Start while the invoke path — reading a
+	// different observation — rejected it.
 	if snapshot, ok := s.cache.Get(svc.ID()); ok {
 		out.Health = toGenHealth(snapshot.Health)
+		out.Actions = toGenActions(snapshot.Actions)
 	} else {
 		// Registered but untracked. Should not happen — the poller tracks everything the
 		// registry built — so say so honestly rather than inventing a status.
@@ -212,11 +213,22 @@ func (s *Server) InvokeServiceAction(ctx context.Context, request gen.InvokeServ
 			"service %q does not support actions", request.ServiceId)
 	}
 
-	// The action must be one the adapter advertises. Invoking something absent from
-	// Actions() would let a client reach behaviour that never appeared in the descriptor
-	// list a UI gates on.
+	// The action must be one the adapter currently advertises. Invoking something absent
+	// from that list would let a client reach behaviour that never appeared in the
+	// descriptor list a UI gates on — including a Stop on a service that is already
+	// stopped, or a Start on one that is running.
+	//
+	// Read from the cache so this agrees with what the service listing showed. The
+	// fallback covers the window before the first poll: an invocation is already going
+	// to D-Bus, so one state read on this path costs nothing that matters, and ADR-0003's
+	// concern is a client *read* hanging on an upstream call.
+	available := controllable.Actions(ctx)
+	if snapshot, ok := s.cache.Get(request.ServiceId); ok && snapshot.Actions != nil {
+		available = snapshot.Actions
+	}
+
 	var descriptor *domain.Action
-	for _, candidate := range controllable.Actions() {
+	for _, candidate := range available {
 		if candidate.ID == request.ActionId {
 			action := candidate
 			descriptor = &action

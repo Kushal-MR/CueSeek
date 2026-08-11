@@ -2,8 +2,10 @@ package jellyfin
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,11 +22,32 @@ const testAPIKey = "test-api-key-abc123"
 // delegation rather than trusting that the adapter did not reach for systemd itself.
 type fakeUnits struct {
 	restarted []string
+	started   []string
+	stopped   []string
 	err       error
+
+	// state is what UnitState reports. The zero value is an inactive unit, which is what
+	// makes the "offers Start when stopped" case the default in these tests.
+	state    host.UnitState
+	stateErr error
+}
+
+func (f *fakeUnits) UnitState(_ context.Context, _ string) (host.UnitState, error) {
+	return f.state, f.stateErr
 }
 
 func (f *fakeUnits) RestartUnit(_ context.Context, unit string) (*host.Job, error) {
 	f.restarted = append(f.restarted, unit)
+	return nil, f.err
+}
+
+func (f *fakeUnits) StartUnit(_ context.Context, unit string) (*host.Job, error) {
+	f.started = append(f.started, unit)
+	return nil, f.err
+}
+
+func (f *fakeUnits) StopUnit(_ context.Context, unit string) (*host.Job, error) {
+	f.stopped = append(f.stopped, unit)
 	return nil, f.err
 }
 
@@ -363,29 +386,94 @@ func TestControlIsAdvertisedOnlyWhenPerformable(t *testing.T) {
 }
 
 func TestActionDescriptors(t *testing.T) {
-	svc := buildControllable(t, &fakeUnits{})
-
-	controllable, ok := svc.(adapters.Controllable)
-	if !ok {
-		t.Fatal("service does not implement Controllable")
+	// Actions are state-dependent since ADR-0002 Amendment 1. Offering Start on a running
+	// service is noise; offering Stop on a stopped one is a lie.
+	cases := []struct {
+		name      string
+		units     *fakeUnits
+		wantIDs   []string
+		wantRisks map[string]domain.RiskLevel
+	}{
+		{
+			name:    "running: restart and stop, no start",
+			units:   &fakeUnits{state: host.UnitState{ActiveState: "active"}},
+			wantIDs: []string{adapters.ActionRestart, adapters.ActionStop},
+			wantRisks: map[string]domain.RiskLevel{
+				adapters.ActionRestart: domain.RiskDisruptive,
+				// Destructive, not disruptive: a stop does not undo itself, so it must
+				// route to a client's press-and-hold rather than a single tap.
+				adapters.ActionStop: domain.RiskDestructive,
+			},
+		},
+		{
+			name:    "stopped: start only",
+			units:   &fakeUnits{state: host.UnitState{ActiveState: "inactive"}},
+			wantIDs: []string{adapters.ActionStart},
+			wantRisks: map[string]domain.RiskLevel{
+				// Nothing is interrupted and nothing is lost: it is not running.
+				adapters.ActionStart: domain.RiskSafe,
+			},
+		},
+		{
+			name: "state unreadable: restart only",
+			// Restart is the one verb correct whichever state we failed to observe:
+			// systemd's RestartUnit starts an inactive unit.
+			units:     &fakeUnits{stateErr: errors.New("dbus unavailable")},
+			wantIDs:   []string{adapters.ActionRestart},
+			wantRisks: map[string]domain.RiskLevel{adapters.ActionRestart: domain.RiskDisruptive},
+		},
 	}
 
-	actions := controllable.Actions()
-	if len(actions) != 1 {
-		t.Fatalf("actions = %v, want exactly restart", actions)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := buildControllable(t, tc.units)
+			controllable, ok := svc.(adapters.Controllable)
+			if !ok {
+				t.Fatal("service does not implement Controllable")
+			}
+
+			actions := controllable.Actions(context.Background())
+
+			var gotIDs []string
+			for _, a := range actions {
+				gotIDs = append(gotIDs, a.ID)
+				if a.Label == "" || a.Description == "" {
+					t.Errorf("action descriptor is incomplete: %+v", a)
+				}
+				// Clients gate on risk without knowing what the action does, so an
+				// invalid level would make a destructive action look safe.
+				if !a.Risk.Valid() {
+					t.Errorf("risk %q is not a recognised level", a.Risk)
+				}
+				if want, ok := tc.wantRisks[a.ID]; ok && a.Risk != want {
+					t.Errorf("%s risk = %q, want %q", a.ID, a.Risk, want)
+				}
+			}
+			if !slices.Equal(gotIDs, tc.wantIDs) {
+				t.Errorf("actions = %v, want %v", gotIDs, tc.wantIDs)
+			}
+		})
 	}
-	action := actions[0]
-	if action.ID != actionRestart || action.Label == "" || action.Description == "" {
-		t.Errorf("action descriptor is incomplete: %+v", action)
+}
+
+// TestStopDescriptionWarnsItStaysStopped is the copy the operator reads before confirming.
+// systemd leaves a stopped unit enabled, so it returns on the next boot — and nobody
+// should have to know that to predict what their tap does.
+func TestStopDescriptionWarnsItStaysStopped(t *testing.T) {
+	svc := buildControllable(t, &fakeUnits{state: host.UnitState{ActiveState: "active"}})
+	controllable := svc.(adapters.Controllable)
+
+	for _, a := range controllable.Actions(context.Background()) {
+		if a.ID != adapters.ActionStop {
+			continue
+		}
+		if !strings.Contains(a.Description, "reboot") ||
+			!strings.Contains(a.Description, "stays stopped") {
+			t.Errorf("stop description does not say it persists: %q", a.Description)
+		}
+		return
 	}
-	// Clients gate on risk without knowing what the action does, so an invalid or absent
-	// level would make a destructive action indistinguishable from a safe one.
-	if !action.Risk.Valid() {
-		t.Errorf("risk %q is not a recognised level", action.Risk)
-	}
-	if action.Risk != domain.RiskDisruptive {
-		t.Errorf("risk = %q; restarting interrupts viewers but loses nothing", action.Risk)
-	}
+	t.Fatal("a running service advertised no stop action")
 }
 
 // TestInvokeDelegatesToHostLayer is requirement 5: the adapter never touches systemd. It

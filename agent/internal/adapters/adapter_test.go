@@ -70,7 +70,7 @@ type fakeControllable struct {
 	invoked []string
 }
 
-func (f *fakeControllable) Actions() []domain.Action {
+func (f *fakeControllable) Actions(_ context.Context) []domain.Action {
 	return []domain.Action{{ID: "restart", Label: "Restart", Risk: domain.RiskDisruptive}}
 }
 

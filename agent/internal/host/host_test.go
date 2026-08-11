@@ -18,6 +18,8 @@ import (
 // operation never reached it at all — not merely that it returned an error.
 type fakeBackend struct {
 	restartCalls []string
+	startCalls   []string
+	stopCalls    []string
 	stateCalls   []string
 	closed       bool
 
@@ -29,6 +31,22 @@ type fakeBackend struct {
 
 func newFakeBackend() *fakeBackend {
 	return &fakeBackend{results: make(chan string, 1)}
+}
+
+func (f *fakeBackend) StartUnit(_ context.Context, unit string) (*Job, error) {
+	f.startCalls = append(f.startCalls, unit)
+	if f.restartErr != nil {
+		return nil, f.restartErr
+	}
+	return newJob(1, unit, f.results), nil
+}
+
+func (f *fakeBackend) StopUnit(_ context.Context, unit string) (*Job, error) {
+	f.stopCalls = append(f.stopCalls, unit)
+	if f.restartErr != nil {
+		return nil, f.restartErr
+	}
+	return newJob(1, unit, f.results), nil
 }
 
 func (f *fakeBackend) Platform() string { return "fake" }
@@ -434,5 +452,67 @@ func TestUnitStatePassesThroughBackend(t *testing.T) {
 	}
 	if got.Name != "jellyfin.service" || !got.Active() || !got.ActiveEnterTime.Equal(when) {
 		t.Errorf("state = %+v", got)
+	}
+}
+
+// TestStartAndStopRefuseUnmanagedUnitBeforeBackend extends the package's core security
+// assertion to the two verbs added in ADR-0002 Amendment 1.
+//
+// The widening was to the *verbs*, never to the *targets*. If the allowlist gated restart
+// but not stop, a misconfiguration could stop an arbitrary unit — and stop is the verb
+// that does not undo itself. Asserting the absence of the backend call, not merely the
+// presence of an error, is what proves the refusal happened before the system bus.
+func TestStartAndStopRefuseUnmanagedUnitBeforeBackend(t *testing.T) {
+	unmanaged := []string{
+		"ssh.service",
+		"jellyfin",
+		"jellyfin.service.evil",
+		"Jellyfin.service",
+		" jellyfin.service",
+		"",
+	}
+
+	t.Run("start", func(t *testing.T) {
+		c, backend := newTestController(t)
+		for _, unit := range unmanaged {
+			if _, err := c.StartUnit(context.Background(), unit); !errors.Is(err, ErrUnitNotManaged) {
+				t.Errorf("StartUnit(%q) error = %v, want ErrUnitNotManaged", unit, err)
+			}
+		}
+		if len(backend.startCalls) != 0 {
+			t.Errorf("an unmanaged unit reached the backend: %v", backend.startCalls)
+		}
+	})
+
+	t.Run("stop", func(t *testing.T) {
+		c, backend := newTestController(t)
+		for _, unit := range unmanaged {
+			if _, err := c.StopUnit(context.Background(), unit); !errors.Is(err, ErrUnitNotManaged) {
+				t.Errorf("StopUnit(%q) error = %v, want ErrUnitNotManaged", unit, err)
+			}
+		}
+		if len(backend.stopCalls) != 0 {
+			t.Errorf("an unmanaged unit reached the backend: %v", backend.stopCalls)
+		}
+	})
+}
+
+// TestStartAndStopReachBackendForManagedUnit is the other half: the allowlist must permit
+// what it is supposed to permit, or the widening did nothing.
+func TestStartAndStopReachBackendForManagedUnit(t *testing.T) {
+	c, backend := newTestController(t)
+
+	if _, err := c.StartUnit(context.Background(), "jellyfin.service"); err != nil {
+		t.Fatalf("StartUnit on a managed unit: %v", err)
+	}
+	if _, err := c.StopUnit(context.Background(), "jellyfin.service"); err != nil {
+		t.Fatalf("StopUnit on a managed unit: %v", err)
+	}
+
+	if len(backend.startCalls) != 1 || backend.startCalls[0] != "jellyfin.service" {
+		t.Errorf("startCalls = %v", backend.startCalls)
+	}
+	if len(backend.stopCalls) != 1 || backend.stopCalls[0] != "jellyfin.service" {
+		t.Errorf("stopCalls = %v", backend.stopCalls)
 	}
 }

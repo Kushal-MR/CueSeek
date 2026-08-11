@@ -82,7 +82,12 @@ func TestListServicesServesFromCache(t *testing.T) {
 		Reasons: []domain.HealthReason{{
 			Code: domain.ReasonAuthFailed, Message: "Jellyfin rejected the API key.",
 		}},
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	services := decode[[]wireService](t, env.do(t, http.MethodGet, "/v1/services", token, nil))
 	if len(services) != 1 {
@@ -113,6 +118,21 @@ func TestListServicesServesFromCache(t *testing.T) {
 func TestServiceExposesDiscoveredCapabilitiesAndActions(t *testing.T) {
 	env := newTestEnv(t)
 	token := env.pairDevice(t, "Phone", domain.ScopeRead)
+
+	// Actions travel with the observation now (ADR-0002 Amendment 1), because which ones
+	// apply depends on the unit's state. A service the poller has not reached yet
+	// therefore advertises none — the same window in which its health is Unknown, and
+	// honest for the same reason: we do not yet know what state the unit is in.
+	env.cache.Put("jellyfin", domain.Health{
+		Status:     domain.StatusHealthy,
+		Reachable:  true,
+		ObservedAt: time.Now().UTC(),
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	svc := decode[wireService](t, env.do(t, http.MethodGet, "/v1/services/jellyfin", token, nil))
 
@@ -166,7 +186,12 @@ func TestStaleCacheIsReportedAsUnknown(t *testing.T) {
 		Status:     domain.StatusHealthy,
 		Reachable:  true,
 		ObservedAt: time.Now().UTC().Add(-2 * time.Hour),
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	svc := decode[wireService](t, env.do(t, http.MethodGet, "/v1/services/jellyfin", token, nil))
 	if svc.Health.Status != "unknown" {
@@ -392,7 +417,12 @@ func TestOverallHealthIsComputedByTheAgent(t *testing.T) {
 
 	env.cache.Put("jellyfin", domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: time.Now().UTC(),
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 	if got := env.api.OverallHealth().Status; got != domain.StatusHealthy {
 		t.Errorf("status = %q with a healthy service, want healthy", got)
 	}
@@ -400,7 +430,12 @@ func TestOverallHealthIsComputedByTheAgent(t *testing.T) {
 	env.cache.Put("jellyfin", domain.Health{
 		Status: domain.StatusUnreachable, ObservedAt: time.Now().UTC(),
 		Reasons: []domain.HealthReason{{Code: domain.ReasonUnreachable, Message: "refused"}},
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 	overall := env.api.OverallHealth()
 	if overall.Status != domain.StatusUnreachable {
 		t.Errorf("status = %q with the only service unreachable, want unreachable", overall.Status)

@@ -55,7 +55,7 @@ func (s *stubAdapter) Health(context.Context) (domain.Health, error) {
 	return domain.Health{Status: domain.StatusHealthy, Reachable: true}, nil
 }
 
-func (s *stubAdapter) Actions() []domain.Action {
+func (s *stubAdapter) Actions(_ context.Context) []domain.Action {
 	return []domain.Action{{
 		ID: "restart", Label: "Restart Jellyfin",
 		Description: "Restarts the service.", Risk: domain.RiskDisruptive,

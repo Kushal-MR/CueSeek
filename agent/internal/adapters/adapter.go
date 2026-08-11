@@ -35,8 +35,13 @@ type Service interface {
 
 // Controllable is the optional capability of having actions that can be invoked.
 type Controllable interface {
-	// Actions returns descriptors. Static: this is the menu, not the kitchen.
-	Actions() []domain.Action
+	// Actions returns the descriptors that currently apply.
+	//
+	// No longer static, as of ADR-0002 Amendment 1: Start applies only to a stopped unit
+	// and Stop only to a running one. Takes a context because answering may require
+	// reading the unit's state, and that read must happen on the poll path rather than
+	// on a request path (ADR-0003).
+	Actions(ctx context.Context) []domain.Action
 
 	// Invoke starts an action and returns a job whose outcome arrives later.
 	//
@@ -74,7 +79,13 @@ type (
 // An adapter that imported go-systemd directly would bypass the allowlist entirely, so
 // the narrowness of this interface is a security property, not a style preference.
 type UnitControl interface {
+	// UnitState reads the unit's current properties, so an adapter can decide which
+	// lifecycle actions currently apply.
+	UnitState(ctx context.Context, unit string) (host.UnitState, error)
+
 	RestartUnit(ctx context.Context, unit string) (*host.Job, error)
+	StartUnit(ctx context.Context, unit string) (*host.Job, error)
+	StopUnit(ctx context.Context, unit string) (*host.Job, error)
 }
 
 // Deps are what a Factory may use to build an adapter.

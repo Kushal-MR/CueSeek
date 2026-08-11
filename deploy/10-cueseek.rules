@@ -43,14 +43,21 @@ polkit.addRule(function (action, subject) {
             "qbittorrent.service"
         ];
 
-        /* The agent only ever calls RestartUnit, which systemd reports to polkit
-         * as the "restart" verb. The other two are listed because a future
-         * ReloadOrRestart would otherwise fail as an authorisation error, which
-         * looks like a misconfigured user rather than a missing verb.
+        /* The agent calls RestartUnit, StartUnit and StopUnit, which systemd
+         * reports to polkit as "restart", "start" and "stop". try-restart and
+         * reload-or-restart are listed because a future ReloadOrRestart would
+         * otherwise fail as an authorisation error, which looks like a
+         * misconfigured user rather than a missing verb.
          *
-         * Note what is absent: start, stop, enable, disable, mask. The agent
-         * cannot leave a service switched off. */
-        var allowedVerbs = ["restart", "try-restart", "reload-or-restart"];
+         * `stop` was deliberately absent until M3.1 and its addition is a real
+         * widening: restart is self-healing, stop is not, so a stolen token can
+         * now leave a service down. ADR-0002 Amendment 1 records what bounds it.
+         *
+         * Note what is still absent: enable, disable, mask. A stopped unit stays
+         * enabled and returns on the next boot, so a stop costs one reboot
+         * rather than persisting. Do not add them without amending the ADR. */
+        var allowedVerbs = ["restart", "try-restart", "reload-or-restart",
+                            "start", "stop"];
 
         if (allowedUnits.indexOf(action.lookup("unit")) >= 0 &&
             allowedVerbs.indexOf(action.lookup("verb")) >= 0) {
