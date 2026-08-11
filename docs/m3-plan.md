@@ -33,22 +33,24 @@ without the user maintaining two addresses.
 
 ## Phases
 
-| Phase | Scope | Depends on |
-| --- | --- | --- |
-| M3.1 | Service lifecycle: Start, Stop, Restart | — |
-| M3.2 | Contract + agent: `web_ui` | — |
-| M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 |
-| M3.4 | qBittorrent adapter | M3.1, M3.2 |
-| M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 |
-| M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 |
-| M3.7 | Host power actions | M3.1, M3.3 |
-| M3.8 | Verification, documentation, ADR closure | all |
+| Phase | Scope | Depends on | Status |
+| --- | --- | --- | --- |
+| M3.1 | Service lifecycle: Start, Stop, Restart | — | ✅ verified |
+| M3.2 | Contract + agent: `web_ui` | — | ⬜ |
+| M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 | ⬜ |
+| M3.4 | qBittorrent adapter | M3.1, M3.2 | ⬜ |
+| M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ⬜ |
+| M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
+| M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
+| M3.8 | Verification, documentation, ADR closure | all | ⬜ |
 
 Each phase is independently verifiable and separately committed.
 
 ---
 
-### M3.1 — Service lifecycle: Start, Stop, Restart
+### M3.1 — Service lifecycle: Start, Stop, Restart ✅
+
+Verified on the real host; see [`m3-verification.md`](m3-verification.md).
 
 **No contract change.** `Action` is `{id, label, risk, description}`, and actions are data,
 so `stop` and `start` are new values rather than new schema. That is the point of ADR-0005,
