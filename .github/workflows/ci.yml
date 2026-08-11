@@ -106,10 +106,21 @@ jobs:
       # code that runs before any of our own build logic does.
       - uses: gradle/actions/wrapper-validation@v4
 
+      # 21, not 17. Paparazzi 2.0.0-alpha05's Gradle module metadata declares
+      # `org.gradle.jvm.version: 21` on both apiElements and runtimeElements, so a Java 17
+      # runner cannot even resolve the plugin - the build fails while configuring
+      # :core:design, before any code is compiled.
+      #
+      # This was invisible locally: the development machine's default JDK is 25 and Android
+      # Studio's JBR is 25, so the floor was never touched. It only appeared once CI, the
+      # one environment pinned to 17, ran the design system for the first time.
+      #
+      # The modules still target JVM 17 bytecode; that is a compile target and is unaffected
+      # by the runtime the build itself runs on.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       # -------------------------------------------------------------------------------
       # No SDK installation step, and no setup-android action.

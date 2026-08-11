@@ -83,3 +83,6 @@ desktop.ini
 
 # Stray runtime files from local testing
 *.pid
+
+# Local scratch: agent doubles, screenshots and test databases.
+.demo/
