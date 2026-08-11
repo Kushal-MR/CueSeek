@@ -168,3 +168,10 @@ jobs:
 
       - name: Build, test and lint every module
         run: ./gradlew build
+
+      # `check` does not include Paparazzi verification - it only prepares its resources -
+      # so a golden would drift silently if this were left to `build`. The status language
+      # is the one part of the UI where a rendering change is a correctness bug, which is
+      # why it is pinned at all (ADR-0010).
+      - name: Verify the design system's golden images
+        run: ./gradlew :core:design:verifyPaparazziDebug
