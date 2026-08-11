@@ -78,6 +78,7 @@ Proven end to end: **phone → Tailscale → cueseekd → polkit → systemd →
 | 16 | Recovery from a VPN outage, unattended | Operator toggled Tailscale off, switched to mobile data, locked the phone for several minutes, then re-enabled Tailscale. The app recovered and a subsequent Jellyfin restart succeeded on the same stored token |
 | 17 | **The freshness watchdog, against the real agent** | `systemctl kill --signal=STOP cueseekd`. At 35s and 70s the phone read `Unverified`, with **"Stream open"** beside `no data 75s` then `no data 110s`, a dashed tally, a dashed clock mark and `Last verified 11:52:59` |
 | 18 | Recovery from starvation | `--signal=CONT` → back to `All good`, live, within 8s, with no re-pairing and no visible reconnect state |
+| 19 | **Boot ordering, on a real reboot** | `sudo reboot`. The agent came back `active (running)` unattended, bound to its tailnet address; the phone reconnected on its own and showed Healthy; a Jellyfin restart from the app then succeeded |
 
 Item 17 is the one this client exists for, and it took a real agent to prove properly.
 `SIGSTOP` suspends the process without touching its sockets, so the TCP session genuinely
@@ -101,15 +102,20 @@ aged data. The freshness watchdog defends a different case — the app visible w
 stream goes quiet — which cannot be forced against a live agent without making it stop
 emitting, and so remains verified only against a controllable double.
 
-## Not verified, and not to be claimed
+Item 19 settles the last of it. `After=tailscaled.service` is still commented out in the
+unit, so the agent genuinely raced `tailscaled` at boot and won on its own — the
+`EADDRNOTAVAIL` listen retry doing in practice what it was unit-tested for. Enabling those
+lines would make the ordering explicit rather than survivable, which is worth doing on the
+next redeployment, but nothing depends on it.
 
-One item remains:
+The device token survived the reboot on both sides: the phone reconnected without
+re-pairing, and a privileged action succeeded immediately afterwards.
 
-1. **Boot ordering in practice.** The host was already bound to its tailnet address, so the
-   commented `After=tailscaled.service` lines never had to be enabled. Untested across a
-   reboot. The listen retry that makes it survivable *is* unit-tested.
+## Nothing outstanding
 
-This does not block M2, and should be revisited if the agent is ever redeployed.
+Every behaviour M2 set out to prove has now been observed against the real agent on real
+hardware over Tailscale. What remains untested here belongs to later milestones: a second
+adapter (M3), Wear (M4), and anything about power draw over long periods.
 
 ## The final acceptance test — passed, 2026-08-11
 
