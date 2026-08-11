@@ -46,3 +46,53 @@ No sudo. No shell. No `systemctl` invocation, ever.
   placed correctly, and getting it wrong fails in ways that are unintuitive to debug.
 - **This is the riskiest assumption in the architecture and is validated first**, by a
   throwaway spike, before anything depends on it. See ADR-0011.
+
+## Amendments
+
+### Amendment 1 — 2026-08-11: the ceiling widens to `start` and `stop`
+
+**What changed.** This ADR's decision named `RestartUnit` and unit property reads. The
+agent may now also call `StartUnit` and `StopUnit`, and the shipped polkit rule grants the
+`start` and `stop` verbs alongside `restart` on the same unit allowlist.
+
+**Why.** M3 turns CueSeek from a monitoring app into a service control panel. Restart alone
+cannot express the two things an operator actually wants when something is misbehaving:
+take it down, and bring it back. Without `stop`, the only way to stop a service from a
+phone is to not have that capability at all.
+
+**What this costs, stated plainly.** The original rule carried this comment:
+
+> Note what is absent: start, stop, enable, disable, mask. The agent cannot leave a
+> service switched off.
+
+That sentence is no longer true, and the reason it was written still holds: a `restart`
+grant is self-healing, because whatever it does, the service is running afterwards. A
+`stop` grant is not. A stolen `service.control` token, or a bug in the agent, can now leave
+Jellyfin down until somebody notices.
+
+Three things bound that risk, and none of them is new machinery:
+
+1. **The unit allowlist is unchanged.** `start` and `stop` are grantable only for units
+   already named in both the config and the rule. Widening the *verbs* does not widen the
+   *targets*.
+2. **`enable`, `disable` and `mask` remain absent.** A stopped unit is still enabled, so it
+   returns on the next boot. The damage is bounded by one reboot rather than being
+   persistent, and the client's confirmation says so.
+3. **`stop` is classified `destructive`, not `disruptive`** (ADR-0005's risk vocabulary),
+   which routes it to the client's press-and-hold confirmation rather than a single tap.
+   The risk level is carried on the wire, so this holds for every client including ones
+   written later.
+
+**What was considered and rejected.** A separate `service.lifecycle` scope, distinct from
+`service.control`, would let a device restart without being able to stop. It was rejected
+for now because it doubles the scope vocabulary to express a distinction no user has asked
+for, and scopes are hard to change once devices are paired with them. If a real need
+appears — a shared device, a kiosk — this is the shape it should take, and the tokens are
+per-device precisely so that becomes possible without a migration.
+
+**Consequence for `Actions()`.** `adapters.Controllable.Actions()` was documented as
+"Static: this is the menu, not the kitchen." It is no longer static: Start is offered only
+when the unit is inactive, and Stop only when it is active. The list is derived from
+`host.UnitState` on each poll and shipped in `Service.actions`, so clients continue to
+render what they are given and gain no new branching. This costs nothing on the wire —
+actions were always data.
