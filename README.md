@@ -8,9 +8,9 @@ something about it when the answer is no — across every service running on you
 It talks to Jellyfin, qBittorrent and others through their APIs, and adds the host-level
 control they cannot provide themselves.
 
-> **Status: pre-alpha.** This repository currently contains the architecture, the decision
-> record, and the project skeleton. There is no working software yet. See
-> [Roadmap](#roadmap) for what is actually built.
+> **Status: M2 complete.** The agent and the Android client both work, and the whole path —
+> phone → Tailscale → `cueseekd` → polkit → systemd — has been verified end to end on real
+> hardware. See [What works today](#what-works-today).
 
 ---
 
@@ -37,6 +37,36 @@ This distinction is the product, so it is stated first and enforced everywhere:
 That constraint is what keeps the adapter interface small enough to remain an adapter
 interface, and what keeps CueSeek from collapsing into a lowest-common-denominator
 link-grid.
+
+---
+
+## What works today
+
+Two milestones are complete. Both were verified on real hardware against the real agent,
+not against mocks — the record is in [`docs/m2-p6-verification.md`](docs/m2-p6-verification.md).
+
+**The agent — `cueseekd`.** Runs as an unprivileged `cueseek` user on a systemd host.
+Serves the REST contract and an SSE event stream, stores paired devices and hashed tokens
+in SQLite, polls Jellyfin for health on its own schedule, and restarts units through polkit
+without ever holding root.
+
+**The Android client.** Pair by entering the host's address and a single-use code printed
+by `cueseekd pair`. A live dashboard shows every service's health, updated over SSE. Tap a
+service to see its detail and restart it; the outcome arrives as a stream event rather than
+being assumed from the acknowledgement.
+
+Verified end to end over Tailscale, on a phone and a real Linux host:
+
+| | |
+| --- | --- |
+| **Pair a device** | Real single-use code redeemed over the tailnet; replaying it is refused |
+| **See health** | Matches `systemctl` — two independent measurements, the adapter polling Jellyfin's API and systemd watching the process |
+| **Restart a service** | Through polkit; `ActiveEnterTimestamp` moved, and the outcome arrived over the stream *after* systemd recorded it |
+| **Never be confidently wrong** | Agent suspended with its sockets intact: the app reported `Unverified` and "Stream open" side by side while the data aged |
+| **Recover** | From a VPN outage, a Wi-Fi↔cellular switch, a locked phone, a starved stream and a host reboot |
+
+The fourth row is the one the architecture exists for. A client that trusted its transport
+would have shown a healthy green service two minutes after the agent stopped speaking.
 
 ---
 
@@ -111,7 +141,7 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | `agent/internal/host/` | `HostController`; systemd/logind over D-Bus. |
 | `agent/internal/store/` | SQLite: device registry, token hashes, audit log. |
 | `clients/android/` | Android phone client (Compose). |
-| `clients/wear/` | Wear OS client. |
+| `clients/wear/` | Wear OS client. Placeholder until M4. |
 | `deploy/` | systemd unit, polkit rule, install script, packaging. |
 | `docs/adr/` | Architecture Decision Records. Start here. |
 
@@ -151,13 +181,17 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | **Setup** | Repository skeleton, ADRs, contract placeholder | ✅ Done |
 | **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | ✅ Done — [findings](docs/m0-findings.md). A7 closed: SSE viable, but Doze freezes it silently rather than killing it (ADR-0004 Amendment 2) |
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
-| **M2** | Android client: pair by entering host address + code, one capability-driven card, one action | ⬜ |
-| **M3** | qBittorrent, `now_playing`, host metrics, power actions, design system | ⬜ |
+| **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
+| **M3** | qBittorrent, `now_playing`, host metrics, power actions | ⬜ |
 | **M4** | Wear OS standalone client, tiles and complications | ⬜ |
 | **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
 
 **Setup** is unnumbered on purpose: it produced structure and decisions, but no behaviour.
 Numbering starts where the software does.
+
+**Phases within a milestone are numbered `M<n>.<k>`** — `M1.1` … `M1.8`, and `M3.1` onward.
+M2's commits use `M2 P0` … `M2 P6`, an earlier variant of the same idea, kept as-is because
+that history is merged and public.
 
 **M0 runs before the agent, deliberately.** It is throwaway code whose only job is to prove
 that a polkit rule really does grant an unprivileged daemon `RestartUnit` and `PowerOff` on
@@ -177,7 +211,10 @@ future work in [ADR-0006, Amendment 3](docs/adr/0006-device-pairing-scoped-token
 **Requirements**
 
 - Go 1.24+ — the agent
-- JDK 17+ and Android Studio — the clients
+- JDK 21+ — the clients. The screenshot-test plugin declares a JVM 21 floor, so 17 cannot
+  resolve it. The modules still *target* JVM 17 bytecode
+- Android Studio recent enough for AGP 9.3.1, if you want the IDE. The command line does
+  not need it
 - A Linux host running systemd — the agent's only supported target today
 - Tailscale, WireGuard or LAN connectivity between client and host
 
