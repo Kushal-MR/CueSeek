@@ -45,21 +45,47 @@ interface itself.
   dying, which is what `m1.8-listenretry` is. The unit's `Restart=on-failure` is a
   backstop, not the mechanism.
 
+## Verified over Tailscale, on the main phone
+
+Run on a OnePlus CPH2707 (Android 16) with Tailscale connected — `tun0`, `100.121.26.17/32`,
+MTU 1280 — against `cueseekd` on `kushal-hp-paviliong6` at `100.92.18.125:7777`, reached by
+MagicDNS at ~24 ms.
+
+| # | Behaviour | Evidence |
+| --- | --- | --- |
+| 9 | The real Android → Tailscale → `cueseekd` path | Real code `8F7Q-SP96` from `sudo cueseekd pair` redeemed from the phone; the dashboard came up naming the host |
+| 10 | SSE genuinely delivers across the tailnet | Service age read 11s, 26s, then **12s** — the reset is a `service_updated` arriving, not a connection merely held open |
+| 11 | A 1280-byte MTU does not break the stream | No stall or truncation across a 40s observation |
+| 12 | Health matches the host | App reported Healthy; `systemctl status jellyfin` reported `active (running) since 09:36:27 IST`. Two independent measurements — the adapter polls Jellyfin's HTTP API, systemd watches the process — agreeing |
+| 13 | Backgrounding and resume | Screen off 70s, then unlock: reconnected immediately to live with a fresh snapshot |
+| 14 | Network transition | Wi-Fi disabled so Tailscale moved to cellular, then restored. Live on both sides |
+
+Item 13 deserves a note, because it is easy to mistake for a Doze test. It is not one. The
+stream is torn down when the app is backgrounded (ADR-0004 Amendment 2), so Doze never gets
+the chance to freeze it, and on resume the client takes a fresh snapshot rather than showing
+aged data. The freshness watchdog defends a different case — the app visible while the
+stream goes quiet — which cannot be forced against a live agent without making it stop
+emitting, and so remains verified only against a controllable double.
+
 ## Not verified, and not to be claimed
 
-The older test phone **has no Tailscale**, so nothing here is evidence for the
-Android → Tailscale → `cueseekd` path. These remain open:
+One item remains, and it is the important one:
 
-1. **The tailnet hop itself.** A `100.64.0.0/10` address, Tailscale's MTU, and SSE held
-   open across it.
-2. **A real restart.** Host control has only ever been observed *failing* on the Windows
+1. **A real restart.** Host control has only ever been observed *failing*, on the Windows
    stub. Whether polkit permits `RestartUnit jellyfin.service` for the `cueseek` user, and
-   whether the outcome arrives as an `action_progress` event, is untested.
-3. **A real Jellyfin.** Every health reading so far came from a stub of our own design.
-4. **Doze on a real device.** P3 simulated the symptom — a connection held open while
-   silent. Actual Doze, on cellular, has never run.
-5. **Boot ordering in practice.** The `After=tailscaled.service` lines have never been
-   enabled on a running host.
+   whether the outcome returns as an `action_progress` event rather than the client merely
+   believing the `202`, is untested. It restarts a live media server, so it waits for the
+   operator to choose the moment.
+
+   Baseline captured for the comparison:
+   `ActiveEnterTimestamp=Tue 2026-08-11 09:36:27 IST`.
+
+Two smaller ones, deliberately left:
+
+2. **The freshness watchdog against the real agent.** See the note above — the design means
+   it cannot be provoked from the client side.
+3. **Boot ordering in practice.** The host was already bound to its tailnet address, so
+   `After=tailscaled.service` never had to be enabled; it remains untested on a reboot.
 
 ## The final acceptance test
 
