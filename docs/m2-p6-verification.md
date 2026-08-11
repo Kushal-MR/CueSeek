@@ -73,6 +73,27 @@ would have claimed success four seconds before the service actually came back.
 
 Proven end to end: **phone → Tailscale → cueseekd → polkit → systemd → back over SSE.**
 
+| # | Behaviour | Evidence |
+| --- | --- | --- |
+| 16 | Recovery from a VPN outage, unattended | Operator toggled Tailscale off, switched to mobile data, locked the phone for several minutes, then re-enabled Tailscale. The app recovered and a subsequent Jellyfin restart succeeded on the same stored token |
+| 17 | **The freshness watchdog, against the real agent** | `systemctl kill --signal=STOP cueseekd`. At 35s and 70s the phone read `Unverified`, with **"Stream open"** beside `no data 75s` then `no data 110s`, a dashed tally, a dashed clock mark and `Last verified 11:52:59` |
+| 18 | Recovery from starvation | `--signal=CONT` → back to `All good`, live, within 8s, with no re-pairing and no visible reconnect state |
+
+Item 17 is the one this client exists for, and it took a real agent to prove properly.
+`SIGSTOP` suspends the process without touching its sockets, so the TCP session genuinely
+stays `ESTABLISHED` — the stream really was open while the agent said nothing. A client that
+trusted its transport would have shown a green "All good" and a healthy Jellyfin 110 seconds
+after the agent stopped speaking. That is precisely the "confidently wrong" state ADR-0008
+exists to prevent.
+
+`Last verified 11:52:59` also confirms the local-time fix against real `observed_at` data off
+the wire, rather than against a fixture.
+
+Item 18 says the watchdog is a rendering decision and nothing more: it never interferes with
+the transport, and feeding the stream again restores the display without re-pairing. The 8s
+sample cannot distinguish "same connection resumed" from "reconnected quickly"; the
+user-visible outcome is what is claimed.
+
 Item 13 deserves a note, because it is easy to mistake for a Doze test. It is not one. The
 stream is torn down when the app is backgrounded (ADR-0004 Amendment 2), so Doze never gets
 the chance to freeze it, and on resume the client takes a fresh snapshot rather than showing
@@ -82,19 +103,13 @@ emitting, and so remains verified only against a controllable double.
 
 ## Not verified, and not to be claimed
 
-Two items, both deliberately left rather than overlooked:
+One item remains:
 
-1. **The freshness watchdog against the real agent.** It cannot be provoked from the client
-   side: the stream is torn down when the app is backgrounded, so the app is never visible
-   while a live connection goes quiet. Forcing it would mean making `cueseekd` hold a
-   connection open and stop emitting. It stays verified against a controllable double, on
-   virtual time, and on a device against a freezable stand-in.
-
-2. **Boot ordering in practice.** The host was already bound to its tailnet address, so the
+1. **Boot ordering in practice.** The host was already bound to its tailnet address, so the
    commented `After=tailscaled.service` lines never had to be enabled. Untested across a
    reboot. The listen retry that makes it survivable *is* unit-tested.
 
-Neither blocks M2. Both should be revisited if the agent is ever redeployed.
+This does not block M2, and should be revisited if the agent is ever redeployed.
 
 ## The final acceptance test — passed, 2026-08-11
 
