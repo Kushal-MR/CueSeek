@@ -15,6 +15,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 	"net"
 	"net/url"
 	"os"
@@ -94,12 +95,34 @@ type Service struct {
 	// where the deployment has somewhere better to keep it.
 	APIKey string `yaml:"api_key"`
 
+	// WebUI describes where this service's own interface lives, for clients that offer
+	// to open it. Omit the block entirely and the service simply does not advertise the
+	// capability — which is the honest answer for something with no web interface.
+	WebUI *WebUI `yaml:"web_ui"`
+
 	// APIKeyFile reads the key from a separate file, trimmed of whitespace.
 	//
 	// Exists so the key can live somewhere with its own permissions and its own backup
 	// policy — and so a config file can be committed to a private repo or pasted into a
 	// support request without leaking a credential. Takes precedence over APIKey.
 	APIKeyFile string `yaml:"api_key_file"`
+}
+
+// WebUI is the configured location of a service's own interface.
+//
+// Note what is absent: a host. The agent does not know which address a given client can
+// reach it on — a phone on the VPN and a laptop on the LAN use different ones — so it
+// supplies the parts that do not vary and lets the client compose the rest from the
+// address it already paired with.
+type WebUI struct {
+	// Scheme is "http" or "https". Defaults to http: this is a service on a private
+	// network and ADR-0001 delegates transport security to the VPN.
+	Scheme string `yaml:"scheme"`
+	// Port the interface listens on. Required — it is usually not the port the agent
+	// polls, and guessing would be worse than asking.
+	Port int `yaml:"port"`
+	// Path to open, including the leading slash. Defaults to "/".
+	Path string `yaml:"path"`
 }
 
 // Defaults returns a Config with every optional field populated.
@@ -292,6 +315,7 @@ func (s Service) validate(i int) []error {
 	if s.Timeout < 0 {
 		errs = append(errs, fmt.Errorf("services[%d]: timeout must not be negative", i))
 	}
+	errs = append(errs, s.WebUI.validate(i)...)
 	// A request budget at or beyond the poll interval lets one slow poll still be running
 	// when the next begins, and they accumulate.
 	if s.Timeout > 0 && s.PollInterval > 0 && s.Timeout >= s.PollInterval {
@@ -323,4 +347,49 @@ func (c Config) ManagedUnits() []string {
 		units = append(units, s.Unit)
 	}
 	return units
+}
+
+// validate checks a web_ui block. A nil block is valid: the service simply has no web
+// interface to offer.
+//
+// Strict about the scheme because the value crosses the wire and a client composes a URL
+// from it. Anything outside http/https there would be a client opening an intent for a
+// scheme the operator never intended — and "ftp" or "javascript" in a config file should
+// fail at startup, where an operator is watching, rather than on a phone later.
+func (w *WebUI) validate(i int) []error {
+	if w == nil {
+		return nil
+	}
+	var errs []error
+	if w.Port < 1 || w.Port > 65535 {
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: web_ui.port %d is outside 1-65535", i, w.Port))
+	}
+	switch w.Scheme {
+	case "", "http", "https":
+	default:
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: web_ui.scheme %q must be http or https", i, w.Scheme))
+	}
+	if w.Path != "" && !strings.HasPrefix(w.Path, "/") {
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: web_ui.path %q must start with /", i, w.Path))
+	}
+	return errs
+}
+
+// Resolved returns the block with defaults applied.
+func (w *WebUI) Resolved() (domain.WebUI, bool) {
+	if w == nil {
+		return domain.WebUI{}, false
+	}
+	scheme := w.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+	path := w.Path
+	if path == "" {
+		path = "/"
+	}
+	return domain.WebUI{Scheme: scheme, Port: w.Port, Path: path}, true
 }

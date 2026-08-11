@@ -78,6 +78,16 @@ type (
 //
 // An adapter that imported go-systemd directly would bypass the allowlist entirely, so
 // the narrowness of this interface is a security property, not a style preference.
+// WebUIProvider is implemented by an adapter whose service has its own interface.
+//
+// Returning false is normal, not a failure: whether a service has a web UI is an operator
+// configuration, not a property of the adapter's code. An adapter implements this and then
+// reports what it was configured with, which is why discovery below checks the second
+// return rather than only the type assertion.
+type WebUIProvider interface {
+	WebUI() (domain.WebUI, bool)
+}
+
 type UnitControl interface {
 	// UnitState reads the unit's current properties, so an adapter can decide which
 	// lifecycle actions currently apply.
@@ -114,6 +124,17 @@ var capabilityProbes = []struct {
 	implements func(Service) bool
 }{
 	{domain.CapabilityControl, func(s Service) bool { _, ok := s.(Controllable); return ok }},
+	{domain.CapabilityWebUI, func(s Service) bool {
+		// Two conditions, unlike the others: the adapter must implement the interface
+		// *and* have been configured with somewhere to point. Advertising the capability
+		// without a destination would make a client offer to open nothing.
+		provider, ok := s.(WebUIProvider)
+		if !ok {
+			return false
+		}
+		_, configured := provider.WebUI()
+		return configured
+	}},
 	{domain.CapabilityNowPlaying, func(s Service) bool { _, ok := s.(NowPlayingProvider); return ok }},
 	{domain.CapabilityTransfers, func(s Service) bool { _, ok := s.(TransferProvider); return ok }},
 }

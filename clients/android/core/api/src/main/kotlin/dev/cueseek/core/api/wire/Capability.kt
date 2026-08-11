@@ -23,14 +23,14 @@ import kotlinx.serialization.Contextual
 /**
  * A capability a service supports. Clients hold a map of capability id to renderer and look it up; they must never branch on service id (ADR-0007). 
  *
- * @param id Stable capability identifier. Not an enum: capabilities are added by agent updates, and a client must tolerate ids it has never heard of. 
+ * @param id Stable capability identifier. Not an enum: capabilities are added by agent updates, and a client must tolerate ids it has never heard of.  In use today: `health`, `control`, `web_ui`, `now_playing`, `transfers`. 
  * @param label Human-readable name. Exists so a client that predates a capability can render \"Immich Jobs — update CueSeek to view this\" rather than an empty box. 
  */
 @Serializable
 
 data class Capability (
 
-    /* Stable capability identifier. Not an enum: capabilities are added by agent updates, and a client must tolerate ids it has never heard of.  */
+    /* Stable capability identifier. Not an enum: capabilities are added by agent updates, and a client must tolerate ids it has never heard of.  In use today: `health`, `control`, `web_ui`, `now_playing`, `transfers`.  */
     @SerialName(value = "id")
     val id: kotlin.String,
 

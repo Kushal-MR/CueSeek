@@ -147,6 +147,26 @@ type Capability struct {
 var (
 	CapabilityHealth     = Capability{ID: "health", Label: "Health"}
 	CapabilityControl    = Capability{ID: "control", Label: "Controls"}
+	CapabilityWebUI      = Capability{ID: "web_ui", Label: "Web interface"}
 	CapabilityNowPlaying = Capability{ID: "now_playing", Label: "Now Playing"}
 	CapabilityTransfers  = Capability{ID: "transfers", Label: "Transfers"}
 )
+
+// WebUI locates a service's own interface, as parts rather than as a URL.
+//
+// Deliberately not a URL, and the reason is worth stating where the type is defined. The
+// agent reaches Jellyfin at 127.0.0.1 because they share a host; that address is useless
+// to a phone. The client already holds one that works — whatever it paired with — so it
+// composes scheme://{paired host}:{port}{path} itself.
+//
+// The security property is the same shape as the allowlist duplication in ADR-0002: by
+// never supplying an origin, the agent cannot send a client somewhere the operator never
+// pointed it, even if the agent is wrong or compromised.
+type WebUI struct {
+	// Scheme is "http" or "https".
+	Scheme string
+	// Port the service's own interface listens on.
+	Port int
+	// Path to open, including the leading slash.
+	Path string
+}

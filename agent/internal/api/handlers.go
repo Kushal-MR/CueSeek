@@ -172,6 +172,12 @@ func (s *Server) describeService(svc adapters.Service) gen.Service {
 		Actions:      []gen.Action{},
 	}
 
+	if provider, ok := svc.(adapters.WebUIProvider); ok {
+		if webUI, configured := provider.WebUI(); configured {
+			out.WebUi = toGenWebUI(webUI)
+		}
+	}
+
 	// Actions come from the same snapshot as the health, not from a fresh call to the
 	// adapter. They are state-dependent now (ADR-0002 Amendment 1), so reading them
 	// separately would let this response offer Start while the invoke path — reading a

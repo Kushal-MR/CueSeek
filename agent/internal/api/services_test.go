@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +40,11 @@ type wireService struct {
 		Risk        string  `json:"risk"`
 		Description *string `json:"description"`
 	} `json:"actions"`
+	WebUi *struct {
+		Scheme string  `json:"scheme"`
+		Port   int     `json:"port"`
+		Path   *string `json:"path"`
+	} `json:"web_ui"`
 }
 
 type wireAction struct {
@@ -442,5 +449,70 @@ func TestOverallHealthIsComputedByTheAgent(t *testing.T) {
 	}
 	if len(overall.Reasons) == 0 {
 		t.Error("no reasons; 'unreachable' alone is not actionable")
+	}
+}
+
+// TestWebUIIsAdvertisedAsCapabilityAndPayload covers the pairing this contract already
+// uses for control/actions: the capability declares that something exists, the sibling
+// field carries what a client needs.
+//
+// A client keys its renderer map on the capability id, so a payload without the capability
+// would be invisible, and a capability without the payload would offer to open nothing.
+func TestWebUIIsAdvertisedAsCapabilityAndPayload(t *testing.T) {
+	env := newTestEnv(t)
+	token := env.pairDevice(t, "Phone", domain.ScopeRead)
+
+	svc := decode[wireService](t, env.do(t, http.MethodGet, "/v1/services/jellyfin", token, nil))
+
+	var advertised bool
+	for _, c := range svc.Capabilities {
+		if c.Id == domain.CapabilityWebUI.ID {
+			advertised = true
+			if c.Label == "" {
+				t.Error("web_ui capability has no label; a client that predates it renders an empty box")
+			}
+		}
+	}
+	if !advertised {
+		t.Fatalf("capabilities = %v, want web_ui", svc.Capabilities)
+	}
+	if svc.WebUi == nil {
+		t.Fatal("web_ui capability advertised with no payload to open")
+	}
+	if svc.WebUi.Port == 0 {
+		t.Error("web_ui payload has no port")
+	}
+	if svc.WebUi.Scheme != "http" && svc.WebUi.Scheme != "https" {
+		t.Errorf("web_ui scheme = %q, must be http or https", svc.WebUi.Scheme)
+	}
+}
+
+// TestWebUIPayloadCarriesNoOrigin is the wire-level half of the security property.
+//
+// The agent supplies parts and no host. If a host, an authority or a full URL ever
+// appeared here, a client composing a URL would be following the agent to an origin the
+// operator never configured.
+func TestWebUIPayloadCarriesNoOrigin(t *testing.T) {
+	env := newTestEnv(t)
+	token := env.pairDevice(t, "Phone", domain.ScopeRead)
+
+	var payload struct {
+		WebUI map[string]any `json:"web_ui"`
+	}
+	resp := env.do(t, http.MethodGet, "/v1/services/jellyfin", token, nil)
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for key := range payload.WebUI {
+		switch key {
+		case "scheme", "port", "path":
+		default:
+			t.Errorf("web_ui carries unexpected field %q; the agent must not supply an origin", key)
+		}
+	}
+	if path, ok := payload.WebUI["path"].(string); ok {
+		if strings.Contains(path, "://") || strings.HasPrefix(path, "//") {
+			t.Errorf("path %q would override the host a client composed", path)
+		}
 	}
 }

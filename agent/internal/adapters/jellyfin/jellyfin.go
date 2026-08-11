@@ -62,6 +62,12 @@ type adapter struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
+
+	// webUI is what the operator configured, or the zero value when they configured
+	// nothing. hasWebUI is what capability discovery keys on: a Jellyfin with no web_ui
+	// block advertises no web interface, which is honest rather than a degradation.
+	webUI    domain.WebUI
+	hasWebUI bool
 }
 
 // controllable adds the Controllable capability.
@@ -110,12 +116,16 @@ func New(cfg config.Service, deps adapters.Deps) (adapters.Service, error) {
 		name = cfg.ID
 	}
 
+	webUI, hasWebUI := cfg.WebUI.Resolved()
+
 	base := &adapter{
-		id:      cfg.ID,
-		name:    name,
-		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
-		apiKey:  cfg.APIKey,
-		client:  client,
+		id:       cfg.ID,
+		name:     name,
+		baseURL:  strings.TrimRight(cfg.BaseURL, "/"),
+		apiKey:   cfg.APIKey,
+		client:   client,
+		webUI:    webUI,
+		hasWebUI: hasWebUI,
 	}
 
 	// Control is advertised only when it can actually be performed.
@@ -293,6 +303,13 @@ var lifecycleCopy = adapters.LifecycleCopy{
 	DisplayName:  "Jellyfin",
 	Interruption: "Anyone currently watching will be interrupted and will need to resume playback.",
 }
+
+// WebUI reports where Jellyfin's own interface lives, if the operator configured it.
+//
+// The adapter contributes nothing of its own here: it does not know which port the
+// operator exposed, and base_url is the loopback address it polls, which no client can
+// use. It is a pass-through by design.
+func (a *adapter) WebUI() (domain.WebUI, bool) { return a.webUI, a.hasWebUI }
 
 // Actions describes what can be done to this service right now.
 //

@@ -146,3 +146,41 @@ func TestUnimplementedCapabilitiesAreNotAdvertised(t *testing.T) {
 		}
 	}
 }
+
+// TestWebUICapabilityRequiresConfiguration is the discovery rule that differs from the
+// others in this table.
+//
+// Control is discovered by type assertion alone: an adapter either implements it or does
+// not. Whether a service has a web interface is an *operator* decision, so the assertion
+// is not enough — an adapter that implements the interface but was configured with no
+// destination must stay out of the capability list, or a client offers to open nothing.
+func TestWebUICapabilityRequiresConfiguration(t *testing.T) {
+	configured := &fakeWebUI{webUI: &domain.WebUI{Scheme: "http", Port: 8096, Path: "/"}}
+	unconfigured := &fakeWebUI{}
+
+	if !HasCapability(configured, domain.CapabilityWebUI.ID) {
+		t.Error("a configured service did not advertise web_ui")
+	}
+	if HasCapability(unconfigured, domain.CapabilityWebUI.ID) {
+		t.Error("a service with no configured interface advertised web_ui; " +
+			"a client would offer to open nothing")
+	}
+}
+
+type fakeWebUI struct {
+	webUI *domain.WebUI
+}
+
+func (f *fakeWebUI) ID() string   { return "fake" }
+func (f *fakeWebUI) Name() string { return "Fake" }
+
+func (f *fakeWebUI) Health(context.Context) (domain.Health, error) {
+	return domain.Health{Status: domain.StatusHealthy}, nil
+}
+
+func (f *fakeWebUI) WebUI() (domain.WebUI, bool) {
+	if f.webUI == nil {
+		return domain.WebUI{}, false
+	}
+	return *f.webUI, true
+}
