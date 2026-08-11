@@ -2,8 +2,7 @@
 
 **An operations console for self-hosted home servers.**
 
-CueSeek gives you one consistent way to answer *"is everything fine?"* — and to do
-something about it when the answer is no — across every service running on your box.
+CueSeek gives you one consistent way accesss every service running on your home server.
 
 It talks to Jellyfin, qBittorrent and others through their APIs, and adds the host-level
 control they cannot provide themselves.
@@ -25,18 +24,12 @@ the machine they run on:
 
 ## What CueSeek is not
 
-This distinction is the product, so it is stated first and enforced everywhere:
-
 - **Not a replacement** for Jellyfin, qBittorrent, Sonarr, Immich or Home Assistant.
 - **Not a media client.** CueSeek shows you *that* something is playing, not the library
   you browse to play it.
 - **Not a general dashboard.** Adding a service means adding its health, activity and
   control surface — never its full domain UI. Immich support will mean Immich *jobs and
   storage*, not photo browsing.
-
-That constraint is what keeps the adapter interface small enough to remain an adapter
-interface, and what keeps CueSeek from collapsing into a lowest-common-denominator
-link-grid.
 
 ---
 
@@ -59,14 +52,10 @@ Verified end to end over Tailscale, on a phone and a real Linux host:
 
 | | |
 | --- | --- |
-| **Pair a device** | Real single-use code redeemed over the tailnet; replaying it is refused |
-| **See health** | Matches `systemctl` — two independent measurements, the adapter polling Jellyfin's API and systemd watching the process |
+| **Pair a device** | Real single-use code redeemed over the tailnet |
+| **See health** | Matches `systemctl` — two independent measurements, the Jellyfin's API and systemd watching the process |
 | **Restart a service** | Through polkit; `ActiveEnterTimestamp` moved, and the outcome arrived over the stream *after* systemd recorded it |
-| **Never be confidently wrong** | Agent suspended with its sockets intact: the app reported `Unverified` and "Stream open" side by side while the data aged |
 | **Recover** | From a VPN outage, a Wi-Fi↔cellular switch, a locked phone, a starved stream and a host reboot |
-
-The fourth row is the one the architecture exists for. A client that trusted its transport
-would have shown a healthy green service two minutes after the agent stopped speaking.
 
 ---
 
@@ -90,17 +79,15 @@ Phone / Wear ──Tailscale──▶ cueseekd  (user: cueseek, no sudo)
                                     └─ qbittorrent ──HTTP──▶ qBittorrent
 ```
 
-Four properties worth calling out:
+Properties:
 
 **The agent never runs as root.** It holds no special privileges of its own. A shipped
 polkit rule grants the `cueseek` user exactly `RestartUnit` on an allowlist of units plus
-`Reboot`/`PowerOff` via logind — nothing else. One rule file states the complete ceiling of
-what CueSeek can do to your machine, and you can read it in under a minute.
+`Reboot`/`PowerOff` via logind — 
 See [ADR-0002](docs/adr/0002-host-privilege-dbus-polkit.md).
 
 **The spec is the source of truth.** `api/openapi.yaml` is hand-authored. The Go server
-interfaces and every client SDK are generated from it, and CI fails if they drift. The
-spec is not a description of what the agent happens to do.
+interfaces and every client SDK are generated from it, and CI fails if they drift. 
 See [ADR-0004](docs/adr/0004-contract-openapi-sse.md).
 
 **Services declare capabilities; clients render capabilities.** There is no fat `Adapter`
@@ -118,8 +105,7 @@ See [ADR-0006](docs/adr/0006-device-pairing-scoped-tokens.md).
 ### Access model
 
 CueSeek assumes your client can already reach the host — over Tailscale, WireGuard or your
-LAN. It deliberately does **not** implement NAT traversal, a cloud relay, TLS termination
-or certificate management, and it should never be exposed directly to the internet.
+LAN and it should **never be exposed directly to the internet.**
 
 This is the same guidance Home Assistant and Immich give for their own remote access. It
 also means the largest attack surface — a public endpoint that can power off a machine —
@@ -156,24 +142,6 @@ owner.
 Every significant decision is recorded as an ADR with its rationale **and its accepted
 cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 
-| ADR | Decision |
-| --- | --- |
-| [0001](docs/adr/0001-vpn-only-remote-access.md) | VPN-only remote access; no relay, no public exposure |
-| [0002](docs/adr/0002-host-privilege-dbus-polkit.md) | Unprivileged agent; systemd/logind via D-Bus + polkit |
-| [0003](docs/adr/0003-agent-runtime-go.md) | Go for the agent |
-| [0004](docs/adr/0004-contract-openapi-sse.md) | Spec-first OpenAPI (3.0.3) + SSE |
-| [0005](docs/adr/0005-capability-based-adapters.md) | Capability interfaces with runtime discovery |
-| [0006](docs/adr/0006-device-pairing-scoped-tokens.md) | Device pairing with per-device scoped tokens |
-| [0007](docs/adr/0007-client-capability-registry.md) | Client-side capability registry, not server-driven UI |
-| [0008](docs/adr/0008-multi-host-and-computed-health.md) | Multi-host data model; agent computes health |
-| [0009](docs/adr/0009-monorepo-contract-drift-gate.md) | Monorepo with a contract-drift CI gate |
-| [0010](docs/adr/0010-design-system-m3-expressive.md) | Material 3 Expressive + owned token layer |
-| [0011](docs/adr/0011-sequencing-spike-then-slice.md) | De-risking spike, then thin end-to-end slice |
-| [0012](docs/adr/0012-alerting-vs-vpn-only-access.md) | *(Proposed)* Alerting reopens the access model |
-| [0013](docs/adr/0013-android-client-architecture.md) | Four shared `core` modules; features are packages |
-
----
-
 ## Roadmap
 
 | Milestone | Scope | Status |
@@ -186,25 +154,6 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | **M4** | Wear OS standalone client, tiles and complications | ⬜ |
 | **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
 
-**Setup** is unnumbered on purpose: it produced structure and decisions, but no behaviour.
-Numbering starts where the software does.
-
-**Phases within a milestone are numbered `M<n>.<k>`** — `M1.1` … `M1.8`, and `M3.1` onward.
-M2's commits use `M2 P0` … `M2 P6`, an earlier variant of the same idea, kept as-is because
-that history is merged and public.
-
-**M0 runs before the agent, deliberately.** It is throwaway code whose only job is to prove
-that a polkit rule really does grant an unprivileged daemon `RestartUnit` and `PowerOff` on
-a real machine. If that assumption were wrong, several decisions would change — and the
-cheapest moment to discover it is before anything depends on it.
-
-**M2 pairs by typed code, not by QR.** This milestone previously said "pair by QR". The
-agent emits no QR and no payload format exists on either side, so shipping a scanner would
-have meant adding server work in service of a client convenience, inside the milestone
-whose entire purpose is to prove the path end to end. The payload format is recorded as
-future work in [ADR-0006, Amendment 3](docs/adr/0006-device-pairing-scoped-tokens.md).
-
----
 
 ## Development
 
@@ -229,8 +178,5 @@ cd agent && go build ./...
 **Platform support.** The agent targets systemd-based Linux. This is a real limitation, not
 an oversight: `RestartUnit`, `Reboot` and `PowerOff` are systemd/logind operations. The
 `HostController` interface exists so that an OpenRC, BSD or macOS backend is a swap rather
-than a rewrite, but none is implemented.
+than a rewrite, but none is implemented yet...
 
-## License
-
-Not yet chosen.
