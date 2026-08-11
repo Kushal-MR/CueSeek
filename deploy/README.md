@@ -34,8 +34,13 @@ important in the repository. It is the complete statement of what CueSeek is per
 do to the machine:
 
 - `org.freedesktop.systemd1.manage-units`, restricted to an allowlist of unit names **and**
-  to the verbs `restart`, `try-restart` and `reload-or-restart`. Notably absent: `start`,
-  `stop`, `enable`, `disable`, `mask` — the agent cannot leave a service switched off.
+  to the verbs `restart`, `try-restart`, `reload-or-restart`, `start` and `stop`. Notably
+  absent: `enable`, `disable`, `mask` — so a stopped unit stays enabled and returns on the
+  next boot. A stop costs one reboot rather than persisting.
+
+  `start` and `stop` were deliberately excluded until M3.1, on the grounds that a restart
+  is self-healing and a stop is not. Adding them widened the ceiling and is recorded, with
+  what bounds it, in [ADR-0002 Amendment 1](../docs/adr/0002-host-privilege-dbus-polkit.md).
 
 Granted to the `cueseek` user and nobody else. Everything else returns `NOT_HANDLED`, so
 the rule only ever adds permissions and never revokes ones another rule granted.
