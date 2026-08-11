@@ -17,12 +17,15 @@ import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.PairedHost
+import dev.cueseek.core.data.ThemeChoice
 import dev.cueseek.core.model.Service
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 
 /** The API version this build was written against (`docs/m2-android-api.md`). */
@@ -77,6 +80,39 @@ class CueSeekViewModel(private val container: AppContainer) : ViewModel() {
     /** The service whose sheet is open, by id. Held by id so a stream update refreshes it. */
     var openServiceId by mutableStateOf<String?>(null)
         private set
+
+    /**
+     * Whether the forget confirmation is showing.
+     *
+     * Opening a menu must never be destructive, so the menu item only asks; nothing is
+     * removed until the dialog is confirmed.
+     */
+    var confirmingForget by mutableStateOf(false)
+        private set
+
+    /**
+     * The chosen theme.
+     *
+     * Hot rather than cold, and started eagerly: it drives the whole composition, so
+     * resolving it a frame late would flash the wrong theme on launch.
+     */
+    val theme = container.settings.theme.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = ThemeChoice.System,
+    )
+
+    fun setTheme(choice: ThemeChoice) {
+        viewModelScope.launch { container.settings.setTheme(choice) }
+    }
+
+    fun askToForget() {
+        confirmingForget = true
+    }
+
+    fun cancelForget() {
+        confirmingForget = false
+    }
 
     fun edit(update: PairingForm.() -> PairingForm) {
         form = form.update()
@@ -146,6 +182,7 @@ class CueSeekViewModel(private val container: AppContainer) : ViewModel() {
     fun forget(host: PairedHost) {
         viewModelScope.launch {
             container.hosts.forget(host.hostId)
+            confirmingForget = false
             pending = null
             openServiceId = null
         }

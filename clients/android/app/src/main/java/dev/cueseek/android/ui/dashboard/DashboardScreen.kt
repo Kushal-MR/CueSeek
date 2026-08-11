@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Snackbar
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.cueseek.android.ui.CueSeekViewModel
 import dev.cueseek.android.ui.SUPPORTED_API_VERSION
 import dev.cueseek.android.ui.explain
@@ -61,6 +63,7 @@ fun DashboardScreen(
         }
     }
 
+    val theme by viewModel.theme.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     val stale = state.freshness.isStale
     val open = viewModel.openServiceId?.let { id -> state.services.firstOrNull { it.id == id } }
@@ -74,7 +77,9 @@ fun DashboardScreen(
             SummaryHeader(
                 state = state,
                 now = now,
-                onOverflow = { viewModel.forget(state.host) },
+                theme = theme,
+                onThemeChange = viewModel::setTheme,
+                onForgetRequested = viewModel::askToForget,
             )
 
             SkewBanner(state)
@@ -133,6 +138,42 @@ fun DashboardScreen(
                 else -> Unit
             }
         }
+    }
+
+    if (viewModel.confirmingForget) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelForget,
+            title = { Text("Forget ${state.host.hostname}?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This phone will lose its credentials and you will need a new " +
+                            "pairing code to connect again.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    // Said plainly because it is easy to assume otherwise: revoking the
+                    // device on the agent needs the devices.manage scope, which the CLI
+                    // does not grant by default, so this device almost certainly cannot.
+                    Text(
+                        "The agent will not be told. Its record of this device stays until " +
+                            "you remove it there.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.forget(state.host) },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Forget") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelForget) { Text("Cancel") }
+            },
+        )
     }
 
     viewModel.actionError?.let { error ->

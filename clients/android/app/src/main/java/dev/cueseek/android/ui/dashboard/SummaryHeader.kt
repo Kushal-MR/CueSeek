@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.cueseek.core.data.ThemeChoice
 import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.design.icon.CueSeekIcons
 import dev.cueseek.core.design.status.BeatDot
@@ -46,7 +47,9 @@ import java.time.Instant
 fun SummaryHeader(
     state: AgentState,
     now: Instant,
-    onOverflow: () -> Unit,
+    theme: ThemeChoice,
+    onThemeChange: (ThemeChoice) -> Unit,
+    onForgetRequested: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val stale = state.freshness.isStale
@@ -80,14 +83,12 @@ fun SummaryHeader(
                 }
             }
 
-            androidx.compose.material3.IconButton(onClick = onOverflow) {
-                Icon(
-                    CueSeekIcons.More,
-                    contentDescription = "More",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+            HostMenu(
+                theme = theme,
+                onThemeChange = onThemeChange,
+                onForgetRequested = onForgetRequested,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
 
         TallyRule(

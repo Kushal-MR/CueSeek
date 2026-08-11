@@ -5,7 +5,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import dev.cueseek.core.data.internal.HostRecords
 import dev.cueseek.core.data.internal.TokenCipher
 import dev.cueseek.core.model.AgentAddress
@@ -17,10 +16,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-
-private val Context.cueSeekStore: DataStore<Preferences> by preferencesDataStore(
-    name = HostRepository.STORE_NAME,
-)
 
 /**
  * Which agents this app is paired with, and their credentials.

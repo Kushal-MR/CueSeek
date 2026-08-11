@@ -7,6 +7,7 @@ import dev.cueseek.core.data.AgentLiveState
 import dev.cueseek.core.data.HostRepository
 import dev.cueseek.core.data.PairingRepository
 import dev.cueseek.core.data.ServicesRepository
+import dev.cueseek.core.data.SettingsRepository
 
 /**
  * Everything the app is built from, constructed once.
@@ -24,6 +25,9 @@ class AppContainer(context: Context) {
     private val http = CueSeekApiFactory.sharedHttp()
 
     val hosts: HostRepository = HostRepository(context)
+
+    /** Appearance and anything else that is about the app rather than a host. */
+    val settings: SettingsRepository = SettingsRepository(context)
 
     private val clients = AgentClients(hosts, http)
 
