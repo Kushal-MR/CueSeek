@@ -287,17 +287,19 @@ func summarise(err error) string {
 
 // ---------------------------------------------------------------- Controllable
 
-// Actions describes what can be done to this service.
-func (c *controllable) Actions() []domain.Action {
-	return []domain.Action{{
-		ID:    actionRestart,
-		Label: "Restart Jellyfin",
-		Description: "Restarts the Jellyfin service. Anyone currently watching will be " +
-			"interrupted and will need to resume playback.",
-		// Disruptive rather than destructive: it interrupts people, but nothing is lost
-		// and the service comes back on its own.
-		Risk: domain.RiskDisruptive,
-	}}
+// lifecycleCopy is Jellyfin's contribution to the shared action descriptors: the
+// mechanism is identical for every unit-backed service, only the consequence differs.
+var lifecycleCopy = adapters.LifecycleCopy{
+	DisplayName:  "Jellyfin",
+	Interruption: "Anyone currently watching will be interrupted and will need to resume playback.",
+}
+
+// Actions describes what can be done to this service right now.
+//
+// State-dependent since ADR-0002 Amendment 1: Start is offered only when the unit is
+// inactive, Stop only when it is active.
+func (c *controllable) Actions(ctx context.Context) []domain.Action {
+	return adapters.AvailableLifecycleActions(ctx, c.units, c.unit, lifecycleCopy)
 }
 
 // Invoke performs an action.
@@ -308,10 +310,9 @@ func (c *controllable) Actions() []domain.Action {
 // via the host layer means the request passes the configured unit allowlist and then
 // polkit (ADR-0002). An adapter reaching for go-systemd itself would bypass both.
 func (c *controllable) Invoke(ctx context.Context, actionID string) (*host.Job, error) {
-	switch actionID {
-	case actionRestart:
-		return c.units.RestartUnit(ctx, c.unit)
-	default:
-		return nil, fmt.Errorf("jellyfin: unknown action %q", actionID)
+	job, err := adapters.InvokeLifecycle(ctx, c.units, c.unit, actionID)
+	if err != nil {
+		return nil, fmt.Errorf("jellyfin: %w", err)
 	}
+	return job, nil
 }

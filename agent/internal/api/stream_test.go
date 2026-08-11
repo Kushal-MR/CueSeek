@@ -112,7 +112,12 @@ func TestStreamSendsSnapshotFirst(t *testing.T) {
 
 	env.cache.Put("jellyfin", domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: time.Now().UTC(),
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	frames, _ := openStream(t, env, token)
 	first := nextFrame(t, frames, "the snapshot")
@@ -187,7 +192,12 @@ func TestStreamSendsServiceDeltas(t *testing.T) {
 	env.cache.Put("jellyfin", domain.Health{
 		Status: domain.StatusUnreachable, ObservedAt: time.Now().UTC(),
 		Reasons: []domain.HealthReason{{Code: domain.ReasonUnreachable, Message: "refused"}},
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	delta := nextFrame(t, frames, "a service_updated delta")
 	if delta.envelope.Type != gen.StreamEventTypeServiceUpdated {
@@ -308,7 +318,12 @@ func TestMultipleClientsAllReceiveEvents(t *testing.T) {
 
 	env.cache.Put("jellyfin", domain.Health{
 		Status: domain.StatusDegraded, Reachable: true, ObservedAt: time.Now().UTC(),
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	for i, s := range streams {
 		delta := nextFrame(t, s, "a delta on client")
@@ -351,7 +366,12 @@ func TestSlowClientDoesNotStallOthers(t *testing.T) {
 		}
 		env.cache.Put("jellyfin", domain.Health{
 			Status: status, Reachable: true, ObservedAt: time.Now().UTC(),
-		})
+		}, []domain.Action{{
+			ID:          "restart",
+			Label:       "Restart Jellyfin",
+			Description: "Restarts the Jellyfin service.",
+			Risk:        domain.RiskDisruptive,
+		}})
 		time.Sleep(2 * time.Millisecond)
 	}
 
@@ -366,7 +386,12 @@ func TestSlowClientDoesNotStallOthers(t *testing.T) {
 	// events published after the laggard was cut loose.
 	env.cache.Put("jellyfin", domain.Health{
 		Status: domain.StatusUnreachable, ObservedAt: time.Now().UTC(),
-	})
+	}, []domain.Action{{
+		ID:          "restart",
+		Label:       "Restart Jellyfin",
+		Description: "Restarts the Jellyfin service.",
+		Risk:        domain.RiskDisruptive,
+	}})
 
 	deadline := time.After(10 * time.Second)
 	for {

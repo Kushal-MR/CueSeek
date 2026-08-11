@@ -116,6 +116,29 @@ func (b *systemdBackend) RestartUnit(ctx context.Context, unit string) (*Job, er
 	return newJob(id, unit, results), nil
 }
 
+// StartUnit and StopUnit use the same "replace" job mode as RestartUnit, for the same
+// reason: coalescing with an in-flight job is a better answer for an operations console
+// than refusing because one is already queued.
+func (b *systemdBackend) StartUnit(ctx context.Context, unit string) (*Job, error) {
+	results := make(chan string, 1)
+
+	id, err := b.conn.StartUnitContext(ctx, unit, "replace", results)
+	if err != nil {
+		return nil, classifyError(dbusErrorName(err), err)
+	}
+	return newJob(id, unit, results), nil
+}
+
+func (b *systemdBackend) StopUnit(ctx context.Context, unit string) (*Job, error) {
+	results := make(chan string, 1)
+
+	id, err := b.conn.StopUnitContext(ctx, unit, "replace", results)
+	if err != nil {
+		return nil, classifyError(dbusErrorName(err), err)
+	}
+	return newJob(id, unit, results), nil
+}
+
 // dbusErrorName extracts the D-Bus error name, e.g.
 // "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired".
 //

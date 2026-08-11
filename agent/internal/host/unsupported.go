@@ -40,6 +40,14 @@ func (unsupportedBackend) RestartUnit(_ context.Context, unit string) (*Job, err
 	return nil, unsupported("restart unit %q", unit)
 }
 
+func (unsupportedBackend) StartUnit(_ context.Context, unit string) (*Job, error) {
+	return nil, unsupported("start unit %q", unit)
+}
+
+func (unsupportedBackend) StopUnit(_ context.Context, unit string) (*Job, error) {
+	return nil, unsupported("stop unit %q", unit)
+}
+
 func unsupported(action string, args ...any) error {
 	return fmt.Errorf("%w: cannot %s on %s",
 		ErrUnsupportedPlatform, fmt.Sprintf(action, args...), runtime.GOOS)

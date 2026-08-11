@@ -157,6 +157,14 @@ func (p *Poller) pollOnce(ctx context.Context, service Service, timeout time.Dur
 	started := time.Now().UTC()
 	health, err := service.Health(pollCtx)
 
+	// Read on the poll path so a client request never causes a D-Bus round trip
+	// (ADR-0003), and cached with the health so the list a client is shown is the list
+	// the API validates against.
+	var actions []domain.Action
+	if controllable, ok := service.(Controllable); ok {
+		actions = controllable.Actions(pollCtx)
+	}
+
 	if err != nil {
 		// The adapter could not form an opinion at all. Distinct from it reporting
 		// "unreachable", which is an opinion.
@@ -176,7 +184,7 @@ func (p *Poller) pollOnce(ctx context.Context, service Service, timeout time.Dur
 				Code:    domain.ReasonUnreachable,
 				Message: "The agent could not determine this service's state: " + err.Error(),
 			}},
-		})
+		}, actions)
 		return
 	}
 
@@ -194,5 +202,5 @@ func (p *Poller) pollOnce(ctx context.Context, service Service, timeout time.Dur
 		})
 	}
 
-	p.cache.Put(service.ID(), health)
+	p.cache.Put(service.ID(), health, actions)
 }

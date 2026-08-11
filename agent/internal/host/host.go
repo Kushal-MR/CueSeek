@@ -132,6 +132,14 @@ type Backend interface {
 	// RestartUnit enqueues a restart and returns a Job whose result arrives later.
 	RestartUnit(ctx context.Context, unit string) (*Job, error)
 
+	// StartUnit and StopUnit enqueue the corresponding job.
+	//
+	// Stop is the one verb here that is not self-healing: a restart leaves the service
+	// running whatever happens, a stop does not. See ADR-0002 Amendment 1 for the
+	// widened ceiling and what bounds it.
+	StartUnit(ctx context.Context, unit string) (*Job, error)
+	StopUnit(ctx context.Context, unit string) (*Job, error)
+
 	// Platform names the implementation, for logs and diagnostics.
 	Platform() string
 
@@ -231,6 +239,29 @@ func (c *Controller) RestartUnit(ctx context.Context, unit string) (*Job, error)
 		return nil, err
 	}
 	return c.backend.RestartUnit(ctx, unit)
+}
+
+// StartUnit enqueues a start of a managed unit.
+//
+// Same two-place enforcement as RestartUnit: the allowlist is checked here before the
+// system bus is touched, and the polkit rule checks it again behind that.
+func (c *Controller) StartUnit(ctx context.Context, unit string) (*Job, error) {
+	if err := c.checkManaged(unit); err != nil {
+		return nil, err
+	}
+	return c.backend.StartUnit(ctx, unit)
+}
+
+// StopUnit enqueues a stop of a managed unit.
+//
+// The unit remains enabled, so it returns on the next boot. `enable`, `disable` and
+// `mask` are deliberately absent from the agent and from the polkit rule, which is what
+// bounds a stop to a single boot rather than making it persistent (ADR-0002 Amendment 1).
+func (c *Controller) StopUnit(ctx context.Context, unit string) (*Job, error) {
+	if err := c.checkManaged(unit); err != nil {
+		return nil, err
+	}
+	return c.backend.StopUnit(ctx, unit)
 }
 
 // Close releases the backend's resources.
