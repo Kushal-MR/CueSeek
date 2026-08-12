@@ -93,6 +93,9 @@ on* it. The dashboard was rebuilt onto the phone and exercised against the live 
 | 5 | Risk gating survives the move off the sheet | Stop rendered in the error role, and opening it produced the hold-to-confirm dialog carrying the agent's own consequence text |
 | 6 | A service with no `web_ui` falls back to detail rather than to nothing | Body tap opened the sheet, showing health, its reason, and the `control` capability |
 
+Item 6 was observed *before* the host was given a `web_ui` block, which is why it is the
+fallback that is recorded here and the browser path that is recorded under M3.2 below.
+
 ### Found on the device, not in a test
 
 - **"Stop Jellyfin Jellyfin?"** — the confirmation title appended the service name to a label
@@ -113,13 +116,48 @@ nothing left to activate. It now merges instead, so the node keeps its action an
 the `onClickLabel` — which names the actual destination, browser or sheet, since the two
 differ enough that guessing would mislead exactly the users who depend on it.
 
+---
+
+## M3.2 — Contract and agent: `web_ui` ✅
+
+Out of numerical order because that is the order it happened in. M3.2 shipped the contract
+and the agent side; nothing consumed it until M3.3 existed, so the two were accepted
+together on the real host. M3.2 is what the agent says, M3.3 is what the phone does with it,
+and neither is worth much demonstrated alone.
+
+The `web_ui` block was added to Jellyfin's entry in the host's existing
+`/etc/cueseek/config.yaml` — `scheme: http`, `port: 8096`, `path: /` — alongside the
+M3.2 binary. The config, the pairing database and the Jellyfin credential were left in
+place. Reading `/v1/services` from the host confirmed Jellyfin advertising the `web_ui`
+capability and carrying the block through to the wire.
+
+### Real-device acceptance ✅
+
+Run on the OnePlus CPH2707 over Tailscale against `kushal-HP-paviliong6`.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | The agent advertises the capability | Jellyfin carried `web_ui` |
+| 2 | The row's body opens the service itself | Tapping it launched the phone's browser |
+| 3 | **The URL is composed, not received** | It resolved through the paired Tailscale address, not a hardcoded LAN address the agent could have supplied |
+| 4 | The destination is real | Jellyfin's web interface loaded and was usable from the phone |
+| 5 | The two targets stay separate | Tapping `⋮` opened no browser |
+| 6 | Lifecycle actions remain behind the menu | Restart Jellyfin and Stop Jellyfin, listed separately |
+| 7 | Risk gating survived the move off the sheet | Stop still required a sustained hold |
+
+Item 3 is the one worth keeping. The agent polls Jellyfin at `127.0.0.1:8096`, an address
+that means nothing to a phone, and it never sends an origin at all. What reached the browser
+was the tailnet host this device paired with, joined to the port and path the agent
+configured — so the same single configuration would work unchanged on the LAN, and a wrong
+or compromised agent has no field in which to put a host of its choosing.
+
+Items 5 and 6 together are the interaction model tested rather than asserted: one row, two
+meanings, and no path by which *using* a service can reach *operating on* it by accident.
+
 ### Not claimed
 
-- **Opening a `web_ui` in the browser has not been exercised on real hardware.** The path is
-  covered by unit tests end to end — composition, rejection, and the destination decision —
-  but the host's `/etc/cueseek/config.yaml` carries no `web_ui:` block yet and still runs the
-  M3.1 binary, so the agent currently advertises no interface to open. Every device
-  observation above is therefore of the *fallback* path. Deploying M3.2 and configuring
-  Jellyfin's `web_ui` is what would close this, and it is the first step of M3.3's real-host
-  acceptance rather than something the client can prove alone.
-
+- **A service configured with `https`** was not exercised; the reference deployment is
+  plain HTTP behind the VPN, per ADR-0001.
+- **`ACTION_VIEW` falling through to a native app** was not exercised, and by design cannot
+  be arranged from here: the intent carries no package, so the resolution is the phone's
+  default-app setting rather than anything CueSeek decides.
