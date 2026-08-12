@@ -559,6 +559,8 @@ components:
           description: |
             Stable capability identifier. Not an enum: capabilities are added by agent
             updates, and a client must tolerate ids it has never heard of.
+
+            In use today: `health`, `control`, `web_ui`, `now_playing`, `transfers`.
           example: "now_playing"
         label:
           type: string
@@ -574,6 +576,46 @@ components:
         action does — which is what lets a new action ship to an existing client with a
         confirmation prompt already attached.
       enum: [safe, disruptive, destructive]
+
+    WebUI:
+      type: object
+      description: |
+        Where a service's own interface lives, as parts rather than as a URL.
+
+        **The agent never sends a whole URL, and a client must never accept one.** The
+        agent's own `base_url` for a service is a loopback address — it polls Jellyfin at
+        127.0.0.1 because it runs on the same host — which is meaningless to a phone. The
+        client already holds an address that reaches the host: the one it paired with. It
+        composes `scheme://{paired host}:{port}{path}` from that.
+
+        Two properties fall out of this. The same configuration works over a VPN and on the
+        LAN, because the host part is whatever the client used to get here. And a
+        compromised or buggy agent cannot redirect a client to an arbitrary origin, or hand
+        back a `javascript:` URL, because it never supplies an origin at all.
+      required: [scheme, port]
+      properties:
+        scheme:
+          type: string
+          enum: [http, https]
+          description: |
+            Almost always `http`: this is a service on the operator's own private network,
+            and ADR-0001 delegates transport security to the VPN. `https` exists for
+            deployments that terminate TLS locally.
+          example: "http"
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: The port the service's own interface listens on.
+          example: 8096
+        path:
+          type: string
+          description: |
+            Path to open, including the leading slash. Defaults to `/`. Exists because a
+            service may put its interface somewhere other than the root, and because a
+            reverse proxy on the host may mount it under a prefix.
+          default: "/"
+          example: "/web/index.html"
 
     Action:
       type: object
@@ -609,6 +651,12 @@ components:
           type: array
           description: Empty if the service does not implement the `control` capability.
           items: { $ref: "#/components/schemas/Action" }
+        web_ui:
+          allOf: [{ $ref: "#/components/schemas/WebUI" }]
+          description: |
+            Absent unless the service advertises the `web_ui` capability. Same pairing as
+            `control` and `actions`: the capability declares that something exists, the
+            sibling field carries what a client needs to use it.
 
     # --------------------------------------------------------------- actions
     ActionStatus:

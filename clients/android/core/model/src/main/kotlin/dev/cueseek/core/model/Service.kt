@@ -84,4 +84,6 @@ data class Service(
     val health: Health,
     /** Empty when the service does not implement the `control` capability. */
     val actions: List<Action>,
+    /** Absent unless the service advertises the `web_ui` capability. */
+    val webUi: WebUi? = null,
 )

@@ -93,3 +93,18 @@ func toGenActions(actions []domain.Action) []gen.Action {
 	}
 	return out
 }
+
+// toGenWebUI converts the configured location of a service's own interface.
+//
+// Note what is not built here: a URL. The agent supplies parts and no origin, so a client
+// composes the address from the one it already paired with — which is both why the same
+// configuration works on a VPN and on a LAN, and why a wrong agent cannot send a client
+// somewhere the operator never pointed it.
+func toGenWebUI(w domain.WebUI) *gen.WebUI {
+	path := w.Path
+	return &gen.WebUI{
+		Scheme: gen.WebUIScheme(w.Scheme),
+		Port:   w.Port,
+		Path:   &path,
+	}
+}

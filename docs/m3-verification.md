@@ -75,3 +75,89 @@ What was established while it was happening:
 If it recurs, the three diagnostics that would settle it are: whether the phone reads
 "Stream open" or "Reconnecting", the raw event stream observed from the host with `curl -N`,
 and whether `journalctl -u cueseekd` shows `stream subscriber fell behind`.
+
+---
+
+## M3.3 — Android: the row interaction model ✅
+
+The service row became two targets. Its body *uses* the service; the trailing `⋮` *operates
+on* it. The dashboard was rebuilt onto the phone and exercised against the live agent on
+`kushal-HP-paviliong6` over Tailscale.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | The row exposes exactly two independent targets | Accessibility dump: body `[28,626]–[1062,864]`, button `[1062,661]–[1230,829]` — adjacent, non-overlapping |
+| 2 | The trailing target meets Material's minimum | 168px at 3.5× = **48dp square**, with the glyph at 18dp inside it |
+| 3 | The two are announced differently | "Jellyfin, Healthy" and "Actions for Jellyfin" |
+| 4 | The menu is built from the agent's actions, not from the service's identity | Offered **Restart Jellyfin** and **Stop Jellyfin**, the two verbs the agent advertised |
+| 5 | Risk gating survives the move off the sheet | Stop rendered in the error role, and opening it produced the hold-to-confirm dialog carrying the agent's own consequence text |
+| 6 | A service with no `web_ui` falls back to detail rather than to nothing | Body tap opened the sheet, showing health, its reason, and the `control` capability |
+
+Item 6 was observed *before* the host was given a `web_ui` block, which is why it is the
+fallback that is recorded here and the browser path that is recorded under M3.2 below.
+
+### Found on the device, not in a test
+
+- **"Stop Jellyfin Jellyfin?"** — the confirmation title appended the service name to a label
+  that already contained it. The agent owns that copy; the dialog now prints it verbatim.
+- **The sheet duplicated the menu.** With actions in both, one screen offered the same two
+  verbs three times over: the `control` capability's summary, a pair of buttons, and the new
+  menu. The sheet is now detail-only, so a destructive verb has exactly one entry point to
+  keep gated correctly.
+
+Neither was visible from the source or from a unit test, which is the same lesson as M2's
+UTC timestamp bug: some defects only exist once the thing is in your hand.
+
+### Fixed in passing
+
+The row previously used `clearAndSetSemantics`, which collapses the row to one node **and
+erases the clickable's action** along with it. It read correctly to TalkBack while having
+nothing left to activate. It now merges instead, so the node keeps its action and announces
+the `onClickLabel` — which names the actual destination, browser or sheet, since the two
+differ enough that guessing would mislead exactly the users who depend on it.
+
+---
+
+## M3.2 — Contract and agent: `web_ui` ✅
+
+Out of numerical order because that is the order it happened in. M3.2 shipped the contract
+and the agent side; nothing consumed it until M3.3 existed, so the two were accepted
+together on the real host. M3.2 is what the agent says, M3.3 is what the phone does with it,
+and neither is worth much demonstrated alone.
+
+The `web_ui` block was added to Jellyfin's entry in the host's existing
+`/etc/cueseek/config.yaml` — `scheme: http`, `port: 8096`, `path: /` — alongside the
+M3.2 binary. The config, the pairing database and the Jellyfin credential were left in
+place. Reading `/v1/services` from the host confirmed Jellyfin advertising the `web_ui`
+capability and carrying the block through to the wire.
+
+### Real-device acceptance ✅
+
+Run on the OnePlus CPH2707 over Tailscale against `kushal-HP-paviliong6`.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | The agent advertises the capability | Jellyfin carried `web_ui` |
+| 2 | The row's body opens the service itself | Tapping it launched the phone's browser |
+| 3 | **The URL is composed, not received** | It resolved through the paired Tailscale address, not a hardcoded LAN address the agent could have supplied |
+| 4 | The destination is real | Jellyfin's web interface loaded and was usable from the phone |
+| 5 | The two targets stay separate | Tapping `⋮` opened no browser |
+| 6 | Lifecycle actions remain behind the menu | Restart Jellyfin and Stop Jellyfin, listed separately |
+| 7 | Risk gating survived the move off the sheet | Stop still required a sustained hold |
+
+Item 3 is the one worth keeping. The agent polls Jellyfin at `127.0.0.1:8096`, an address
+that means nothing to a phone, and it never sends an origin at all. What reached the browser
+was the tailnet host this device paired with, joined to the port and path the agent
+configured — so the same single configuration would work unchanged on the LAN, and a wrong
+or compromised agent has no field in which to put a host of its choosing.
+
+Items 5 and 6 together are the interaction model tested rather than asserted: one row, two
+meanings, and no path by which *using* a service can reach *operating on* it by accident.
+
+### Not claimed
+
+- **A service configured with `https`** was not exercised; the reference deployment is
+  plain HTTP behind the VPN, per ADR-0001.
+- **`ACTION_VIEW` falling through to a native app** was not exercised, and by design cannot
+  be arranged from here: the intent carries no package, so the resolution is the phone's
+  default-app setting rather than anything CueSeek decides.

@@ -18,6 +18,7 @@ package dev.cueseek.core.api.wire
 import dev.cueseek.core.api.wire.Action
 import dev.cueseek.core.api.wire.Capability
 import dev.cueseek.core.api.wire.Health
+import dev.cueseek.core.api.wire.WebUI
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
@@ -31,6 +32,7 @@ import kotlinx.serialization.Contextual
  * @param capabilities 
  * @param health 
  * @param actions Empty if the service does not implement the `control` capability.
+ * @param webUi Absent unless the service advertises the `web_ui` capability. Same pairing as `control` and `actions`: the capability declares that something exists, the sibling field carries what a client needs to use it. 
  */
 @Serializable
 
@@ -52,7 +54,11 @@ data class Service (
 
     /* Empty if the service does not implement the `control` capability. */
     @SerialName(value = "actions")
-    val actions: kotlin.collections.List<Action>
+    val actions: kotlin.collections.List<Action>,
+
+    /* Absent unless the service advertises the `web_ui` capability. Same pairing as `control` and `actions`: the capability declares that something exists, the sibling field carries what a client needs to use it.  */
+    @SerialName(value = "web_ui")
+    val webUi: WebUI? = null
 
 ) {
 

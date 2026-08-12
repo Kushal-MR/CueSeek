@@ -83,6 +83,29 @@ services:
     # other, never both — startup rejects that:
     # api_key: YOUR_KEY_HERE
 
+    # Where Jellyfin's own web interface lives, for the "open this service" tap.
+    #
+    # Note what is absent: a host. The agent does not know which address a given
+    # client can reach it on — a phone on the tailnet and a laptop on the LAN use
+    # different ones — so it supplies only the parts that do not vary. The client
+    # composes scheme://{the address it paired with}:{port}{path}.
+    #
+    # That is why one configuration works everywhere, and why a wrong or
+    # compromised agent cannot send your phone to an origin you never configured.
+    #
+    # Omit this whole block for a service with no web interface; it then simply
+    # does not advertise the capability, and tapping its row opens the detail
+    # sheet instead.
+    web_ui:
+      # http or https. Almost always http: this is a service on your own private
+      # network, and ADR-0001 puts transport security in the VPN.
+      scheme: http
+      # The port Jellyfin's interface listens on — usually the same as base_url's,
+      # but stated separately because it does not have to be.
+      port: 8096
+      # Optional. Defaults to "/".
+      # path: /web/index.html
+
     # How often the agent refreshes this service's state. The agent polls on its
     # own schedule and serves cached results; a client request never triggers an
     # upstream call, so a wedged Jellyfin cannot hang your dashboard (ADR-0003).

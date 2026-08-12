@@ -42,10 +42,23 @@ type testEnv struct {
 type stubAdapter struct {
 	id, name string
 
+	// webUI is what the operator would have configured. Nil means the service has no web
+	// interface, which is a normal state and not a degradation.
+	webUI *domain.WebUI
+
 	mu        sync.Mutex
 	invoked   []string
 	invokeErr error
 	block     chan struct{} // when non-nil, Invoke waits on it before returning
+}
+
+// WebUI implements adapters.WebUIProvider. Reporting false is how a service without a
+// configured interface stays out of the capability list.
+func (s *stubAdapter) WebUI() (domain.WebUI, bool) {
+	if s.webUI == nil {
+		return domain.WebUI{}, false
+	}
+	return *s.webUI, true
 }
 
 func (s *stubAdapter) ID() string   { return s.id }
@@ -95,7 +108,13 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	stub := &stubAdapter{id: "jellyfin", name: "Jellyfin"}
+	stub := &stubAdapter{
+		id:   "jellyfin",
+		name: "Jellyfin",
+		// Configured with an interface, so the default env exercises the capability and
+		// its payload together. A service without one is covered separately.
+		webUI: &domain.WebUI{Scheme: "http", Port: 8096, Path: "/"},
+	}
 
 	registry := adapters.NewRegistry()
 	if err := registry.RegisterFactory("stub", func(cfg config.Service, _ adapters.Deps) (adapters.Service, error) {

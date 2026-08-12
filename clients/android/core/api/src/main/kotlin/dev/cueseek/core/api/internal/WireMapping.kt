@@ -18,6 +18,7 @@ import dev.cueseek.core.model.Pairing
 import dev.cueseek.core.model.Platform
 import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
+import dev.cueseek.core.model.WebUi
 import dev.cueseek.core.model.SystemInfo
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -30,6 +31,7 @@ import dev.cueseek.core.api.wire.Health as WireHealth
 import dev.cueseek.core.api.wire.HealthReason as WireHealthReason
 import dev.cueseek.core.api.wire.PairResponse as WirePairResponse
 import dev.cueseek.core.api.wire.Service as WireService
+import dev.cueseek.core.api.wire.WebUI as WireWebUI
 import dev.cueseek.core.api.wire.System as WireSystem
 
 /**
@@ -93,6 +95,20 @@ internal fun WireService.toDomain() = Service(
     capabilities = capabilities.map { it.toDomain() },
     health = health.toDomain(),
     actions = actions.map { it.toDomain() },
+    webUi = webUi?.toDomain(),
+)
+
+/**
+ * `scheme` is one of the few fields the contract models as a closed enum rather than as an
+ * open string like `risk`. That is defensible here and nowhere else: the set of schemes a
+ * client is willing to hand to a browser intent is not a vocabulary the agent gets to
+ * extend. It flattens back to a string so the domain never depends on generated types, and
+ * [dev.cueseek.core.model.urlFor] validates it again regardless.
+ */
+internal fun WireWebUI.toDomain() = WebUi(
+    scheme = scheme.value,
+    port = port,
+    path = path ?: "/",
 )
 
 internal fun WireActionAccepted.toDomain() = ActionAcceptance(
