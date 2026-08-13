@@ -516,3 +516,83 @@ func TestWebUIPayloadCarriesNoOrigin(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------- nudged observation
+
+// TestRequestRefreshNudgesEveryService is the endpoint that closes the gap pull-to-refresh
+// left open: re-reading the cache is not verification, so a manual refresh has to reach
+// the poller (ADR-0003 Amendment 1).
+func TestRequestRefreshNudgesEveryService(t *testing.T) {
+	env := newTestEnv(t)
+	token := env.pairDevice(t, "Phone", domain.ScopeRead)
+
+	resp := env.do(t, http.MethodPost, "/v1/refresh", token, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
+	}
+	if _, all := env.refresher.counts(); all != 1 {
+		t.Fatalf("PollAllNow called %d times, want 1", all)
+	}
+}
+
+// TestRequestRefreshNeedsOnlyRead — asking the agent to look is not acting on anything, so
+// a device paired without service.control must still be able to check.
+func TestRequestRefreshNeedsOnlyRead(t *testing.T) {
+	env := newTestEnv(t)
+	token := env.pairDevice(t, "Watcher", domain.ScopeRead)
+
+	resp := env.do(t, http.MethodPost, "/v1/refresh", token, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("a read-only device got %d, want 202", resp.StatusCode)
+	}
+}
+
+// TestRequestRefreshRejectsAnUnauthenticatedCaller keeps the endpoint behind the same
+// door as everything else: it is cheap, but it still reports on this host.
+func TestRequestRefreshRejectsAnUnauthenticatedCaller(t *testing.T) {
+	env := newTestEnv(t)
+
+	resp := env.do(t, http.MethodPost, "/v1/refresh", "", nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+	if _, all := env.refresher.counts(); all != 0 {
+		t.Fatal("an unauthenticated request reached the poller")
+	}
+}
+
+// TestActionCompletionNudgesTheService is the other half of the amendment, and the case
+// that started it: after the agent stops a service it must not keep serving the state it
+// observed before it did so.
+func TestActionCompletionNudgesTheService(t *testing.T) {
+	env := newTestEnv(t)
+	token := env.pairDevice(t, "Phone", domain.ScopeRead, domain.ScopeServiceControl)
+
+	env.cache.Put("jellyfin", domain.Health{
+		Status: domain.StatusHealthy, Reachable: true, ObservedAt: time.Now().UTC(),
+	}, []domain.Action{{ID: "restart", Label: "Restart Jellyfin", Risk: domain.RiskDisruptive}})
+
+	resp := env.do(t, http.MethodPost,
+		"/v1/services/jellyfin/actions/restart", token, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
+	}
+
+	waitFor(t, "the service to be nudged after the action finished", func() bool {
+		one, _ := env.refresher.counts()
+		for _, id := range one {
+			if id == "jellyfin" {
+				return true
+			}
+		}
+		return false
+	})
+}

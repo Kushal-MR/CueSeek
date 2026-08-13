@@ -464,3 +464,104 @@ func TestStartIsIdempotent(t *testing.T) {
 		t.Fatal("Wait did not return; Start probably launched duplicate goroutines")
 	}
 }
+
+// ---------------------------------------------------------------- nudged polls
+
+// TestPollNowObservesAheadOfTheTick is the defect that prompted ADR-0003 Amendment 1.
+//
+// An operator stops a service and wants to confirm it. With the ticker as the only clock,
+// the agent serves a cache it knows is out of date until the next interval — up to thirty
+// seconds of a console contradicting something the operator just did through it.
+func TestPollNowObservesAheadOfTheTick(t *testing.T) {
+	svc := &fakeService{}
+	// An hour between ticks: anything observed here was observed because of the nudge.
+	p := newTestPoller(t, map[string]*fakeService{"jellyfin": svc}, time.Hour, time.Second)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	p.Start(ctx)
+
+	waitFor(t, "the first poll", func() bool {
+		s, _ := p.Cache().Get("jellyfin")
+		return s.Health.Status == domain.StatusHealthy
+	})
+
+	svc.set(domain.Health{Status: domain.StatusUnreachable}, nil)
+
+	// The rate bound applies to the nudge that follows the startup poll, so wait it out —
+	// this is the honest cost of the guard, and asserting around it would hide it.
+	time.Sleep(MinRefreshInterval)
+	p.PollNow("jellyfin")
+
+	waitFor(t, "the nudged observation", func() bool {
+		s, _ := p.Cache().Get("jellyfin")
+		return s.Health.Status == domain.StatusUnreachable
+	})
+
+	cancel()
+	p.Wait()
+}
+
+// TestPollNowIsRateBounded is the bound that keeps a gesture from becoming an amplifier.
+func TestPollNowIsRateBounded(t *testing.T) {
+	svc := &fakeService{}
+	p := newTestPoller(t, map[string]*fakeService{"jellyfin": svc}, time.Hour, time.Second)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	p.Start(ctx)
+
+	waitFor(t, "the first poll", func() bool { return svc.callCount() >= 1 })
+	after := svc.callCount()
+
+	// A user holding the gesture down. Every one of these lands inside the bound.
+	for range 50 {
+		p.PollNow("jellyfin")
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	if got := svc.callCount(); got > after+1 {
+		t.Fatalf("50 nudges inside the rate bound caused %d extra polls, want at most 1", got-after)
+	}
+
+	cancel()
+	p.Wait()
+}
+
+// TestPollNowNeverBlocks is the property ADR-0003's original rule protects and the
+// amendment promises to keep: the caller is on a request path, and a service that never
+// answers must not hold it there.
+func TestPollNowNeverBlocks(t *testing.T) {
+	wedged := &fakeService{delay: time.Hour}
+	p := newTestPoller(t, map[string]*fakeService{"wedged": wedged}, time.Hour, time.Hour)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	p.Start(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 10 {
+			p.PollNow("wedged")
+			p.PollAllNow()
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("PollNow blocked on a service that never answers")
+	}
+
+	cancel()
+	p.Wait()
+}
+
+// TestPollNowIgnoresUnknownServices — callers pass ids from the registry, so an unknown
+// one is a bug elsewhere, but it must not panic on a request path.
+func TestPollNowIgnoresUnknownServices(t *testing.T) {
+	p := newTestPoller(t, map[string]*fakeService{"jellyfin": {}}, time.Hour, time.Second)
+	p.PollNow("nothing-here")
+	p.PollAllNow()
+}

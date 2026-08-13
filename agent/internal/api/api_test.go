@@ -29,12 +29,13 @@ import (
 // and prove nothing about the chain.
 
 type testEnv struct {
-	server   *httptest.Server
-	store    *store.Store
-	api      *Server
-	cache    *adapters.Cache
-	adapter  *stubAdapter
-	registry *adapters.Registry
+	server    *httptest.Server
+	store     *store.Store
+	api       *Server
+	cache     *adapters.Cache
+	adapter   *stubAdapter
+	registry  *adapters.Registry
+	refresher *recordingRefresher
 }
 
 // stubAdapter stands in for a real service. It implements Controllable so action tests
@@ -134,10 +135,13 @@ func newTestEnv(t *testing.T) *testEnv {
 	cache := adapters.NewCache()
 	cache.Track("jellyfin", time.Minute)
 
+	refresher := &recordingRefresher{}
+
 	srv, err := New(Options{
 		Store:        st,
 		Registry:     registry,
 		Cache:        cache,
+		Refresher:    refresher,
 		AgentVersion: "test",
 		HostID:       "test-host",
 	})
@@ -150,8 +154,36 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	return &testEnv{
 		server: ts, store: st, api: srv,
-		cache: cache, adapter: stub, registry: registry,
+		cache: cache, adapter: stub, registry: registry, refresher: refresher,
 	}
+}
+
+// recordingRefresher stands in for the poller.
+//
+// The interface exists so these tests can assert that a handler asked for an observation
+// without standing up a poller and waiting for one to happen.
+type recordingRefresher struct {
+	mu  sync.Mutex
+	one []string
+	all int
+}
+
+func (r *recordingRefresher) PollNow(serviceID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.one = append(r.one, serviceID)
+}
+
+func (r *recordingRefresher) PollAllNow() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.all++
+}
+
+func (r *recordingRefresher) counts() ([]string, int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.one...), r.all
 }
 
 // do issues a request. An empty token means no Authorization header at all, which is a

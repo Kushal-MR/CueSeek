@@ -33,6 +33,14 @@ const (
 	// every time one poll runs late would train the operator to ignore the state that
 	// exists precisely to be trusted.
 	staleMultiplier = 3
+
+	// MinRefreshInterval is the shortest gap between a nudged poll and the one before it.
+	//
+	// The floor exists because a nudge is reachable from a gesture: without it, a client
+	// holding pull-to-refresh could turn one finger into a request amplifier against
+	// Jellyfin. Two seconds is longer than any local poll takes and far shorter than a
+	// human notices, so the bound costs the honest case nothing (ADR-0003 Amendment 1).
+	MinRefreshInterval = 2 * time.Second
 )
 
 // Poller keeps the cache current.
@@ -46,6 +54,14 @@ type Poller struct {
 	registry *Registry
 	cache    *Cache
 	settings map[string]pollSettings
+
+	// nudges carries out-of-band poll requests, one channel per service.
+	//
+	// Written at construction and only read afterwards, so no lock guards the map itself;
+	// the channels are the synchronisation. Buffered by one and sent to without blocking,
+	// which is what conflates a burst: while a poll is running the buffer holds exactly
+	// one pending request no matter how many arrive.
+	nudges map[string]chan struct{}
 
 	wg      sync.WaitGroup
 	started bool
@@ -64,6 +80,7 @@ func NewPoller(registry *Registry, cfg config.Config) *Poller {
 		registry: registry,
 		cache:    NewCache(),
 		settings: make(map[string]pollSettings),
+		nudges:   make(map[string]chan struct{}),
 	}
 
 	byID := make(map[string]config.Service, len(cfg.Services))
@@ -88,6 +105,7 @@ func NewPoller(registry *Registry, cfg config.Config) *Poller {
 		}
 
 		p.settings[id] = pollSettings{interval: interval, timeout: timeout}
+		p.nudges[id] = make(chan struct{}, 1)
 		p.cache.Track(id, time.Duration(staleMultiplier)*interval)
 	}
 	return p
@@ -128,18 +146,60 @@ func (p *Poller) Start(ctx context.Context) {
 func (p *Poller) Wait() { p.wg.Wait() }
 
 func (p *Poller) run(ctx context.Context, service Service, settings pollSettings) {
+	lastPoll := time.Now()
 	p.pollOnce(ctx, service, settings.timeout)
 
 	ticker := time.NewTicker(settings.interval)
 	defer ticker.Stop()
 
+	nudges := p.nudges[service.ID()]
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+
 		case <-ticker.C:
+			lastPoll = time.Now()
+			p.pollOnce(ctx, service, settings.timeout)
+
+		case <-nudges:
+			// Rate-bounded, and silently: a dropped nudge is not an error the operator
+			// needs to see. It means the answer being asked for is two seconds old, and
+			// the honest response to that is to let the existing answer stand.
+			if time.Since(lastPoll) < MinRefreshInterval {
+				continue
+			}
+			// Deliberately does not reset the ticker. A nudge is an extra observation,
+			// not a rescheduling: letting a gesture shift the regular cadence would make
+			// the poll interval depend on how often someone opened the app.
+			lastPoll = time.Now()
 			p.pollOnce(ctx, service, settings.timeout)
 		}
+	}
+}
+
+// PollNow asks one service to be observed as soon as the bound allows.
+//
+// Never blocks and never fails: the caller is on a request path or an action's completion
+// path, and neither may wait on an upstream service (ADR-0003 Amendment 1). An unknown id
+// is ignored rather than reported, because every caller learned the id from the registry.
+func (p *Poller) PollNow(serviceID string) {
+	nudge, ok := p.nudges[serviceID]
+	if !ok {
+		return
+	}
+	select {
+	case nudge <- struct{}{}:
+	default:
+		// One already pending. Two requests to look now are one observation.
+	}
+}
+
+// PollAllNow nudges every service. What a client's manual refresh reaches.
+func (p *Poller) PollAllNow() {
+	for id := range p.nudges {
+		p.PollNow(id)
 	}
 }
 

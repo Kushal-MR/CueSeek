@@ -80,6 +80,7 @@ type Server struct {
 	// these two and never from a live upstream call (ADR-0003).
 	registry *adapters.Registry
 	cache    *adapters.Cache
+	refresh  Refresher
 
 	actions *actionTracker
 	// hub fans stream events out to every connected client.
@@ -127,6 +128,11 @@ type Options struct {
 
 	// Cache is what the poller fills. Required whenever Registry has services in it.
 	Cache *adapters.Cache
+
+	// Refresher lets a client, or a completed action, ask for an observation ahead of
+	// the next tick (ADR-0003 Amendment 1). Optional: without one the agent still works,
+	// it simply only ever polls on its own schedule.
+	Refresher Refresher
 
 	AgentVersion string
 	HostID       string
@@ -178,6 +184,7 @@ func New(opts Options) (*Server, error) {
 		store:          opts.Store,
 		registry:       registry,
 		cache:          cache,
+		refresh:        opts.Refresher,
 		actions:        newActionTracker(now),
 		hub:            newHub(),
 		heartbeat:      streamHeartbeat,
@@ -487,5 +494,26 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		}
 		slog.Info("api stopped cleanly")
 		return nil
+	}
+}
+
+// Refresher triggers an out-of-band observation.
+//
+// An interface rather than a *adapters.Poller so this package keeps knowing nothing about
+// how polling is implemented — and so a test can assert that a handler nudged without
+// standing up a poller to watch.
+//
+// Both methods must return without waiting on an upstream service. That is the whole of
+// ADR-0003 Amendment 1: the schedule may be nudged, but no request handler may block on
+// the thing being observed.
+type Refresher interface {
+	PollNow(serviceID string)
+	PollAllNow()
+}
+
+// nudge asks for an observation of one service, if a refresher was configured.
+func (s *Server) nudge(serviceID string) {
+	if s.refresh != nil {
+		s.refresh.PollNow(serviceID)
 	}
 }

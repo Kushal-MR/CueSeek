@@ -5,7 +5,10 @@ import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.model.Service
+import dev.cueseek.core.model.StreamEvent
 import dev.cueseek.core.model.SystemInfo
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Reads and acts on a host's services.
@@ -30,6 +33,55 @@ class ServicesRepository(
 
     suspend fun system(host: PairedHost): ApiResult<SystemInfo> =
         withApi(host) { it.system() }
+
+    /**
+     * Asks the agent to observe every service now.
+     *
+     * The half of a manual refresh that makes it verification. [snapshot] alone re-reads
+     * the agent's cache, which — right after you stopped something — still describes the
+     * moment before you stopped it. This makes the agent look again.
+     *
+     * Returns as soon as the agent accepts. Nothing has been observed yet at that point;
+     * the results arrive over the stream, or on the [snapshot] that follows.
+     */
+    suspend fun requestRefresh(host: PairedHost): ApiResult<Unit> =
+        withApi(host) { it.requestRefresh() }
+
+    /**
+     * Everything a screen needs, in the same shape the stream delivers it.
+     *
+     * Returns a [StreamEvent.Snapshot] rather than a pair, and that is the whole point of
+     * this method existing. A manual refresh then flows through the identical code path a
+     * streamed snapshot does — same application, same clock, same degradation — instead of
+     * being a second way for state to arrive that has to be kept in agreement with the
+     * first. A capability added later rides along without touching this: it is already
+     * inside `services`.
+     *
+     * Both calls must succeed. A snapshot missing half of itself is not a snapshot, and
+     * applying one would replace the roster wholesale with a partial truth.
+     *
+     * Note what this does *not* do: it does not make the agent poll upstream. Requests are
+     * served from the agent's cache by design (ADR-0003), so this returns what the agent
+     * already knows. What it proves is that the agent is reachable **now**, which is
+     * exactly the thing a frozen stream cannot tell you.
+     */
+    suspend fun snapshot(host: PairedHost): ApiResult<StreamEvent.Snapshot> = coroutineScope {
+        val system = async { system(host) }
+        val services = async { services(host) }
+
+        when (val systemResult = system.await()) {
+            is ApiResult.Failure -> ApiResult.Failure(systemResult.error)
+            is ApiResult.Success -> when (val servicesResult = services.await()) {
+                is ApiResult.Failure -> ApiResult.Failure(servicesResult.error)
+                is ApiResult.Success -> ApiResult.Success(
+                    StreamEvent.Snapshot(
+                        system = systemResult.value,
+                        services = servicesResult.value,
+                    )
+                )
+            }
+        }
+    }
 
     /**
      * Invokes an action, returning the agent's acknowledgement.
