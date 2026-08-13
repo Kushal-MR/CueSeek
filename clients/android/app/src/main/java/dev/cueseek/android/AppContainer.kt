@@ -49,5 +49,6 @@ class AppContainer(context: Context) {
         // its own request logic, and giving it one would be a second place for the
         // credential handling, the error mapping and the shape of a snapshot to drift.
         snapshots = services::snapshot,
+        nudge = services::requestRefresh,
     )
 }

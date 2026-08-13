@@ -35,6 +35,19 @@ class ServicesRepository(
         withApi(host) { it.system() }
 
     /**
+     * Asks the agent to observe every service now.
+     *
+     * The half of a manual refresh that makes it verification. [snapshot] alone re-reads
+     * the agent's cache, which — right after you stopped something — still describes the
+     * moment before you stopped it. This makes the agent look again.
+     *
+     * Returns as soon as the agent accepts. Nothing has been observed yet at that point;
+     * the results arrive over the stream, or on the [snapshot] that follows.
+     */
+    suspend fun requestRefresh(host: PairedHost): ApiResult<Unit> =
+        withApi(host) { it.requestRefresh() }
+
+    /**
      * Everything a screen needs, in the same shape the stream delivers it.
      *
      * Returns a [StreamEvent.Snapshot] rather than a pair, and that is the whole point of

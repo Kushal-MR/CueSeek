@@ -54,6 +54,9 @@ internal class RetrofitCueSeekApi(
     override suspend fun revokeDevice(id: DeviceId): ApiResult<Unit> =
         callEmpty { service.revokeDevice(id.value) }
 
+    override suspend fun requestRefresh(): ApiResult<Unit> =
+        callEmpty { service.requestRefresh() }
+
     override suspend fun services(): ApiResult<List<Service>> =
         call({ service.services() }) { services -> services.map { it.toDomain() } }
 
@@ -92,7 +95,7 @@ internal class RetrofitCueSeekApi(
         }
     }
 
-    /** For `204 No Content`, where a body's absence is the success condition. */
+    /** For `202` and `204`, where a body's absence is the success condition. */
     private suspend fun callEmpty(request: suspend () -> Response<Unit>): ApiResult<Unit> =
         guard {
             val response = request()

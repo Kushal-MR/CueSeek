@@ -113,11 +113,13 @@ class AgentLiveStateTest {
         snapshots: suspend (PairedHost) -> ApiResult<StreamEvent.Snapshot> = {
             ApiResult.Failure(ApiError.Transport(IOException("no refresh in this test")))
         },
+        nudge: suspend (PairedHost) -> ApiResult<Unit> = { ApiResult.Success(Unit) },
     ): Pair<MutableList<AgentState>, AgentLiveState> {
         val seen = mutableListOf<AgentState>()
         val live = AgentLiveState(
             streams = streams,
             snapshots = snapshots,
+            nudge = nudge,
             now = { Instant.ofEpochMilli(testScheduler.currentTime) },
             staleAfter = Duration.ofSeconds(30),
             checkInterval = Duration.ofSeconds(1),
@@ -439,7 +441,9 @@ class AgentLiveStateTest {
         assertTrue("should have gone stale in silence", seen.last().freshness.isStale)
 
         refreshes.emit(Unit)
-        advanceTimeBy(1_000)
+        // Past the observe window: the refresh now nudges the agent and waits for it to
+        // look before reading, so the answer is deliberately later than it used to be.
+        advanceTimeBy(5_000)
 
         assertFalse("a delivered snapshot is fresh data", seen.last().freshness.isStale)
         assertEquals(HealthStatus.Healthy, seen.last().services.single().health.status)
@@ -462,7 +466,7 @@ class AgentLiveStateTest {
         val before = seen.last().freshness
 
         refreshes.emit(Unit)
-        advanceTimeBy(1_000)
+        advanceTimeBy(5_000)
 
         assertEquals(before, seen.last().freshness)
         assertTrue(seen.last().freshness.isStale)
@@ -521,7 +525,7 @@ class AgentLiveStateTest {
         advanceTimeBy(500)
 
         refreshes.emit(Unit)
-        advanceTimeBy(100)
+        advanceTimeBy(5_000)
 
         val latest = seen.last()
         assertFalse("data arrived, so it is fresh", latest.freshness.isStale)
@@ -561,6 +565,57 @@ class AgentLiveStateTest {
             "expected a reconnect attempt without waiting out the backoff",
             connects.get() > before,
         )
+        job.cancel()
+    }
+
+    @Test
+    fun `a refresh asks the agent to look before it reads`() = runTest {
+        // The ordering is the feature. Reading first would return the agent's cache — the
+        // state from before whatever the user is trying to verify (ADR-0003 Amendment 1).
+        val order = mutableListOf<String>()
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val (seen, live) = liveState(
+            streams = frozenStream(),
+            snapshots = {
+                order += "read"
+                ApiResult.Success(StreamEvent.Snapshot(system, listOf(service())))
+            },
+            nudge = {
+                order += "nudge"
+                ApiResult.Success(Unit)
+            },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+        advanceTimeBy(1_000)
+
+        refreshes.emit(Unit)
+        advanceTimeBy(5_000)
+
+        assertEquals(listOf("nudge", "read"), order)
+        assertFalse(seen.last().freshness.isStale)
+        job.cancel()
+    }
+
+    @Test
+    fun `an agent too old to know the refresh endpoint still gets read`() = runTest {
+        // Forward compatibility in the awkward direction: a client newer than its agent.
+        // The nudge 404s, the read still happens, and the refresh degrades to what it did
+        // before the endpoint existed rather than failing outright.
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val (seen, live) = liveState(
+            streams = frozenStream(),
+            snapshots = { ApiResult.Success(StreamEvent.Snapshot(system, listOf(service()))) },
+            nudge = { ApiResult.Failure(ApiError.NotFound("no such endpoint")) },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+
+        advanceTimeBy(60_000)
+        assertTrue(seen.last().freshness.isStale)
+
+        refreshes.emit(Unit)
+        advanceTimeBy(5_000)
+
+        assertFalse("the read still delivered data", seen.last().freshness.isStale)
         job.cancel()
     }
 }

@@ -62,6 +62,23 @@ class AgentLiveState(
     private val snapshots: suspend (PairedHost) -> ApiResult<StreamEvent.Snapshot> = {
         ApiResult.Failure(ApiError.Transport(IOException("no refresh path is configured")))
     },
+    /**
+     * Asks the agent to observe its services now.
+     *
+     * Distinct from [snapshots], and the distinction is the entire feature. [snapshots]
+     * re-reads what the agent already knows; this makes it look again. A refresh that
+     * only did the former would answer "has this changed?" with the state from before the
+     * change (ADR-0003 Amendment 1).
+     */
+    private val nudge: suspend (PairedHost) -> ApiResult<Unit> = { ApiResult.Success(Unit) },
+    /**
+     * How long to give the agent to observe before reading the result.
+     *
+     * Not a guess at how long a poll takes so much as a bound on how long the indicator
+     * may spin. If the agent is slower than this, the answer still arrives — over the
+     * stream, a moment later, through the ordinary path.
+     */
+    private val observeWindow: Duration = Duration.ofMillis(1_200),
     private val now: () -> Instant = Instant::now,
     /**
      * How long silence is tolerated before the data is disbelieved.
@@ -126,6 +143,16 @@ class AgentLiveState(
                 if (!refreshLock.tryLock()) return@collect
                 try {
                     publish { it.copy(refreshing = true) }
+
+                    // Ask the agent to look, then give it a moment to do so before
+                    // reading. A failed nudge is not fatal: the read below still proves
+                    // reachability and still refuses to invent freshness, so an agent too
+                    // old to know this endpoint degrades to the previous behaviour rather
+                    // than to an error.
+                    if (nudge(host) is ApiResult.Success) {
+                        delay(observeWindow.toMillis())
+                    }
+
                     when (val result = snapshots(host)) {
                         // Applied through the ordinary event path, so the freshness clock
                         // advances for the same reason it always does: the agent answered.

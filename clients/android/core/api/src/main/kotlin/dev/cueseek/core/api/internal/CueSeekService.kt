@@ -39,6 +39,9 @@ internal interface CueSeekService {
     @DELETE("v1/devices/{deviceId}")
     suspend fun revokeDevice(@Path("deviceId") deviceId: String): Response<Unit>
 
+    @POST("v1/refresh")
+    suspend fun requestRefresh(): Response<Unit>
+
     @GET("v1/services")
     suspend fun services(): Response<List<Service>>
 

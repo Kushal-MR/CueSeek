@@ -50,6 +50,20 @@ interface CueSeekApi {
     suspend fun revokeDevice(id: DeviceId): ApiResult<Unit>
 
     /** `GET /v1/services` — scope `read`. Configuration order. */
+    /**
+     * Asks the agent to observe every service now.
+     *
+     * Success means the request was accepted, **not** that anything has been observed.
+     * The agent never lets a request wait on an upstream service, so this returns before
+     * the polls it triggered have run; their results arrive over the stream, or on the
+     * next read (ADR-0003 Amendment 1).
+     *
+     * This is what makes a manual refresh verification rather than repetition. Reading
+     * [services] alone returns the agent's cache, which after stopping something is the
+     * state from before you stopped it.
+     */
+    suspend fun requestRefresh(): ApiResult<Unit>
+
     suspend fun services(): ApiResult<List<Service>>
 
     /** `GET /v1/services/{id}` — scope `read`. */
