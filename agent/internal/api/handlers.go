@@ -139,6 +139,30 @@ func (s *Server) RevokeDevice(ctx context.Context, request gen.RevokeDeviceReque
 
 // ---------------------------------------------------------------- services
 
+// RequestRefresh asks the poller to observe every service now.
+//
+// Returns before anything has been observed, and that is the contract's promise rather
+// than a shortcut. The nudge lands on each service's own goroutine, where the poll runs
+// under the same timeout a ticked poll does; the results reach clients as ordinary
+// `service_updated` events. So a service that has stopped answering delays this handler
+// by nothing at all (ADR-0003 Amendment 1).
+//
+// Requires `read`, not `service.control`. Asking the agent to look is not acting on
+// anything, and a device paired only to watch should still be able to check.
+func (s *Server) RequestRefresh(
+	ctx context.Context, _ gen.RequestRefreshRequestObject,
+) (gen.RequestRefreshResponseObject, error) {
+	if _, err := deviceFromContext(ctx); err != nil {
+		return nil, err
+	}
+	if s.refresh != nil {
+		s.refresh.PollAllNow()
+	}
+	// Not audited. An audit log is a record of things that changed the host, and this
+	// changed nothing — logging every pull-to-refresh would bury the entries that matter.
+	return gen.RequestRefresh202Response{}, nil
+}
+
 // ListServices reports every managed service, served entirely from cache.
 //
 // No upstream call happens here. The poller refreshes each service on its own schedule
@@ -302,6 +326,12 @@ func (s *Server) awaitAction(
 	go func() {
 		defer s.background.Done()
 		defer cancel()
+		// Whatever the outcome, the cache is now describing a moment before the agent
+		// touched this service. Observing immediately is the difference between a console
+		// that confirms what you just did and one that contradicts it for half a minute
+		// (ADR-0003 Amendment 1). Deferred so it also covers the failure paths: a Stop
+		// that systemd rejected still leaves a state worth re-reading.
+		defer s.nudge(serviceID)
 
 		if job == nil {
 			// An adapter may complete an action synchronously and return no job.

@@ -209,6 +209,36 @@ paths:
                 items: { $ref: "#/components/schemas/Service" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /v1/refresh:
+    post:
+      operationId: requestRefresh
+      tags: [services]
+      summary: Ask the agent to observe every service now
+      description: |
+        Nudges the poller. The agent re-observes each service ahead of its next tick and
+        publishes what it finds over the stream as ordinary `service_updated` events.
+
+        **This returns before any of that happens, and that is deliberate.** The agent
+        never lets a request wait on an upstream service, so a Jellyfin that has stopped
+        answering delays nothing here (ADR-0003 Amendment 1). A `202` means the request
+        was accepted, not that anything has been observed yet — watch the stream, or read
+        `/v1/services` a moment later, for the result.
+
+        Exists because re-reading a cache is not verification. An operator who has just
+        stopped a service and wants to confirm it needs the agent to *look*, not to repeat
+        what it last saw.
+
+        Nudges are rate-bounded per service and conflated, so calling this in a loop
+        costs the upstream service no more than calling it once.
+      x-required-scope: read
+      responses:
+        "202":
+          description: |
+            Accepted. Nothing has necessarily been observed yet. Services already polled
+            within the rate bound are left alone, so this is also the response when every
+            nudge was dropped — the distinction is not one a client can act on.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /v1/services/{serviceId}:
     get:
       operationId: getService

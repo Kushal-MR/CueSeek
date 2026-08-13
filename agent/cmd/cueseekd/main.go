@@ -143,6 +143,7 @@ func runServe(args []string) error {
 		Store:        st,
 		Registry:     registry,
 		Cache:        poller.Cache(),
+		Refresher:    poller,
 		AgentVersion: version,
 		HostID:       hostID,
 	})
