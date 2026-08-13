@@ -98,12 +98,11 @@ fun BoxScope.RefreshRule(
         modifier = modifier
             .align(Alignment.TopCenter)
             .graphicsLayer {
-                // Rides down with the pull and parks just below the top edge while
-                // refreshing. Overshoot past the threshold is damped to a quarter so the
-                // rule stops travelling once the gesture has already been understood.
-                val overshoot = (fraction - 1f).coerceAtLeast(0f) * 0.25f
-                val travel = (fraction.coerceAtMost(1f) + overshoot) * Threshold.toPx()
-                translationY = travel - size.height
+                // Sits in the gap the content opens above it, never on top of the content.
+                // The first build parked it exactly where the tally rule lives, and since
+                // the two are deliberately the same shape, the result read as one broken
+                // bar rather than as two objects.
+                translationY = pullTravelPx(fraction, RefreshThreshold.toPx()) - size.height
                 alpha = if (refreshing) 1f else fraction.coerceIn(0f, 1f)
             }
             .width(TrackWidth)
@@ -198,8 +197,21 @@ private fun SweepingSegment(color: Color) {
     )
 }
 
+/**
+ * How far the content travels for a given pull.
+ *
+ * Shared with the screen so the rule and the content it uncovers move as one thing.
+ * Overshoot past the threshold is damped to a quarter: once the gesture has been
+ * understood there is nothing further to say, and a page that keeps sliding says the
+ * opposite.
+ */
+internal fun pullTravelPx(fraction: Float, thresholdPx: Float): Float {
+    val overshoot = (fraction - 1f).coerceAtLeast(0f) * 0.25f
+    return (fraction.coerceAtMost(1f) + overshoot) * thresholdPx
+}
+
 /** Matches [androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.PositionalThreshold]. */
-private val Threshold = PullToRefreshDefaults.PositionalThreshold
+internal val RefreshThreshold = PullToRefreshDefaults.PositionalThreshold
 
 /** The tally rule's height, because this is meant to read as the same object. */
 private val RuleHeight = 8.dp

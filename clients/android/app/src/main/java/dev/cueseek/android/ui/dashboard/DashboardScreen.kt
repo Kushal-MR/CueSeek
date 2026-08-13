@@ -34,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -92,6 +93,15 @@ fun DashboardScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    // The page travels with the pull, so the indicator appears in a gap it
+                    // opened rather than floating over the header. Material's default is
+                    // to move only the indicator, which suits a spinner on a card; it does
+                    // not suit an indicator that is deliberately the same object as the
+                    // rule already sitting under the headline.
+                    .graphicsLayer {
+                        translationY =
+                            pullTravelPx(pullState.distanceFraction, RefreshThreshold.toPx())
+                    }
                     .verticalScroll(rememberScrollState())
                     // A pull is a gesture, and a gesture is not available to everyone. The
                     // same instruction by another route, so refreshing is not a feature
