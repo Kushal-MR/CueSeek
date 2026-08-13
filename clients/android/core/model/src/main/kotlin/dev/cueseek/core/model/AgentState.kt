@@ -29,6 +29,16 @@ data class AgentState(
      * A reconnect delivers a fresh snapshot, not missed events.
      */
     val actionOutcomes: List<ActionProgress> = emptyList(),
+    /**
+     * Whether a manual refresh is in flight *right now*.
+     *
+     * Purely a statement about a request this client has outstanding, and deliberately not
+     * connected to [freshness]. Asking is not the same as being answered: the data becomes
+     * fresh when the agent replies, and a refresh that fails leaves the freshness clock
+     * exactly where it was. A screen that showed green because the user pulled would be
+     * the precise failure this client exists to avoid.
+     */
+    val refreshing: Boolean = false,
 ) {
     fun outcomeOf(actionId: ActionInvocationId): ActionProgress? =
         actionOutcomes.lastOrNull { it.actionId == actionId }

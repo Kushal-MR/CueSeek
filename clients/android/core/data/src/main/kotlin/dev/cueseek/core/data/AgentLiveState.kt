@@ -5,6 +5,7 @@ import dev.cueseek.core.api.StreamFailure
 import dev.cueseek.core.model.ActionProgress
 import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.ApiError
+import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Freshness
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.model.Service
@@ -16,15 +17,19 @@ import dev.cueseek.core.model.degradedToUnknown
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Live state for one agent, and the reason this client can be trusted.
@@ -47,6 +52,16 @@ import kotlinx.coroutines.sync.withLock
  */
 class AgentLiveState(
     private val streams: suspend (PairedHost) -> AgentStream?,
+    /**
+     * Fetches the agent's current state on demand, for a manual refresh.
+     *
+     * Deliberately the same [StreamEvent.Snapshot] the stream's first event carries, so a
+     * pull and a reconnect converge on one application path rather than two that have to
+     * be kept honest separately.
+     */
+    private val snapshots: suspend (PairedHost) -> ApiResult<StreamEvent.Snapshot> = {
+        ApiResult.Failure(ApiError.Transport(IOException("no refresh path is configured")))
+    },
     private val now: () -> Instant = Instant::now,
     /**
      * How long silence is tolerated before the data is disbelieved.
@@ -60,8 +75,17 @@ class AgentLiveState(
     private val backoff: StreamBackoff = StreamBackoff(),
 ) {
 
-    fun stateFor(host: PairedHost): Flow<AgentState> = channelFlow {
+    /**
+     * @param refreshes manual refresh requests. Each emission means "ask the agent now".
+     *   Requests arriving while one is already in flight are dropped rather than queued —
+     *   see the collector below for why that is the correct answer and not a shortcut.
+     */
+    fun stateFor(
+        host: PairedHost,
+        refreshes: Flow<Unit> = emptyFlow(),
+    ): Flow<AgentState> = channelFlow {
         val mutex = Mutex()
+        val refreshLock = Mutex()
         var internal = Internal()
 
         suspend fun publish(transform: (Internal) -> Internal) {
@@ -81,6 +105,42 @@ class AgentLiveState(
             while (isActive) {
                 delay(checkInterval.toMillis())
                 publish { it }
+            }
+        }
+
+        // A refresh is also the user saying "try now". If the stream is sitting out a
+        // backoff, that wait should end. Conflated: several pulls during one wait are one
+        // instruction, and only the fact that one arrived matters.
+        val reconnectNow = Channel<Unit>(Channel.CONFLATED)
+
+        launch {
+            // Conflated, so a burst of pulls during one request collapses to a single
+            // follow-up instead of a queue of identical ones.
+            refreshes.conflate().collect {
+                reconnectNow.trySend(Unit)
+
+                // Single-flight, and the reason it is a drop rather than a queue: every
+                // request would fetch the same cached state from the agent, so running a
+                // second one behind the first produces an identical answer later. The
+                // caller wants current state, not a count of how many times it was asked.
+                if (!refreshLock.tryLock()) return@collect
+                try {
+                    publish { it.copy(refreshing = true) }
+                    when (val result = snapshots(host)) {
+                        // Applied through the ordinary event path, so the freshness clock
+                        // advances for the same reason it always does: the agent answered.
+                        is ApiResult.Success -> publish {
+                            it.applyEvent(result.value, now()).copy(refreshing = false)
+                        }
+
+                        // The clock is untouched. A refresh that failed is evidence of
+                        // nothing, and moving the timestamp here would let a pull make a
+                        // dead agent look alive — the one lie this client must not tell.
+                        is ApiResult.Failure -> publish { it.copy(refreshing = false) }
+                    }
+                } finally {
+                    refreshLock.unlock()
+                }
             }
         }
 
@@ -121,7 +181,10 @@ class AgentLiveState(
 
             attempt += 1
             publish { it.copy(status = StreamStatus.Retrying(failure, attempt)) }
-            delay(backoff.delayFor(attempt).toMillis())
+            // Whichever comes first: the backoff elapsing, or the user asking. A signal
+            // left over from a refresh that happened while connected simply means the next
+            // reconnect is prompt, which is the behaviour a user who just pulled expects.
+            withTimeoutOrNull(backoff.delayFor(attempt).toMillis()) { reconnectNow.receive() }
         }
 
         awaitClose { }
@@ -165,17 +228,31 @@ class AgentLiveState(
         val status: StreamStatus = StreamStatus.Idle,
         val lastEventAt: Instant? = null,
         val outcomes: List<ActionProgress> = emptyList(),
+        /** A request this client has outstanding. Says nothing about the data's age. */
+        val refreshing: Boolean = false,
     ) {
 
-        fun apply(envelope: StreamEnvelope, receivedAt: Instant): Internal {
-            // Every event of any kind counts, heartbeats included. Their whole purpose is
-            // to make silence unambiguous, so they must reset the same timer.
-            val base = copy(
-                lastEventAt = receivedAt,
-                status = StreamStatus.Open(since = (status as? StreamStatus.Open)?.since ?: receivedAt),
+        /**
+         * Applies an event that arrived over the stream.
+         *
+         * The status update lives here rather than in [applyEvent] because it is the one
+         * thing only the stream may claim. A manual refresh proves the agent answered an
+         * HTTP request; it proves nothing about whether the stream is open, and a
+         * successful pull during a reconnect must leave "Reconnecting" on screen.
+         */
+        fun apply(envelope: StreamEnvelope, receivedAt: Instant): Internal =
+            applyEvent(envelope.event, receivedAt).copy(
+                status = StreamStatus.Open(
+                    since = (status as? StreamStatus.Open)?.since ?: receivedAt,
+                ),
             )
 
-            return when (val event = envelope.event) {
+        fun applyEvent(event: StreamEvent, receivedAt: Instant): Internal {
+            // Every event of any kind counts, heartbeats included. Their whole purpose is
+            // to make silence unambiguous, so they must reset the same timer.
+            val base = copy(lastEventAt = receivedAt)
+
+            return when (event) {
                 is StreamEvent.Snapshot -> base.copy(
                     system = event.system,
                     // Replace wholesale. Merging assumes the old and new describe the same
@@ -211,6 +288,7 @@ class AgentLiveState(
                 status = status,
                 freshness = if (stale) Freshness.Stale(lastEventAt) else Freshness.Fresh,
                 actionOutcomes = outcomes,
+                refreshing = refreshing,
             )
         }
     }

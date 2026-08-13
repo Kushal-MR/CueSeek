@@ -8,6 +8,7 @@ import dev.cueseek.core.model.ActionStatus
 import dev.cueseek.core.model.AgentAddress
 import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.ApiError
+import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Capability
 import dev.cueseek.core.model.DeviceId
 import dev.cueseek.core.model.Health
@@ -23,7 +24,11 @@ import dev.cueseek.core.model.SystemInfo
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.max
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -105,10 +110,14 @@ class AgentLiveStateTest {
     /** Collects into a list on the test scope's virtual clock. */
     private fun TestScope.liveState(
         streams: suspend (PairedHost) -> AgentStream?,
+        snapshots: suspend (PairedHost) -> ApiResult<StreamEvent.Snapshot> = {
+            ApiResult.Failure(ApiError.Transport(IOException("no refresh in this test")))
+        },
     ): Pair<MutableList<AgentState>, AgentLiveState> {
         val seen = mutableListOf<AgentState>()
         val live = AgentLiveState(
             streams = streams,
+            snapshots = snapshots,
             now = { Instant.ofEpochMilli(testScheduler.currentTime) },
             staleAfter = Duration.ofSeconds(30),
             checkInterval = Duration.ofSeconds(1),
@@ -406,5 +415,152 @@ class AgentLiveStateTest {
         // promptly, not fifteen minutes after the signal returns.
         assertEquals(Duration.ofSeconds(15), backoff.delayFor(5))
         assertEquals(Duration.ofSeconds(15), backoff.delayFor(50))
+    }
+
+    // ---------------------------------------------------------------- manual refresh
+
+    /** A stream that connects, says nothing, and never drops. The A7 freeze, exactly. */
+    private fun frozenStream() =
+        streamOf(flow<StreamEnvelope> { kotlinx.coroutines.awaitCancellation() })
+
+    @Test
+    fun `a refresh that succeeds resets the freshness clock`() = runTest {
+        // The case pull-to-refresh actually exists for: the connection still claims to be
+        // open, nothing has arrived for a minute, and an HTTP round trip is the only way to
+        // find out whether the agent is alive.
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val (seen, live) = liveState(
+            streams = frozenStream(),
+            snapshots = { ApiResult.Success(StreamEvent.Snapshot(system, listOf(service()))) },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+
+        advanceTimeBy(60_000)
+        assertTrue("should have gone stale in silence", seen.last().freshness.isStale)
+
+        refreshes.emit(Unit)
+        advanceTimeBy(1_000)
+
+        assertFalse("a delivered snapshot is fresh data", seen.last().freshness.isStale)
+        assertEquals(HealthStatus.Healthy, seen.last().services.single().health.status)
+        job.cancel()
+    }
+
+    @Test
+    fun `a refresh that fails leaves the data exactly as stale as it was`() = runTest {
+        // The guarantee that matters most. Pulling must never be able to make a dead agent
+        // look alive, so a failure moves nothing but the in-flight flag.
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val (seen, live) = liveState(
+            // A snapshot lands, then the stream freezes: there is real data to protect.
+            streams = streamOf(flow { emit(snapshot()); kotlinx.coroutines.awaitCancellation() }),
+            snapshots = { ApiResult.Failure(ApiError.Transport(IOException("unreachable"))) },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+
+        advanceTimeBy(60_000)
+        val before = seen.last().freshness
+
+        refreshes.emit(Unit)
+        advanceTimeBy(1_000)
+
+        assertEquals(before, seen.last().freshness)
+        assertTrue(seen.last().freshness.isStale)
+        assertEquals(HealthStatus.Unknown, seen.last().services.single().health.status)
+        assertFalse("the flag must clear even on failure", seen.last().refreshing)
+        job.cancel()
+    }
+
+    @Test
+    fun `refreshes never overlap, however hard the user pulls`() = runTest {
+        // The guarantee is that two requests are never in flight at once, not that a burst
+        // produces exactly one. A pull that arrives *after* a fetch began is a request for
+        // state newer than that fetch will return, so one follow-up is correct rather than
+        // wasteful — what must never happen is two talking to the agent simultaneously.
+        val inFlight = AtomicInteger()
+        val peak = AtomicInteger()
+        val calls = AtomicInteger()
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+        val (seen, live) = liveState(
+            streams = frozenStream(),
+            snapshots = {
+                calls.incrementAndGet()
+                peak.getAndUpdate { max(it, inFlight.incrementAndGet()) }
+                try {
+                    // Long enough that the later pulls all land while this is outstanding.
+                    delay(5_000)
+                    ApiResult.Success(StreamEvent.Snapshot(system, listOf(service())))
+                } finally {
+                    inFlight.decrementAndGet()
+                }
+            },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+        advanceTimeBy(1_000)
+
+        repeat(5) { refreshes.emit(Unit) }
+        advanceTimeBy(30_000)
+
+        assertEquals("never two requests at once", 1, peak.get())
+        assertTrue("five pulls must not become five requests: ${calls.get()}", calls.get() <= 2)
+        assertFalse(seen.last().refreshing)
+        job.cancel()
+    }
+
+    @Test
+    fun `a refresh does not claim the stream is open`() = runTest {
+        // A successful HTTP call says the agent answered; it says nothing about the stream.
+        // Reporting Open here would tell the user a connection exists that does not, which
+        // is the same class of lie as showing stale data as fresh.
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val (seen, live) = liveState(
+            streams = streamOf(flow { throw StreamFailure(ApiError.Transport(IOException("down"))) }),
+            snapshots = { ApiResult.Success(StreamEvent.Snapshot(system, listOf(service()))) },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+        advanceTimeBy(500)
+
+        refreshes.emit(Unit)
+        advanceTimeBy(100)
+
+        val latest = seen.last()
+        assertFalse("data arrived, so it is fresh", latest.freshness.isStale)
+        assertTrue(
+            "but the stream is not open: ${latest.status}",
+            latest.status is StreamStatus.Retrying || latest.status is StreamStatus.Connecting,
+        )
+        job.cancel()
+    }
+
+    @Test
+    fun `a refresh ends the reconnect backoff early`() = runTest {
+        // By the fourth attempt the wait is 8s. A user who pulls should not be told to sit
+        // through the rest of it.
+        val connects = AtomicInteger()
+        val refreshes = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val (seen, live) = liveState(
+            streams = {
+                connects.incrementAndGet()
+                object : AgentStream {
+                    override fun events(): Flow<StreamEnvelope> =
+                        flow { throw StreamFailure(ApiError.Transport(IOException("down"))) }
+                }
+            },
+            snapshots = { ApiResult.Failure(ApiError.Transport(IOException("also down"))) },
+        )
+        val job = launch { live.stateFor(host, refreshes).collect { seen += it } }
+
+        // Let the backoff grow to a wait long enough to be interrupted meaningfully.
+        advanceTimeBy(4_000)
+        val before = connects.get()
+
+        refreshes.emit(Unit)
+        advanceTimeBy(200)
+
+        assertTrue(
+            "expected a reconnect attempt without waiting out the backoff",
+            connects.get() > before,
+        )
+        job.cancel()
     }
 }

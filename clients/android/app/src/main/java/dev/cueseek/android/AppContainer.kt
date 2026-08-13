@@ -43,5 +43,11 @@ class AppContainer(context: Context) {
      * not survive Doze, so nothing background-critical may depend on it (ADR-0004
      * Amendment 2).
      */
-    val live: AgentLiveState = AgentLiveState(streams = clients::streamFor)
+    val live: AgentLiveState = AgentLiveState(
+        streams = clients::streamFor,
+        // The manual-refresh path is the ordinary read path. Nothing about a pull deserves
+        // its own request logic, and giving it one would be a second place for the
+        // credential handling, the error mapping and the shape of a snapshot to drift.
+        snapshots = services::snapshot,
+    )
 }

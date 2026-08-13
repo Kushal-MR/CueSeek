@@ -20,6 +20,8 @@ import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.data.ThemeChoice
 import dev.cueseek.core.model.Service
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -62,10 +64,33 @@ class CueSeekViewModel(private val container: AppContainer) : ViewModel() {
      * lifecycle. That is what keeps the stream a foreground affordance rather than a
      * background service in disguise (ADR-0004 Amendment 2).
      */
+    /**
+     * Manual refresh requests.
+     *
+     * Buffered by one and dropping the oldest, so [refresh] never suspends and a burst of
+     * pulls collapses to a single instruction before it even reaches the data layer. The
+     * layer coalesces again for the in-flight case; this only keeps the UI from queueing.
+     */
+    private val refreshRequests = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val screen: Flow<Screen> = container.hosts.selectedHost.flatMapLatest { host ->
         if (host == null) flowOf(Screen.Unpaired)
-        else container.live.stateFor(host).map { Screen.Paired(it) }
+        else container.live.stateFor(host, refreshRequests).map { Screen.Paired(it) }
+    }
+
+    /**
+     * Asks the agent now.
+     *
+     * Fire-and-forget on purpose: whether anything happens is the data layer's decision,
+     * and the outcome is reported the only way it can honestly be reported — through the
+     * state, as data that did or did not arrive.
+     */
+    fun refresh() {
+        refreshRequests.tryEmit(Unit)
     }
 
     var form by mutableStateOf(PairingForm())

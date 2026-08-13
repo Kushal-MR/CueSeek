@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -31,6 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +57,7 @@ import java.time.Instant
  * Summary, then roster, then everything else on demand. The screen answers "is everything
  * fine?" before it offers anything to do, because that is the question it exists for.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     state: AgentState,
@@ -68,57 +75,78 @@ fun DashboardScreen(
     }
 
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val pullState = rememberPullToRefreshState()
     val context = LocalContext.current
     val snackbars = remember { SnackbarHostState() }
     val stale = state.freshness.isStale
     val open = viewModel.openServiceId?.let { id -> state.services.firstOrNull { it.id == id } }
 
     Column(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+        PullToRefreshBox(
+            isRefreshing = state.refreshing,
+            onRefresh = viewModel::refresh,
+            state = pullState,
+            modifier = Modifier.weight(1f),
+            indicator = { RefreshRule(state = pullState, refreshing = state.refreshing) },
         ) {
-            SummaryHeader(
-                state = state,
-                now = now,
-                theme = theme,
-                onThemeChange = viewModel::setTheme,
-                onForgetRequested = viewModel::askToForget,
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    // A pull is a gesture, and a gesture is not available to everyone. The
+                    // same instruction by another route, so refreshing is not a feature
+                    // only people who can execute a drag are able to reach.
+                    .semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction("Refresh") {
+                                viewModel.refresh()
+                                true
+                            }
+                        )
+                    },
+            ) {
+                SummaryHeader(
+                    state = state,
+                    now = now,
+                    theme = theme,
+                    onThemeChange = viewModel::setTheme,
+                    onForgetRequested = viewModel::askToForget,
+                )
 
-            SkewBanner(state)
+                SkewBanner(state)
 
-            Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(20.dp))
 
-            ServiceRoster(
-                services = state.services,
-                host = state.host,
-                stale = stale,
-                now = now,
-                // The row's two destinations, decided here rather than inside the roster:
-                // composing the URL needs the paired address, and launching it needs an
-                // Android context, neither of which a presentational list should hold.
-                //
-                // Falling back to the sheet — rather than to nothing — is the point. A
-                // service with no configured interface, or a phone with nothing that can
-                // open one, still answers the tap with something worth reading.
-                onServiceClick = { service ->
-                    when (val to = rowDestination(service, state.host.address)) {
-                        // Even a resolved URL can fail to launch on a device with nothing
-                        // that opens links, so the fallback covers that too.
-                        is RowDestination.WebUi ->
-                            if (!openWebUi(context, to.url)) viewModel.openService(service)
+                ServiceRoster(
+                    services = state.services,
+                    host = state.host,
+                    stale = stale,
+                    now = now,
+                    // The row's two destinations, decided here rather than inside the
+                    // roster: composing the URL needs the paired address, and launching it
+                    // needs an Android context, neither of which a presentational list
+                    // should hold.
+                    //
+                    // Falling back to the sheet — rather than to nothing — is the point. A
+                    // service with no configured interface, or a phone with nothing that
+                    // can open one, still answers the tap with something worth reading.
+                    onServiceClick = { service ->
+                        when (val to = rowDestination(service, state.host.address)) {
+                            // Even a resolved URL can fail to launch on a device with
+                            // nothing that opens links, so the fallback covers that too.
+                            is RowDestination.WebUi ->
+                                if (!openWebUi(context, to.url)) viewModel.openService(service)
 
-                        RowDestination.Details -> viewModel.openService(service)
-                    }
-                },
-                onInvoke = { service, action ->
-                    viewModel.invoke(state.host, service.id, action.id, action.label)
-                },
-            )
+                            RowDestination.Details -> viewModel.openService(service)
+                        }
+                    },
+                    onInvoke = { service, action ->
+                        viewModel.invoke(state.host, service.id, action.id, action.label)
+                    },
+                )
 
-            Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(24.dp))
+            }
         }
 
         SnackbarHost(snackbars)
