@@ -26,16 +26,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.cueseek.core.design.token.CueSeekMotion
 import dev.cueseek.core.design.token.CueSeekShapes
-import kotlin.math.absoluteValue
 
 /**
  * The pull-to-refresh indicator, as a rule rather than a spinner.
@@ -121,7 +123,7 @@ fun BoxScope.RefreshRule(
         )
 
         if (refreshing && animationsEnabled()) {
-            SweepingSegment(color)
+            SweepingBand(color)
         } else if (refreshing) {
             // Animations are switched off system-wide. The request is still real, so the
             // track still says so — as a full armed rule rather than as nothing, because
@@ -158,42 +160,55 @@ private fun animationsEnabled(): Boolean {
 }
 
 /**
- * A segment travelling the track while a request is outstanding.
+ * A band running the track while a request is outstanding.
  *
- * It eases at the turns rather than sliding linearly, which is what keeps it from reading
- * as a loading bar borrowed from a web page. The reverse repeat means it never jumps: the
- * segment always occupies a position it could have travelled to.
+ * The first version bounced a fixed block left and right. It read as stuck, and on the
+ * phone it was easy to see why: a 40% block in a 96dp track travels barely 57dp, and it
+ * spends half of every cycle going *backwards*. Reversal is not progress. A thing that
+ * returns to where it started looks like a thing that is waiting, which is the opposite of
+ * what an indicator is for.
+ *
+ * This always runs one way. The head leads on a decelerating curve and the tail follows on
+ * an accelerating one, so the band stretches out of the left edge, sweeps, and gathers into
+ * the right — then begins again. Both ends start at 0 and finish at 1, so the loop closes
+ * on itself with no jump to hide.
+ *
+ * Drawn rather than laid out, and the animation is read inside the draw lambda, so a frame
+ * costs a repaint of one rounded rectangle instead of a recomposition.
  */
 @Composable
-private fun SweepingSegment(color: Color) {
+private fun BoxScope.SweepingBand(color: Color) {
     val transition = rememberInfiniteTransition(label = "refreshSweep")
-    val position by transition.animateFloat(
+    val progress = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(SweepMillis, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "refreshSweepPosition",
+        label = "refreshSweepProgress",
     )
-
-    // Eased by hand rather than by the animation spec: a reversing tween would pause at
-    // each end, and a rule that hesitates looks like a rule that has stalled.
-    val eased = 1f - (2f * position - 1f).absoluteValue
 
     Box(
         Modifier
-            .fillMaxHeight()
-            .fillMaxWidth(SegmentFraction)
-            .layout { measurable, constraints ->
-                val placeable = measurable.measure(constraints)
-                val travel = constraints.maxWidth - placeable.width
-                layout(constraints.maxWidth, placeable.height) {
-                    placeable.placeRelative((travel * eased).toInt(), 0)
-                }
+            .matchParentSize()
+            .drawBehind {
+                val phase = progress.value
+                val head = CueSeekMotion.EmphasizedDecelerate.transform(phase)
+                val tail = CueSeekMotion.EmphasizedAccelerate.transform(phase)
+
+                val left = tail * size.width
+                val width = (head - tail) * size.width
+                if (width <= 0f) return@drawBehind
+
+                val radius = CornerRadius(size.height / 2f)
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(left, 0f),
+                    size = Size(width, size.height),
+                    cornerRadius = radius,
+                )
             }
-            .clip(CueSeekShapes.Shapes.extraSmall)
-            .background(color)
     )
 }
 
@@ -218,5 +233,10 @@ private val RuleHeight = 8.dp
 
 private val TrackWidth = 96.dp
 
-private const val SegmentFraction = 0.4f
-private const val SweepMillis = 900
+/**
+ * One pass of the band.
+ *
+ * Fast enough that a refresh which resolves in a second still shows a complete sweep, so
+ * the shortest case reads as one deliberate movement rather than as a fragment.
+ */
+private const val SweepMillis = 1000
