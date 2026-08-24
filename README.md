@@ -35,8 +35,10 @@ the machine they run on:
 
 ## What works today
 
-Two milestones are complete. Both were verified on real hardware against the real agent,
-not against mocks — the record is in [`docs/m2-p6-verification.md`](docs/m2-p6-verification.md).
+Two milestones are complete and the third is underway. Everything below was verified on real
+hardware against the real agent, not against mocks — the records are in
+[`docs/m2-p6-verification.md`](docs/m2-p6-verification.md) and
+[`docs/m3-verification.md`](docs/m3-verification.md).
 
 **The agent — `cueseekd`.** Runs as an unprivileged `cueseek` user on a systemd host.
 Serves the REST contract and an SSE event stream, stores paired devices and hashed tokens
@@ -130,6 +132,7 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | `clients/wear/` | Wear OS client. Placeholder until M4. |
 | `deploy/` | systemd unit, polkit rule, install script, packaging. |
 | `docs/adr/` | Architecture Decision Records. Start here. |
+| `docs/DESIGN.md` | The design system: palette, type, shape, motion, and the rules behind them. |
 
 `api/` sits outside `agent/` on purpose. The spec is not the agent's — it is the contract
 both sides bind to, and nesting it under the server would quietly make the server its
@@ -142,6 +145,10 @@ owner.
 Every significant decision is recorded as an ADR with its rationale **and its accepted
 cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 
+The visual side has its own record. [`docs/DESIGN.md`](docs/DESIGN.md) states the palette,
+type scale, shape grammar, motion rules and accessibility floor as values rather than as
+prose — the file a designer, a contributor or a design tool should be handed first.
+
 ## Roadmap
 
 | Milestone | Scope | Status |
@@ -150,7 +157,7 @@ cost**. If you read one thing in this repository, read [`docs/adr/`](docs/adr/).
 | **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | ✅ Done — [findings](docs/m0-findings.md). A7 closed: SSE viable, but Doze freezes it silently rather than killing it (ADR-0004 Amendment 2) |
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
 | **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
-| **M3** | qBittorrent, `now_playing`, host metrics, power actions | ⬜ |
+| **M3** | qBittorrent, `now_playing`, host metrics, power actions | 🟡 In progress — M3.1 service lifecycle, M3.2 `web_ui`, M3.3 row interaction and M3.3a on-demand refresh are done and verified on hardware ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). M3.4–M3.8 remain |
 | **M4** | Wear OS standalone client, tiles and complications | ⬜ |
 | **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
 

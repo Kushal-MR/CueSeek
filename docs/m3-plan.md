@@ -38,6 +38,7 @@ without the user maintaining two addresses.
 | M3.1 | Service lifecycle: Start, Stop, Restart | — | ✅ verified |
 | M3.2 | Contract + agent: `web_ui` | — | ✅ verified |
 | M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 | ✅ verified |
+| M3.3a | On-demand refresh: nudged polls and pull-to-refresh | M3.3 | ✅ verified |
 | M3.4 | qBittorrent adapter | M3.1, M3.2 | ⬜ |
 | M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ⬜ |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
@@ -110,6 +111,43 @@ rather than assumed.
 
 **Tests:** URL composition across tailnet, LAN, custom scheme/port/path; refusal of
 malformed values; the existing no-service-id-branching guard still passing.
+
+---
+
+### M3.3a — On-demand refresh: nudged polls and pull-to-refresh
+
+Unplanned, and numbered `3a` rather than taking a slot so that M3.4–M3.8 keep the numbers
+they were given. It exists because M3.3 exposed a gap the plan had not anticipated.
+
+The agent had one clock. The poller ticked every 30s, wrote a cache, and every read served
+that cache — so the console could be knowingly wrong twice over. After stopping a service it
+went on reporting the state observed *before* it did the stopping, and an operator wanting to
+confirm anything had no way to ask.
+
+Pull-to-refresh was built first and did not fix it: re-reading a cache returns the same
+answer. Verification needs the agent to **look**, not to repeat itself. That is recorded as
+[ADR-0003 Amendment 1](adr/0003-agent-runtime-go.md#amendments).
+
+- The poller's `select` gained a nudge channel beside its ticker.
+- `POST /v1/refresh` nudges every service; an action nudges its own service once it reaches
+  a terminal state, deferred so a Stop that systemd rejected still gets re-read.
+- The Android gesture calls the endpoint, waits a bounded moment, then reads.
+
+**What did not change, and is the point.** No request handler waits on an upstream service.
+`/v1/refresh` returns `202` having only nudged; the poll runs on the service's own goroutine
+under its own timeout, and the result reaches clients as an ordinary `service_updated` event.
+The 30s cadence is untouched, and a nudge deliberately does not reset the ticker — letting it
+would make the poll interval depend on how often someone opened the app.
+
+**Bounds:** a nudge inside 2s of the last poll is dropped, nudges conflate per service, and
+the endpoint requires `read` rather than `service.control` — asking the agent to look is not
+acting on anything.
+
+**Tests:** 8 agent (nudge observes ahead of the tick, rate bound, never blocks on a wedged
+service, unknown ids ignored; endpoint nudges, needs only `read`, rejects the unauthenticated;
+action completion nudges) and 7 Android (clock resets on success, unmoved on failure, no
+overlap under a burst, does not claim the stream is open, ends reconnect backoff, nudges
+before reading, and degrades when the agent is too old to know the endpoint).
 
 ---
 

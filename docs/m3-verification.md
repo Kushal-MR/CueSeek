@@ -161,3 +161,56 @@ meanings, and no path by which *using* a service can reach *operating on* it by 
 - **`ACTION_VIEW` falling through to a native app** was not exercised, and by design cannot
   be arranged from here: the intent carries no package, so the resolution is the phone's
   default-app setting rather than anything CueSeek decides.
+
+---
+
+## M3.3a — On-demand refresh ✅ *(see the caveat below)*
+
+Deployed to the real host and exercised on the OnePlus CPH2707 over Tailscale on
+2026-08-13, during the session that built it.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | The gesture reaches the agent | A manual pull returned Jellyfin at **`0s`** — the agent had observed on the spot, not replayed a cache |
+| 2 | The pull has three legible states | Dim and partial below the threshold; full primary in one step at it; a band sweeping while the request is outstanding |
+| 3 | Releasing below the threshold does nothing | Correct — no request, no indicator |
+| 4 | The indicator does not collide with the header | Fixed after the first build parked it exactly on the tally rule; the page now travels with the pull |
+| 5 | **A failed refresh moves no clock** | Taken offline, the screen stayed Unverified throughout — "no data 125s", Jellyfin still Unknown, last-verified timestamp unmoved |
+| 6 | A hung refresh clears itself | The in-flight request ended on the 15s read timeout and the indicator cleared; it did not hang |
+| 7 | Existing behaviour survives | Watchdog tripped correctly, dashed rule and "Stream open / no data" intact, stream reconnected on its own when the network returned |
+| 8 | M3.3 did not regress | ⋮ still opened Restart and Stop; the row body still launched Jellyfin's web UI |
+
+Item 5 is the one that matters. It was observed on hardware rather than only asserted in a
+test, and it is the guarantee the whole feature is balanced on: **asking is not being
+answered.** A pull that could clear the stale state on its own would make a dead agent look
+alive, which is the single failure this client exists to prevent.
+
+### Found on the device, not in a test
+
+- **The indicator parked on top of the tally rule.** Material moves the indicator alone and
+  leaves the content still, which suits a spinner on a card. It does not suit an indicator
+  deliberately shaped like the rule already under the headline — the two overlapped and read
+  as one broken bar. The page now travels with the pull.
+- **The band looked stuck.** It was animating. A 40% block in a 96dp track travels barely
+  57dp and spent half of each cycle going backwards, and reversal reads as waiting rather
+  than progress. It now runs one direction only.
+
+### Not claimed
+
+- **The success path was never photographed.** On a healthy connection the round trip
+  resolves in under 300ms — faster than `screencap` latency. The evidence that the request
+  path runs is the offline test, where a refresh was visibly in flight for the full timeout.
+- **A long, slow refresh** was not watched to see whether the band becomes tiring over the
+  full 15s read timeout.
+- **`-race` has never run locally** — the development machine has no cgo. CI runs it.
+
+### ⚠️ Caveat — this record is second-hand relative to the repository
+
+Everything above was observed during development and written down two weeks later, from a
+session transcript rather than from a fresh run. The code, the tests and the ADR amendment
+are all present and green in the repository; the *device observations* are not independently
+reproducible from it.
+
+Recorded this way rather than dropped, and rather than dressed up as a fresh acceptance run.
+If M3.3a needs to be trusted for something load-bearing, re-run items 1, 5 and 7 — they take
+about five minutes and are the three that carry the guarantees.
