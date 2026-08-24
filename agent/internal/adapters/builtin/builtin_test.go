@@ -2,12 +2,14 @@ package builtin
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/jellyfin"
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/qbittorrent"
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 )
@@ -202,4 +204,75 @@ func TestPollerRunsOverBuiltAdapters(t *testing.T) {
 
 	cancel()
 	poller.Wait()
+}
+
+// TestMixedFleetBuildsAndAdvertisesPerAdapter is ADR-0011's measurement, expressed as a
+// test rather than as a claim.
+//
+// Two different service types in one fleet, built through the real registry, each
+// advertising exactly what its own configuration supports. Nothing in this file, in the
+// registry, or in capability discovery knows what a torrent is — qBittorrent arrives
+// through the same factory map and the same type assertions Jellyfin does.
+//
+// The asymmetry is the interesting part: qBittorrent here has a web_ui and no unit, and
+// Jellyfin has a unit and no web_ui. If capabilities were a property of the *type* rather
+// than of the configuration, the two would come back identical.
+func TestMixedFleetBuildsAndAdvertisesPerAdapter(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	cfg := config.Config{Services: []config.Service{
+		{
+			ID: "jellyfin", Name: "Jellyfin", Type: jellyfin.Type,
+			Unit: "jellyfin.service", BaseURL: "http://127.0.0.1:8096",
+			APIKey: "key-one", PollInterval: 30 * time.Second,
+		},
+		{
+			ID: "qbittorrent", Name: "qBittorrent", Type: qbittorrent.Type,
+			BaseURL: "http://127.0.0.1:8080", PollInterval: 30 * time.Second,
+			WebUI: &config.WebUI{Port: 8080},
+		},
+	}}
+
+	if err := registry.Build(cfg, adapters.Deps{Units: nil}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	want := map[string][]string{
+		// No host layer, so neither can control anything — the capability states what
+		// will actually work, not what the type could do in principle.
+		"jellyfin":    {"health"},
+		"qbittorrent": {"health", "web_ui"},
+	}
+
+	for id, expected := range want {
+		caps, ok := registry.Capabilities(id)
+		if !ok {
+			t.Errorf("%q did not register", id)
+			continue
+		}
+		got := make([]string, 0, len(caps))
+		for _, c := range caps {
+			got = append(got, c.ID)
+		}
+		slices.Sort(got)
+		slices.Sort(expected)
+		if !slices.Equal(got, expected) {
+			t.Errorf("%q advertises %v, want %v", id, got, expected)
+		}
+	}
+}
+
+// TestQBittorrentIsRegistered — the one line in builtin.go, asserted so that deleting it
+// fails here rather than silently at an operator's startup.
+func TestQBittorrentIsRegistered(t *testing.T) {
+	registry, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if !slices.Contains(registry.KnownTypes(), qbittorrent.Type) {
+		t.Errorf("known types = %v, missing %q", registry.KnownTypes(), qbittorrent.Type)
+	}
 }

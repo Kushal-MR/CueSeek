@@ -157,7 +157,7 @@ prose — the file a designer, a contributor or a design tool should be handed f
 | **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | ✅ Done — [findings](docs/m0-findings.md). A7 closed: SSE viable, but Doze freezes it silently rather than killing it (ADR-0004 Amendment 2) |
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
 | **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
-| **M3** | qBittorrent, `now_playing`, host metrics, power actions | 🟡 In progress — M3.1 service lifecycle, M3.2 `web_ui`, M3.3 row interaction and M3.3a on-demand refresh are done and verified on hardware ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). M3.4–M3.8 remain |
+| **M3** | qBittorrent, `now_playing`, host metrics, power actions | 🟡 In progress — M3.1 service lifecycle, M3.2 `web_ui`, M3.3 row interaction, M3.3a on-demand refresh and M3.4 the qBittorrent adapter are done ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). M3.5–M3.8 remain |
 | **M4** | Wear OS standalone client, tiles and complications | ⬜ |
 | **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
 

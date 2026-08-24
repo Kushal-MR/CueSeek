@@ -64,6 +64,15 @@ const (
 	ReasonInvalidResponse = "invalid_response" // reachable, but the answer made no sense
 	ReasonShuttingDown    = "shutting_down"    // service says it is going away
 	ReasonPendingRestart  = "pending_restart"  // service says it needs a restart
+
+	// ReasonPeerConnectivity covers a service that is running and answering but cannot
+	// reach the network it exists to use — a torrent client that is firewalled or
+	// disconnected from its peers.
+	//
+	// Distinct from ReasonUnreachable, which is about the agent's own hop. Here the agent
+	// reached the service perfectly well; the service is the one that cannot reach
+	// anything. Conflating the two would send the operator to look at the wrong network.
+	ReasonPeerConnectivity = "peer_connectivity"
 )
 
 // Health is one observation of a service's state.

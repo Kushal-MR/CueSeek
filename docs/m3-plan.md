@@ -39,7 +39,7 @@ without the user maintaining two addresses.
 | M3.2 | Contract + agent: `web_ui` | — | ✅ verified |
 | M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 | ✅ verified |
 | M3.3a | On-demand refresh: nudged polls and pull-to-refresh | M3.3 | ✅ verified |
-| M3.4 | qBittorrent adapter | M3.1, M3.2 | ⬜ |
+| M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ |
 | M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ⬜ |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
 | M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
@@ -151,11 +151,50 @@ before reading, and degrades when the agent is too old to know the endpoint).
 
 ---
 
-### M3.4 — qBittorrent adapter
+### M3.4 — qBittorrent adapter ✅
 
 New adapter package plus one line in `builtin.go`. This is **ADR-0011's stated
 measurement**: how many files change outside the new adapter's own package? The intended
 answer is two — that file and the config.
+
+**Result: four production files, and the two extra ones are worth naming.**
+
+| File | Change | Anticipated? |
+| --- | --- | --- |
+| `adapters/builtin/builtin.go` | one line in the factory map | ✅ |
+| `config/config.go` | `username` / `password` / `password_file` | ✅ "the config" |
+| `domain/health.go` | one reason code, `peer_connectivity` | ❌ |
+| `deploy/config.example.yaml` | the commented block, now real | ❌ (documentation) |
+
+**Zero contract changes and zero Android changes.** `go generate` produced no diff and no
+file under `clients/` was touched — qBittorrent reaches the phone through the same
+`control` and `web_ui` capabilities Jellyfin uses, which is the acceptance criterion met
+literally rather than approximately.
+
+**On the two unanticipated files.** Neither is a capability-model failure, but one is worth
+watching:
+
+- `domain/health.go` gained `peer_connectivity`, for a service that is running and
+  answering but cannot reach its peers. Reason codes are a shared vocabulary, so this grows
+  with the *kinds of thing that can be wrong*, not with the number of services — the same
+  O(capabilities) property `capabilityProbes` has. A fourth adapter that is another HTTP
+  service will add nothing here.
+- `config.Service` gaining credential fields is the one that would become a smell. It grew
+  because qBittorrent authenticates with a login rather than a key, which is a genuinely
+  different shape. **If a third adapter needs a third credential shape, the fix is a
+  per-adapter options map rather than a fourth pair of fields** — and that is the decision
+  ADR-0011's step 4 exists to trigger.
+
+**What the adapter contributes, and what it inherits.** The whole lifecycle implementation
+is two sentences of copy: `DisplayName` and `Interruption`. Start/Stop availability, the
+risk levels, the hold-to-confirm classification and the state-dependence all come from
+`adapters.AvailableLifecycleActions`. On-demand refresh, the freshness watchdog and the ⋮
+menu required nothing at all.
+
+qBittorrent is also the **first adapter to populate `reported_status`** — Jellyfin publishes
+no self-assessment and leaves it empty. `connection_status` crosses verbatim and unmapped,
+and `firewalled` is deliberately a *reason without a status change*: it still transfers, it
+is often the operator's own choice, and this palette treats chroma as attention.
 
 **Acceptance:** qBittorrent appears in the app with **zero client changes**, including its
 web UI and its lifecycle menu. Managing torrents happens in qBittorrent's own Web UI, which

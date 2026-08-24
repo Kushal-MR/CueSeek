@@ -115,15 +115,57 @@ services:
     # poll_interval, or slow polls pile up on each other.
     timeout: 5s
 
-  # qBittorrent — the adapter lands in M3. Uncomment then, not before: startup
-  # rejects a service whose `type` this build does not implement, which is
-  # correct but will stop the agent from running.
+  # ---------------------------------------------------------------- qBittorrent
+  #
+  # Uncomment to manage qBittorrent. The unit is `qbittorrent.service` on most
+  # distributions — NOT `qbittorrent-nox.service`, whatever the process is called.
+  # Check before assuming:
+  #
+  #   systemctl list-units --type=service | grep -i qbit
+  #
+  # Whatever you put in `unit:` must also be in the polkit rule's allowedUnits
+  # list. Both are enforced, and they are deliberately not generated from each
+  # other (ADR-0002).
   #
   # - id: qbittorrent
   #   name: qBittorrent
   #   type: qbittorrent
   #   unit: qbittorrent.service
+  #
+  #   # Where the adapter reaches qBittorrent's Web API. Loopback: the agent runs
+  #   # on the same host. 8080 is the default Web UI port.
   #   base_url: http://127.0.0.1:8080
-  #   api_key_file: /etc/cueseek/qbittorrent.key
+  #
+  #   # Credentials are OPTIONAL, and most installs need none.
+  #   #
+  #   # qBittorrent has "Bypass authentication for clients on localhost" under
+  #   # Options > Web UI, and it is on by default. The agent is on localhost, so
+  #   # leave these commented out unless you turned that off.
+  #   #
+  #   # If you did turn it off, set both. A username with no password is rejected
+  #   # at startup rather than failing later as a login error:
+  #   #
+  #   #   printf '%s' 'YOUR_PASSWORD' | sudo tee /etc/cueseek/qbittorrent.pass
+  #   #   sudo chown root:cueseek /etc/cueseek/qbittorrent.pass
+  #   #   sudo chmod 0640 /etc/cueseek/qbittorrent.pass
+  #   #
+  #   # username: admin
+  #   # password_file: /etc/cueseek/qbittorrent.pass
+  #   #
+  #   # Or inline, if you would rather manage one file. Set one or the other,
+  #   # never both — startup rejects that:
+  #   # password: YOUR_PASSWORD
+  #
+  #   # Where YOUR PHONE reaches the Web UI. The agent sends only these parts and
+  #   # never a host: the client composes scheme://<the address it paired with>:port/path,
+  #   # so one setting works over Tailscale and on the LAN.
+  #   #
+  #   # This is what makes tapping the qBittorrent row useful — managing torrents
+  #   # happens in qBittorrent's own interface, not in CueSeek.
+  #   web_ui:
+  #     scheme: http
+  #     port: 8080
+  #     path: /
+  #
   #   poll_interval: 30s
   #   timeout: 5s

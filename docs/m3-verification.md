@@ -214,3 +214,80 @@ reproducible from it.
 Recorded this way rather than dropped, and rather than dressed up as a fresh acceptance run.
 If M3.3a needs to be trusted for something load-bearing, re-run items 1, 5 and 7 — they take
 about five minutes and are the three that carry the guarantees.
+
+---
+
+## M3.4 — qBittorrent adapter ✅ *(automated; not yet on the real host)*
+
+The phase whose output is a **number** rather than a feature: ADR-0011 step 4 asks how many
+files change outside a new adapter's own package, and turns "is the abstraction good?" into
+something answerable.
+
+### The measurement
+
+| | |
+| --- | --- |
+| New package | `agent/internal/adapters/qbittorrent/` — adapter and tests |
+| Production files changed outside it | **3** (`builtin.go`, `config.go`, `domain/health.go`) |
+| Deployment/docs files changed | 1 (`deploy/config.example.yaml`) |
+| **Contract changes** | **0** — `go generate ./...` produced no diff |
+| **Android changes** | **0** — no file under `clients/` was touched |
+
+Two of the three were anticipated by the plan. `domain/health.go` was not, and gained one
+reason code for a service that is running and answering but cannot reach its peers.
+
+### What that proves, and what it does not
+
+**Proved.** A second service type reaches the phone with no client release, no contract
+version bump, and no screen edit — through the same `control` and `web_ui` capabilities
+Jellyfin already used. The registry, the poller, capability discovery, the on-demand
+refresh, the ⋮ menu, the risk ladder and the freshness watchdog all required nothing.
+
+The lifecycle implementation is **two sentences of copy**. Everything else — which actions
+apply in which unit state, their risk levels, the hold-to-confirm classification, the
+confirmation wording — comes from `adapters.AvailableLifecycleActions`.
+
+**Not proved, and worth watching.** `config.Service` grew three fields because qBittorrent
+authenticates with a login rather than an API key. That is a real difference in shape rather
+than a leak, but it is the direction a leak would come from: **a third credential shape
+should become a per-adapter options map, not a fourth pair of fields.**
+
+### Verified by test
+
+| # | Behaviour | Where |
+| --- | --- | --- |
+| 1 | Connection status maps to health, all five cases including an unrecognised one | `TestConnectionStatusMapping` |
+| 2 | `firewalled` is a reason, **not** a status downgrade | `TestFirewalledIsAReasonNotAStatus` |
+| 3 | `reported_status` crosses verbatim, in the service's own casing | `TestReportedStatusCrossesVerbatim` |
+| 4 | No credentials configured → no login attempted (the localhost-bypass deployment) | `TestNoCredentialsMeansNoLogin` |
+| 5 | An expired session is silently re-established, not reported as an auth failure | `TestExpiredSessionIsRetriedNotReported` |
+| 6 | A rejected password is **degraded and reachable**, never unreachable | `TestBadCredentialsAreDegradedNotUnreachable` |
+| 7 | A 403 with no credentials names qBittorrent's own bypass setting | `TestForbiddenWithoutCredentialsNamesTheSetting` |
+| 8 | Errors never carry the password | `TestErrorsDoNotLeakCredentials` |
+| 9 | Control advertised only when a unit **and** a host layer exist | `TestControlIsAdvertisedOnlyWhenPerformable` |
+| 10 | Lifecycle actions and risk come from the shared descriptors | `TestLifecycleActionsComeFromTheSharedDescriptors` |
+| 11 | Invoke goes through the host layer, never systemd directly | `TestInvokeDelegatesToHostLayer` |
+| 12 | A mixed Jellyfin + qBittorrent fleet advertises per-configuration, not per-type | `TestMixedFleetBuildsAndAdvertisesPerAdapter` |
+
+Item 12 is the one that carries the claim. The two services are deliberately asymmetric —
+qBittorrent with a `web_ui` and no unit, Jellyfin with a unit and no `web_ui` — so if
+capabilities were a property of the type rather than of the configuration, both would come
+back identical.
+
+### Found by the tests, before it shipped
+
+A rejected password initially surfaced as **`unreachable`**. qBittorrent answers `200` with
+the body `Fails.` for a bad credential, so the failure arrived as a transport-shaped error
+and was classified as one. That is precisely the conflation ADR-0005 calls out — "check the
+network" and "check the password" send an operator to different places. Fixed with a typed
+`authError` and asserted by items 6 and 7.
+
+### Not claimed
+
+- **Nothing has run against a real qBittorrent.** Every observation above is against an
+  `httptest` server shaped like qBittorrent's API. The real-host acceptance — install
+  qBittorrent, configure the block, confirm the row appears with its ⋮ menu and its web UI —
+  has **not** been performed.
+- The **`transfers` capability** is M3.5. This adapter reports service health only; the
+  per-torrent list is deliberately absent.
+- `-race` did not run locally (no cgo on the development machine); CI runs it.

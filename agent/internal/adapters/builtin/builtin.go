@@ -20,13 +20,15 @@ import (
 
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/jellyfin"
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/qbittorrent"
 )
 
 // factories is the complete set of adapter types this build understands.
 //
 // One line per adapter. This is the file a new adapter touches.
 var factories = map[string]adapters.Factory{
-	jellyfin.Type: jellyfin.New,
+	jellyfin.Type:    jellyfin.New,
+	qbittorrent.Type: qbittorrent.New,
 }
 
 // Types lists the adapter types available in this build.

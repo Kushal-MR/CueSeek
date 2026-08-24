@@ -100,6 +100,25 @@ type Service struct {
 	// capability — which is the honest answer for something with no web interface.
 	WebUI *WebUI `yaml:"web_ui"`
 
+	// Username and Password are the other shape a service's credentials take: a login
+	// rather than a key. qBittorrent's Web API issues a session cookie in exchange for
+	// them and has no concept of an API key at all.
+	//
+	// Both are optional even for a service that supports them. qBittorrent's "bypass
+	// authentication for clients on localhost" is the common setup, and the agent is on
+	// localhost — so an operator who has left that on configures no credentials here and
+	// the adapter simply does not log in.
+	//
+	// Whether these are required is a property of the adapter, not of configuration, so
+	// nothing here enforces their presence. The factory does.
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+
+	// PasswordFile is Password's file-backed form, with the same reasoning and the same
+	// handling as APIKeyFile: a config that names a secret can be pasted into a support
+	// request, one that contains it cannot.
+	PasswordFile string `yaml:"password_file"`
+
 	// APIKeyFile reads the key from a separate file, trimmed of whitespace.
 	//
 	// Exists so the key can live somewhere with its own permissions and its own backup
@@ -162,22 +181,37 @@ func Load(path string) (Config, error) {
 
 func (c *Config) resolveSecrets() error {
 	for i, svc := range c.Services {
-		if svc.APIKeyFile == "" {
-			continue
+		if err := readSecretInto(
+			svc.APIKeyFile, &c.Services[i].APIKey, "api_key_file", i, svc.ID); err != nil {
+			return err
 		}
-		raw, err := os.ReadFile(svc.APIKeyFile)
-		if err != nil {
-			return fmt.Errorf("services[%d] (%q): read api_key_file: %w", i, svc.ID, err)
+		if err := readSecretInto(
+			svc.PasswordFile, &c.Services[i].Password, "password_file", i, svc.ID); err != nil {
+			return err
 		}
-		// Trimmed because a key file almost always ends with a newline, and a trailing
-		// \n in an Authorization header fails as a bafflingly generic 401.
-		key := strings.TrimSpace(string(raw))
-		if key == "" {
-			return fmt.Errorf("services[%d] (%q): api_key_file %s is empty",
-				i, svc.ID, svc.APIKeyFile)
-		}
-		c.Services[i].APIKey = key
 	}
+	return nil
+}
+
+// readSecretInto loads a file-backed secret, or does nothing when none is configured.
+//
+// One function for both kinds because the handling must not drift: a password read
+// differently from a key is a password that fails in a way nobody reproduces.
+func readSecretInto(path string, dest *string, field string, i int, id string) error {
+	if path == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("services[%d] (%q): read %s: %w", i, id, field, err)
+	}
+	// Trimmed because a secret file almost always ends with a newline, and a trailing
+	// \n in an Authorization header or a login form fails as a bafflingly generic 401.
+	secret := strings.TrimSpace(string(raw))
+	if secret == "" {
+		return fmt.Errorf("services[%d] (%q): %s %s is empty", i, id, field, path)
+	}
+	*dest = secret
 	return nil
 }
 
@@ -326,6 +360,17 @@ func (s Service) validate(i int) []error {
 	if s.APIKey != "" && s.APIKeyFile != "" {
 		errs = append(errs, fmt.Errorf(
 			"services[%d]: set api_key or api_key_file, not both", i))
+	}
+	if s.Password != "" && s.PasswordFile != "" {
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: set password or password_file, not both", i))
+	}
+	// A username with no secret is almost always a half-finished edit rather than an
+	// intention, and it fails at login with a message from the service rather than from
+	// here — which is the wrong place to learn about it.
+	if s.Username != "" && s.Password == "" && s.PasswordFile == "" {
+		errs = append(errs, fmt.Errorf(
+			"services[%d]: username is set but no password or password_file is", i))
 	}
 	// base_url is not required here: whether a service needs one is a property of its
 	// adapter, not of configuration. The factory validates that (see internal/adapters).
