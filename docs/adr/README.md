@@ -43,8 +43,8 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | --- | --- | --- |
 | [0000](0000-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0001](0001-vpn-only-remote-access.md) | VPN-only remote access | Accepted |
-| [0002](0002-host-privilege-dbus-polkit.md) | Unprivileged agent via D-Bus and polkit | Accepted |
-| [0003](0003-agent-runtime-go.md) | Go for the agent runtime | Accepted |
+| [0002](0002-host-privilege-dbus-polkit.md) | Unprivileged agent via D-Bus and polkit | Accepted · amended ×1 (latest 2026-08-11) |
+| [0003](0003-agent-runtime-go.md) | Go for the agent runtime | Accepted · amended ×1 (latest 2026-08-13) |
 | [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended ×3 (latest 2026-08-09) |
 | [0005](0005-capability-based-adapters.md) | Capability-based adapters | Accepted |
 | [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended ×3 (latest 2026-08-09) |
