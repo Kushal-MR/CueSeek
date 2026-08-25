@@ -404,3 +404,75 @@ func TestShippedExampleConfigIsValid(t *testing.T) {
 			"has no documented way to supply credentials")
 	}
 }
+
+// ---------------------------------------------------------------- credentials
+
+// TestLoadResolvesPasswordFile — a password read differently from an API key is a password
+// that fails in a way nobody reproduces, so both go through the same loader.
+func TestLoadResolvesPasswordFile(t *testing.T) {
+	dir := t.TempDir()
+	pwPath := filepath.Join(dir, "qbittorrent.pass")
+	if err := os.WriteFile(pwPath, []byte("hunter2\n"), 0o600); err != nil {
+		t.Fatalf("write password file: %v", err)
+	}
+
+	configPath := filepath.Join(dir, "config.yaml")
+	body := "storage:\n  path: " + filepath.ToSlash(dir) + "/c.db\n" +
+		"services:\n  - id: qbittorrent\n    type: qbittorrent\n" +
+		"    unit: qbittorrent.service\n" +
+		"    base_url: http://127.0.0.1:8080\n" +
+		"    username: admin\n" +
+		"    password_file: " + filepath.ToSlash(pwPath) + "\n"
+	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Services[0].Password; got != "hunter2" {
+		t.Errorf("Password = %q, want the trimmed file contents", got)
+	}
+	if got := cfg.Services[0].Username; got != "admin" {
+		t.Errorf("Username = %q", got)
+	}
+}
+
+func TestPasswordAndPasswordFileAreMutuallyExclusive(t *testing.T) {
+	_, err := Parse([]byte(
+		"services:\n  - id: qbittorrent\n    type: qbittorrent\n" +
+			"    base_url: http://127.0.0.1:8080\n" +
+			"    username: admin\n    password: a\n    password_file: /tmp/b\n"))
+	if err == nil {
+		t.Fatal("setting both password and password_file must be refused")
+	}
+}
+
+// TestUsernameWithoutASecretIsRefused — almost always a half-finished edit, and it would
+// otherwise surface as a login rejection from the service rather than as a config error.
+func TestUsernameWithoutASecretIsRefused(t *testing.T) {
+	_, err := Parse([]byte(
+		"services:\n  - id: qbittorrent\n    type: qbittorrent\n" +
+			"    base_url: http://127.0.0.1:8080\n    username: admin\n"))
+	if err == nil {
+		t.Fatal("a username with no password must be refused")
+	}
+	if !strings.Contains(err.Error(), "password") {
+		t.Errorf("the error should name what is missing, got %v", err)
+	}
+}
+
+// TestCredentialsAreOptional — qBittorrent's localhost auth bypass is the common setup,
+// and a config that omits credentials entirely must remain valid.
+func TestCredentialsAreOptional(t *testing.T) {
+	cfg, err := Parse([]byte(
+		"services:\n  - id: qbittorrent\n    type: qbittorrent\n" +
+			"    unit: qbittorrent.service\n    base_url: http://127.0.0.1:8080\n"))
+	if err != nil {
+		t.Fatalf("credentials must be optional: %v", err)
+	}
+	if cfg.Services[0].Username != "" || cfg.Services[0].Password != "" {
+		t.Error("nothing should have been invented")
+	}
+}

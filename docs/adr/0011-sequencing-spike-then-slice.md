@@ -43,3 +43,52 @@ keep it honest.
   tempting. Code written to answer a question is rarely code worth maintaining, and a
   spike promoted to production quietly reintroduces every shortcut taken to answer the
   question faster.
+
+## Amendments
+
+### Amendment 1 — 2026-08-27: the measurement, taken one adapter early
+
+Step 4 says to count the files changed outside a new adapter's package when adding **a
+third**. The count was taken at the *second* — qBittorrent, in M3.4 — because waiting would
+have meant carrying an unmeasured assumption through two more phases that build on it
+(`transfers` in M3.5 and host metrics in M3.6 both extend the capability model).
+
+**The result.** New package `agent/internal/adapters/qbittorrent/`, and outside it:
+
+| File | Change |
+| --- | --- |
+| `adapters/builtin/builtin.go` | one line in the factory map |
+| `config/config.go` | `username`, `password`, `password_file` |
+| `domain/health.go` | one reason code, `peer_connectivity` |
+
+Plus `deploy/config.example.yaml`, which is documentation. **No contract change** — the
+generator produced no diff — and **no client change at all**: qBittorrent reached the phone
+through the `control` and `web_ui` capabilities Jellyfin already used, with no Android
+release and no screen edited.
+
+**Read against this ADR's own bar, that is three files where it hoped for two, so it is not
+a clean pass.** Taking each in turn:
+
+- `builtin.go` is the anticipated registry entry.
+- `domain/health.go` is a shared vocabulary that grows with the *kinds of thing that can be
+  wrong*, not with the number of services — the same O(capabilities) property that makes
+  `capabilityProbes` acceptable. A fourth HTTP-shaped adapter adds nothing here.
+- `config.Service` is the one that matters. It grew because qBittorrent authenticates with a
+  login rather than an API key, which is a real difference in shape rather than a leak. But
+  it is exactly the direction a leak arrives from, and the growth is per-*service-type*,
+  which is the property step 4 was written to catch.
+
+**Decision.** ADR-0005 stands; nothing here suggests the capability model is wrong. The
+bound moves to configuration instead:
+
+> A third credential shape must become a per-adapter options map, not a fourth pair of
+> fields on `config.Service`.
+
+Recorded now, while the reasoning is cheap, rather than discovered at the fourth adapter
+when three call sites already depend on the flat shape.
+
+**What the count did not measure.** Neither adapter has yet implemented a capability the
+other lacks — `transfers` and `now_playing` are both still unimplemented. The genuinely
+hard question ADR-0005 poses is whether *those* fit without reshaping the interface, and
+M3.5 is what answers it. This measurement covers breadth of services, not depth of
+capabilities.
