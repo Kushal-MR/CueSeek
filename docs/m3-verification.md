@@ -217,7 +217,7 @@ about five minutes and are the three that carry the guarantees.
 
 ---
 
-## M3.4 — qBittorrent adapter ✅ *(automated; not yet on the real host)*
+## M3.4 — qBittorrent adapter ✅
 
 The phase whose output is a **number** rather than a feature: ADR-0011 step 4 asks how many
 files change outside a new adapter's own package, and turns "is the abstraction good?" into
@@ -282,12 +282,56 @@ and was classified as one. That is precisely the conflation ADR-0005 calls out �
 network" and "check the password" send an operator to different places. Fixed with a typed
 `authError` and asserted by items 6 and 7.
 
+### Real-device acceptance ✅ — 2026-08-25
+
+Against the real qBittorrent 
+(`qbittorrent.service`, Web UI on 8080, localhost auth bypass **off**, so the agent
+authenticates with `username` + `password_file`) on `kushal-HP-paviliong6`, from the OnePlus
+CPH2707 over Tailscale.
+
+**The APK was not rebuilt.** The build on the phone was compiled on 2026-08-13, twelve days
+before the qBittorrent adapter existed, and the last commit touching client code is
+`7ceb24f` from that same session. Everything below is that binary. Reinstalling would have
+destroyed the only interesting thing about this test.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | qBittorrent appears in the roster | "qBittorrent / Healthy"; the tally reads 2 and both rows sit in the one existing surface |
+| 2 | The row has the same two targets as Jellyfin | Body `[28,868]–[1062,1106]`, actions `[1062,903]–[1230,1071]` — 48dp, adjacent, non-overlapping |
+| 3 | Semantics are generated from agent data | "qBittorrent, Healthy" and "Actions for qBittorrent" |
+| 4 | ⋮ lists the discovered lifecycle actions | **Restart qBittorrent** neutral, **Stop qBittorrent** in the error role |
+| 5 | The row body opens the service's own interface | Chrome opened `http://100.92.18.125:8080/` and qBittorrent's login page rendered |
+| 6 | The URL is composed, not received | The tailnet address the phone paired with, never the agent's `127.0.0.1` |
+| 7 | **The service is actually usable from the phone** | Logged in and added torrents, which downloaded |
+| 8 | Restart, Stop and Start behave as on Jellyfin | Stop required the hold; Start replaced it once the unit was inactive |
+| 9 | On-demand refresh covers a two-service fleet | One pull updated both rows |
+
+**Item 7 is the product claim.** CueSeek gets you to the service; qBittorrent manages the
+torrents. The `web_ui` capability is what makes that division work rather than being an
+excuse for a missing feature.
+
+**Item 1 is the architectural claim.** A build that predates the adapter rendered the new
+service, its health, its capabilities and its actions with no release, no contract version
+bump and no screen edited.
+
+`connection_status` was `connected` throughout. Read from the row rather than from the API:
+the supporting line showed the status label, and the roster shows a reason there whenever
+one exists — so the reason list was empty, which under this adapter's mapping happens only
+for `connected`. `firewalled` and `disconnected` were therefore **not** exercised on real
+hardware; both are covered by unit tests only.
+
 ### Not claimed
 
-- **Nothing has run against a real qBittorrent.** Every observation above is against an
-  `httptest` server shaped like qBittorrent's API. The real-host acceptance — install
-  qBittorrent, configure the block, confirm the row appears with its ⋮ menu and its web UI —
-  has **not** been performed.
+- **`firewalled` and `disconnected` have not been seen on real hardware.** The host stayed
+  connected throughout, so the reason-without-a-downgrade behaviour that makes `firewalled`
+  interesting is asserted by test only.
+- **The expired-session re-login has not been observed against the real service.** It needs
+  a session to age out, which takes longer than an acceptance run. Covered by
+  `TestExpiredSessionIsRetriedNotReported`.
 - The **`transfers` capability** is M3.5. This adapter reports service health only; the
   per-torrent list is deliberately absent.
 - `-race` did not run locally (no cgo on the development machine); CI runs it.
+- **`agent_version` still reports `0.0.0-dev`** on the deployed binary. `main.go` declares it
+  for ldflags injection and the documented build command does not set it, so no deployment
+  can be told apart from another through the API. Noticed during this run; a packaging
+  concern rather than an M3.4 one, and deliberately left alone.

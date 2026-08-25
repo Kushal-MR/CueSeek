@@ -39,7 +39,7 @@ without the user maintaining two addresses.
 | M3.2 | Contract + agent: `web_ui` | — | ✅ verified |
 | M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 | ✅ verified |
 | M3.3a | On-demand refresh: nudged polls and pull-to-refresh | M3.3 | ✅ verified |
-| M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ |
+| M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ verified |
 | M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ⬜ |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
 | M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
@@ -151,7 +151,7 @@ before reading, and degrades when the agent is too old to know the endpoint).
 
 ---
 
-### M3.4 — qBittorrent adapter ✅
+### M3.4 — qBittorrent adapter ✅ verified
 
 New adapter package plus one line in `builtin.go`. This is **ADR-0011's stated
 measurement**: how many files change outside the new adapter's own package? The intended
