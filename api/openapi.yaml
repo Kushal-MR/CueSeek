@@ -687,6 +687,182 @@ components:
             Absent unless the service advertises the `web_ui` capability. Same pairing as
             `control` and `actions`: the capability declares that something exists, the
             sibling field carries what a client needs to use it.
+        now_playing:
+          allOf: [{ $ref: "#/components/schemas/NowPlaying" }]
+          description: |
+            Absent unless the service advertises the `now_playing` capability. Same
+            capability-plus-sibling pairing as `control` and `web_ui`.
+        transfers:
+          allOf: [{ $ref: "#/components/schemas/Transfers" }]
+          description: |
+            Absent unless the service advertises the `transfers` capability. Same
+            capability-plus-sibling pairing as `control` and `web_ui`.
+
+    # -------------------------------------------------------------- activity
+    #
+    # Two capabilities describing what a service is *doing* rather than whether it is up.
+    #
+    # Specified semantically rather than around whichever service was implemented first,
+    # because ADR-0005 makes capability names public API: `now_playing` must fit Plex and
+    # Emby as well as Jellyfin, and `transfers` must fit SABnzbd, Sonarr's queue and
+    # Deluge as well as qBittorrent. Getting that wrong produces `now_playing_v2`.
+    #
+    # Both carry aggregate counts *and* a bounded sample of items, and the counts are the
+    # truth. A server with four hundred torrents must not put four hundred objects on an
+    # SSE frame every thirty seconds, so `items` is a sample for display while `active`
+    # and `total` stay correct.
+    #
+    # Both stay inside the product rule: CueSeek reports that something is happening. It
+    # does not pause a torrent or seek a stream. Those live in the service's own
+    # interface, which is what `web_ui` exists to reach.
+
+    NowPlaying:
+      type: object
+      description: |
+        Active playback sessions on a media server.
+
+        `transcoding` is broken out because it is the operationally significant fact on a
+        self-hosted box: direct play costs almost nothing, and one 4K transcode can
+        saturate the CPU everything else on the host shares. A console showing only a
+        session count would hide the number that explains a hot machine.
+      required: [sessions, transcoding, items]
+      properties:
+        sessions:
+          type: integer
+          minimum: 0
+          description: Total active sessions. Authoritative, unlike the length of `items`.
+          example: 2
+        transcoding:
+          type: integer
+          minimum: 0
+          description: How many of those sessions the server is transcoding.
+          example: 1
+        items:
+          type: array
+          description: |
+            A bounded sample. May be shorter than `sessions`, and is empty when nothing
+            is playing.
+          items: { $ref: "#/components/schemas/PlaybackSession" }
+
+    PlaybackSession:
+      type: object
+      required: [id, title, transcoding, paused]
+      properties:
+        id:
+          type: string
+          description: Stable within one observation. Not durable across restarts.
+        title:
+          type: string
+          description: What is playing, as the server names it.
+          example: "The Bear"
+        subtitle:
+          type: string
+          description: |
+            Context the title alone does not carry - an episode, an artist, a year.
+            Absent when the service offers none; never synthesised by the agent.
+          example: "S02E07"
+        user:
+          type: string
+          description: Who is watching. Absent when the service does not say.
+        client:
+          type: string
+          description: The app or device playing it, as the server reports it.
+          example: "Android TV"
+        position_seconds:
+          type: integer
+          minimum: 0
+          description: Absent when the service reports no position.
+        duration_seconds:
+          type: integer
+          minimum: 0
+          description: Absent for live or unbounded content.
+        paused:
+          type: boolean
+        transcoding:
+          type: boolean
+          description: |
+            Whether the server is re-encoding this session. A boolean rather than
+            Jellyfin's richer transcode reasons, which do not generalise.
+
+    Transfers:
+      type: object
+      description: |
+        In-flight transfers: torrents, usenet downloads, an import queue.
+
+        Rates are bytes per second and are the service's own aggregate, never a sum over
+        `items` - a sampled list would understate them.
+      required: [active, total, download_rate_bytes, upload_rate_bytes, items]
+      properties:
+        active:
+          type: integer
+          minimum: 0
+          description: Transfers currently moving data.
+          example: 3
+        total:
+          type: integer
+          minimum: 0
+          description: |
+            Transfers the service is tracking at all, including paused, queued, seeding
+            and completed. Always at least `active`.
+          example: 47
+        download_rate_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Aggregate download rate, bytes per second.
+        upload_rate_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Aggregate upload rate, bytes per second.
+        items:
+          type: array
+          description: |
+            A bounded sample, most active first. May be shorter than `total`, and is
+            empty when the service is tracking nothing.
+          items: { $ref: "#/components/schemas/TransferItem" }
+
+    TransferItem:
+      type: object
+      required: [id, name, state, progress]
+      properties:
+        id:
+          type: string
+          description: The service's own identifier for this transfer.
+        name:
+          type: string
+        state:
+          type: string
+          description: |
+            The service's own state word, **verbatim and unmapped** - `downloading`,
+            `stalledDL`, `seeding`, `queuedDL`, `pausedUP`. Deliberately not an enum:
+            every service in this category has its own vocabulary, and flattening them
+            into a shared one would discard the distinction between "stalled" and
+            "queued" that tells an operator whether to care. Clients display it and must
+            tolerate any value.
+          example: "downloading"
+        progress:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Fraction complete, 0 to 1.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total size. Absent when the service does not report one.
+        download_rate_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: This transfer's own rate, bytes per second.
+        eta_seconds:
+          type: integer
+          minimum: 0
+          description: |
+            Absent when unknown or effectively infinite. A service reporting a
+            placeholder like 8640000 must not have it passed through as eight years.
 
     # --------------------------------------------------------------- actions
     ActionStatus:

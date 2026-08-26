@@ -40,6 +40,8 @@ object CapabilityRegistry {
     private val renderers: Map<String, CapabilityContent> = mapOf(
         "health" to { service, stale -> HealthCapability(service, stale) },
         "control" to { service, _ -> ControlCapability(service) },
+        "now_playing" to { service, stale -> NowPlayingCapability(service, stale) },
+        "transfers" to { service, stale -> TransfersCapability(service, stale) },
     )
 
     fun rendererFor(id: String): CapabilityContent? = renderers[id]

@@ -21,12 +21,34 @@ type Snapshot struct {
 	// offer Start while the API rejected it.
 	Actions []domain.Action
 
+	// NowPlaying and Transfers are the activity payloads, nil when the service does not
+	// implement that capability or the last attempt to read it failed.
+	//
+	// Pointers rather than values because "no sessions" and "we could not ask" are
+	// different facts. A zero-valued NowPlaying says the server is idle; nil says nothing
+	// is known, and a client that rendered "0 playing" for the second would be inventing
+	// an observation the agent never made.
+	NowPlaying *domain.NowPlaying
+	Transfers  *domain.Transfers
+
 	// StatusSince is when the current status was first observed.
 	//
 	// Carried so reasons can say "unreachable for 4 minutes" rather than just
 	// "unreachable" — ADR-0008's example of the difference between a status and an
 	// actionable one. Updated only when the status changes, not on every poll.
 	StatusSince time.Time
+}
+
+// Observation is one poll's worth of findings.
+//
+// A struct rather than a growing parameter list. Put's arity has already changed once, in
+// M3.1, and broke every fake in the tree; M3.6 adds host metrics behind it. A named field
+// costs a caller nothing and stops the churn.
+type Observation struct {
+	Health     domain.Health
+	Actions    []domain.Action
+	NowPlaying *domain.NowPlaying
+	Transfers  *domain.Transfers
 }
 
 // Cache holds the last observation for each service.
@@ -89,8 +111,8 @@ func (c *Cache) SetObserver(fn func(Snapshot)) {
 }
 
 // Put records a fresh observation.
-func (c *Cache) Put(serviceID string, health domain.Health, actions []domain.Action) {
-	snapshot, observer := c.put(serviceID, health, actions)
+func (c *Cache) Put(serviceID string, obs Observation) {
+	snapshot, observer := c.put(serviceID, obs)
 
 	// Called outside the lock. Notifying while holding it would let an observer that
 	// touches this cache — which the stream's own snapshot builder does — deadlock
@@ -100,11 +122,7 @@ func (c *Cache) Put(serviceID string, health domain.Health, actions []domain.Act
 	}
 }
 
-func (c *Cache) put(
-	serviceID string,
-	health domain.Health,
-	actions []domain.Action,
-) (Snapshot, func(Snapshot)) {
+func (c *Cache) put(serviceID string, obs Observation) (Snapshot, func(Snapshot)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -114,6 +132,7 @@ func (c *Cache) put(
 		c.entries[serviceID] = entry
 	}
 
+	health := obs.Health
 	if health.ObservedAt.IsZero() {
 		health.ObservedAt = c.now().UTC()
 	}
@@ -128,7 +147,9 @@ func (c *Cache) put(
 	entry.snapshot = Snapshot{
 		ServiceID:   serviceID,
 		Health:      health,
-		Actions:     actions,
+		Actions:     obs.Actions,
+		NowPlaying:  obs.NowPlaying,
+		Transfers:   obs.Transfers,
 		StatusSince: statusSince,
 	}
 	entry.observed = true

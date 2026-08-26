@@ -243,8 +243,12 @@ func TestMixedFleetBuildsAndAdvertisesPerAdapter(t *testing.T) {
 	want := map[string][]string{
 		// No host layer, so neither can control anything — the capability states what
 		// will actually work, not what the type could do in principle.
-		"jellyfin":    {"health"},
-		"qbittorrent": {"health", "web_ui"},
+		//
+		// The activity capabilities are unconditional, unlike web_ui. Whether a media
+		// server can report sessions is a property of the software; whether it has a web
+		// interface a phone can reach is a property of the operator's configuration.
+		"jellyfin":    {"health", "now_playing"},
+		"qbittorrent": {"health", "transfers", "web_ui"},
 	}
 
 	for id, expected := range want {

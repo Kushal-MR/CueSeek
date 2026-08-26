@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +43,20 @@ const (
 	// loginPath exchanges credentials for a session cookie.
 	loginPath = "/api/v2/auth/login"
 
+	// torrentsPath lists torrents, most recently active first.
+	//
+	// Sorted and limited server-side rather than client-side: a seedbox with four hundred
+	// torrents should not send four hundred objects over the tailnet for a list that is
+	// capped at ten anyway. `sort=dlspeed&reverse=true` puts whatever is actually moving
+	// at the top, which is what a glance is asking about.
+	torrentsPath = "/api/v2/torrents/info?sort=dlspeed&reverse=true&limit="
+
+	// etaNever is qBittorrent's placeholder for "not in any useful timeframe".
+	//
+	// 8640000 seconds is one hundred days. Passed through it renders as a real estimate
+	// and looks like a defect in CueSeek, so it is normalised to "unknown" instead.
+	etaNever = 8640000
+
 	// maxResponseBytes caps how much will be read from the upstream. The same reasoning
 	// as every other adapter: the thing at base_url is only *assumed* to be qBittorrent.
 	maxResponseBytes = 1 << 20 // 1 MiB
@@ -63,6 +78,36 @@ const (
 // nothing reads and that qBittorrent is free to rename.
 type transferInfo struct {
 	ConnectionStatus string `json:"connection_status"`
+
+	// Aggregate rates, in bytes per second. Read here rather than summed from the torrent
+	// list because the list is a bounded sample and summing it would understate a busy
+	// client — the contract says these are the service's own totals.
+	DownloadSpeed int64 `json:"dl_info_speed"`
+	UploadSpeed   int64 `json:"up_info_speed"`
+}
+
+// torrent is the subset of /api/v2/torrents/info this adapter uses.
+type torrent struct {
+	Hash     string  `json:"hash"`
+	Name     string  `json:"name"`
+	State    string  `json:"state"`
+	Progress float32 `json:"progress"`
+	Size     int64   `json:"size"`
+	DlSpeed  int64   `json:"dlspeed"`
+	ETA      int     `json:"eta"`
+}
+
+// activeStates are the states that count toward Transfers.Active.
+//
+// Only these move data. Seeding is excluded deliberately: it is upload, it is usually
+// permanent, and counting it would mean a client that finished everything last week still
+// reports "12 active" forever — which trains an operator to ignore the number.
+var activeStates = map[string]bool{
+	"downloading":  true,
+	"forcedDL":     true,
+	"metaDL":       true,
+	"forcedMetaDL": true,
+	"checkingDL":   true,
 }
 
 // authError marks a failure that came from the login exchange rather than the network.
@@ -94,6 +139,14 @@ type adapter struct {
 	// credential — losing it costs one extra request, not an error.
 	mu  sync.Mutex
 	sid string
+
+	// rates caches the aggregate speeds from the most recent health poll.
+	//
+	// Health already calls /api/v2/transfer/info, which is where these live, so Transfers
+	// reuses them rather than making the same request twice per poll. Guarded because the
+	// two run on the same goroutine today and there is no reason to depend on that.
+	ratesMu sync.Mutex
+	rates   transferInfo
 
 	// webUI is what the operator configured, or the zero value when they configured
 	// nothing. hasWebUI is what capability discovery keys on.
@@ -221,7 +274,20 @@ func (a *adapter) Health(ctx context.Context) (domain.Health, error) {
 		}, nil
 	}
 
+	a.rememberRates(info)
 	return a.healthFromInfo(observedAt, info), nil
+}
+
+func (a *adapter) rememberRates(info transferInfo) {
+	a.ratesMu.Lock()
+	defer a.ratesMu.Unlock()
+	a.rates = info
+}
+
+func (a *adapter) lastRates() transferInfo {
+	a.ratesMu.Lock()
+	defer a.ratesMu.Unlock()
+	return a.rates
 }
 
 // healthFromStatus maps HTTP status codes. The second return reports whether the code was
@@ -529,4 +595,107 @@ func (c *controllable) Invoke(ctx context.Context, actionID string) (*host.Job, 
 		return nil, fmt.Errorf("qbittorrent: %w", err)
 	}
 	return job, nil
+}
+
+// ---------------------------------------------------------------- Transfers
+
+// Transfers reports what qBittorrent is moving.
+//
+// On *adapter rather than *controllable, so a client configured with no systemd unit still
+// reports its transfers. The capabilities are independent.
+//
+// Read-only, and that is the product rule rather than a limitation: pausing, prioritising
+// and deleting torrents belong to qBittorrent's own interface, which `web_ui` exists to
+// reach. A console that grew half a torrent manager would be worse at it than the real one
+// and would still not replace it.
+func (a *adapter) Transfers(ctx context.Context) (domain.Transfers, error) {
+	// One more than the cap, so the sample can be trimmed to the cap while `total` still
+	// reflects what the service reports below.
+	path := torrentsPath + strconv.Itoa(domain.MaxActivityItems+1)
+
+	resp, err := a.get(ctx, path)
+	if err != nil {
+		return domain.Transfers{}, err
+	}
+	if resp.StatusCode == http.StatusForbidden && a.canLogIn() {
+		resp.Body.Close()
+		a.forgetSession()
+		if err := a.logIn(ctx); err != nil {
+			return domain.Transfers{}, err
+		}
+		if resp, err = a.get(ctx, path); err != nil {
+			return domain.Transfers{}, err
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.Transfers{}, fmt.Errorf("torrents returned HTTP %d", resp.StatusCode)
+	}
+
+	var torrents []torrent
+	body := io.LimitReader(resp.Body, maxResponseBytes)
+	if err := json.NewDecoder(body).Decode(&torrents); err != nil {
+		return domain.Transfers{}, fmt.Errorf("decode torrents: %w", err)
+	}
+
+	return transfersFrom(torrents, a.lastRates()), nil
+}
+
+// transfersFrom translates qBittorrent's torrents into the contract's shape.
+//
+// Split from the request so the judgement calls — which states count as active, how an ETA
+// placeholder is handled — are testable against fixtures.
+//
+// Note what `total` is here: the number of torrents *this response* carried, which is
+// capped by the `limit` query. qBittorrent has no cheap count endpoint, so a client with
+// more than the cap reports the cap. That is a known understatement rather than a lie by
+// omission, and it is recorded in the verification notes.
+func transfersFrom(torrents []torrent, rates transferInfo) domain.Transfers {
+	moving := domain.Transfers{
+		Total:             len(torrents),
+		DownloadRateBytes: rates.DownloadSpeed,
+		UploadRateBytes:   rates.UploadSpeed,
+		Items:             []domain.TransferItem{},
+	}
+
+	for _, t := range torrents {
+		if activeStates[t.State] {
+			moving.Active++
+		}
+		moving.Items = append(moving.Items, domain.TransferItem{
+			ID:                t.Hash,
+			Name:              t.Name,
+			State:             t.State,
+			Progress:          clampProgress(t.Progress),
+			SizeBytes:         t.Size,
+			DownloadRateBytes: t.DlSpeed,
+			ETASeconds:        normaliseETA(t.ETA),
+		})
+	}
+	return moving
+}
+
+// normaliseETA turns "never" and nonsense into "unknown".
+func normaliseETA(eta int) int {
+	if eta <= 0 || eta >= etaNever {
+		return 0
+	}
+	return eta
+}
+
+// clampProgress keeps the contract's 0..1 promise.
+//
+// Defensive rather than theoretical: the field crosses into a progress bar, and a value
+// outside the range would render as an overflowing or negative-width element rather than
+// as an obviously wrong number somebody would notice.
+func clampProgress(p float32) float32 {
+	switch {
+	case p < 0:
+		return 0
+	case p > 1:
+		return 1
+	default:
+		return p
+	}
 }

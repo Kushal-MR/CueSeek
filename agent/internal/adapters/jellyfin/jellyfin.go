@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,14 @@ const Type = "jellyfin"
 // credential problem, at the moment it starts being true.
 const systemInfoPath = "/System/Info"
 
+// sessionsPath lists active playback sessions.
+//
+// `?activeWithinSeconds=` is deliberately not used. Jellyfin keeps a session object for a
+// while after playback stops, and filtering by recency would trade one wrong answer for
+// another; what actually distinguishes "playing" from "idle" is the presence of
+// NowPlayingItem, which is checked directly.
+const sessionsPath = "/Sessions"
+
 // maxResponseBytes caps how much we will read from the upstream.
 //
 // /System/Info is a couple of kilobytes. The cap exists because the thing on the other
@@ -54,6 +63,39 @@ type systemInfo struct {
 	HasPendingRestart bool   `json:"HasPendingRestart"`
 	IsShuttingDown    bool   `json:"IsShuttingDown"`
 }
+
+// session is the subset of Jellyfin's /Sessions response this adapter uses.
+//
+// A fraction of what Jellyfin returns. Every field decoded here is one Jellyfin is free to
+// rename under us, so only those that survive translation into the contract's semantic
+// shape are taken — no PlayMethod strings, no transcode reasons, no codec detail. Those
+// are Jellyfin's vocabulary, and `now_playing` belongs to Plex and Emby too.
+type session struct {
+	ID             string `json:"Id"`
+	UserName       string `json:"UserName"`
+	Client         string `json:"Client"`
+	DeviceName     string `json:"DeviceName"`
+	NowPlayingItem *struct {
+		Name              string `json:"Name"`
+		SeriesName        string `json:"SeriesName"`
+		ParentIndexNumber *int   `json:"ParentIndexNumber"`
+		IndexNumber       *int   `json:"IndexNumber"`
+		ProductionYear    *int   `json:"ProductionYear"`
+		RunTimeTicks      int64  `json:"RunTimeTicks"`
+		Type              string `json:"Type"`
+	} `json:"NowPlayingItem"`
+	PlayState *struct {
+		PositionTicks int64 `json:"PositionTicks"`
+		IsPaused      bool  `json:"IsPaused"`
+	} `json:"PlayState"`
+	TranscodingInfo *struct {
+		IsVideoDirect bool `json:"IsVideoDirect"`
+		IsAudioDirect bool `json:"IsAudioDirect"`
+	} `json:"TranscodingInfo"`
+}
+
+// ticksPerSecond converts Jellyfin's 100-nanosecond ticks to seconds.
+const ticksPerSecond = 10_000_000
 
 // adapter implements adapters.Service: identity and health, nothing more.
 type adapter struct {
@@ -287,6 +329,11 @@ func (a *adapter) unreachable(observedAt time.Time, err error) domain.Health {
 // net/http errors embed the full request URL, which for some services carries the API key
 // in a query string. This message ends up in an API response and in the log, so the URL
 // does not travel with it.
+// summariseErr is summarise's error-returning sibling, for paths that wrap rather than
+// render. Keeping one implementation of the URL-stripping means a credential cannot leak
+// through whichever of the two a future caller happens to pick.
+func summariseErr(err error) error { return errors.New(summarise(err)) }
+
 func summarise(err error) string {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) && urlErr.Err != nil {
@@ -332,4 +379,110 @@ func (c *controllable) Invoke(ctx context.Context, actionID string) (*host.Job, 
 		return nil, fmt.Errorf("jellyfin: %w", err)
 	}
 	return job, nil
+}
+
+// ---------------------------------------------------------------- NowPlaying
+
+// NowPlaying reports active playback.
+//
+// Implemented on *adapter rather than on *controllable, so a Jellyfin configured with no
+// systemd unit still reports what it is playing. The capabilities are independent: being
+// unable to restart something does not stop you watching it.
+func (a *adapter) NowPlaying(ctx context.Context) (domain.NowPlaying, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.baseURL+sessionsPath, nil)
+	if err != nil {
+		return domain.NowPlaying{}, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("X-Emby-Token", a.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return domain.NowPlaying{}, fmt.Errorf("sessions: %w", summariseErr(err))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.NowPlaying{}, fmt.Errorf("sessions returned HTTP %d", resp.StatusCode)
+	}
+
+	var sessions []session
+	body := io.LimitReader(resp.Body, maxResponseBytes)
+	if err := json.NewDecoder(body).Decode(&sessions); err != nil {
+		return domain.NowPlaying{}, fmt.Errorf("decode sessions: %w", err)
+	}
+
+	return nowPlayingFrom(sessions), nil
+}
+
+// nowPlayingFrom translates Jellyfin's sessions into the contract's shape.
+//
+// Split out from the request so the mapping — which is where the judgement calls are — can
+// be tested against fixtures without an HTTP server.
+func nowPlayingFrom(sessions []session) domain.NowPlaying {
+	playing := domain.NowPlaying{Items: []domain.PlaybackSession{}}
+
+	for _, s := range sessions {
+		// A session with no NowPlayingItem is a connected client sitting on a menu.
+		// Jellyfin keeps those around, and counting them would make an idle house look
+		// busy — which is the opposite of what this capability is for.
+		if s.NowPlayingItem == nil {
+			continue
+		}
+		playing.Sessions++
+
+		transcoding := s.TranscodingInfo != nil &&
+			!(s.TranscodingInfo.IsVideoDirect && s.TranscodingInfo.IsAudioDirect)
+		if transcoding {
+			playing.Transcoding++
+		}
+
+		item := domain.PlaybackSession{
+			ID:          s.ID,
+			Title:       s.NowPlayingItem.Name,
+			Subtitle:    subtitleFor(s),
+			User:        s.UserName,
+			Client:      clientLabel(s),
+			Paused:      s.PlayState != nil && s.PlayState.IsPaused,
+			Transcoding: transcoding,
+		}
+		if s.PlayState != nil {
+			item.PositionSeconds = int(s.PlayState.PositionTicks / ticksPerSecond)
+		}
+		item.DurationSeconds = int(s.NowPlayingItem.RunTimeTicks / ticksPerSecond)
+
+		playing.Items = append(playing.Items, item)
+	}
+	return playing
+}
+
+// subtitleFor builds the one line of context the title cannot carry.
+//
+// Only from what Jellyfin actually supplies. An episode becomes "Series · S2E7"; a film
+// becomes its year; anything else gets nothing rather than a synthesised label, because
+// the contract says this field is never invented.
+func subtitleFor(s session) string {
+	item := s.NowPlayingItem
+	if item.SeriesName != "" {
+		if item.ParentIndexNumber != nil && item.IndexNumber != nil {
+			return fmt.Sprintf("%s · S%dE%d",
+				item.SeriesName, *item.ParentIndexNumber, *item.IndexNumber)
+		}
+		return item.SeriesName
+	}
+	if item.ProductionYear != nil && *item.ProductionYear > 0 {
+		return strconv.Itoa(*item.ProductionYear)
+	}
+	return ""
+}
+
+// clientLabel prefers the device's name over the app's.
+//
+// "Living Room TV" locates a stream in the house; "Jellyfin Android" only says it is not
+// the web player. Falls back when Jellyfin reports no device name.
+func clientLabel(s session) string {
+	if s.DeviceName != "" {
+		return s.DeviceName
+	}
+	return s.Client
 }

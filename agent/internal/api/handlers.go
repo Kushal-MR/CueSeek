@@ -209,6 +209,11 @@ func (s *Server) describeService(svc adapters.Service) gen.Service {
 	if snapshot, ok := s.cache.Get(svc.ID()); ok {
 		out.Health = toGenHealth(snapshot.Health)
 		out.Actions = toGenActions(snapshot.Actions)
+		// Activity comes from the same snapshot for the same reason: it was observed at
+		// the moment the health was, and pairing a fresh reading with a stale status
+		// would produce a service that is "unreachable" while three things play.
+		out.NowPlaying = toGenNowPlaying(snapshot.NowPlaying)
+		out.Transfers = toGenTransfers(snapshot.Transfers)
 	} else {
 		// Registered but untracked. Should not happen — the poller tracks everything the
 		// registry built — so say so honestly rather than inventing a status.
@@ -427,3 +432,84 @@ func (s *Server) audit(ctx context.Context, actor domain.Device, action, target 
 }
 
 func defaultNow() time.Time { return time.Now().UTC() }
+
+// toGenNowPlaying and toGenTransfers map the activity payloads onto the wire.
+//
+// Both return nil for a nil input, so a service that does not implement the capability —
+// or whose last read of it failed — omits the field entirely rather than sending a zero
+// value. "Nothing is playing" and "we did not manage to ask" must not look the same.
+func toGenNowPlaying(playing *domain.NowPlaying) *gen.NowPlaying {
+	if playing == nil {
+		return nil
+	}
+	items := make([]gen.PlaybackSession, 0, len(playing.Items))
+	for _, item := range playing.Items {
+		session := gen.PlaybackSession{
+			Id:          item.ID,
+			Title:       item.Title,
+			Paused:      item.Paused,
+			Transcoding: item.Transcoding,
+		}
+		// Optional fields are pointers on the wire, and the zero value means "the service
+		// did not say" rather than a real zero. Sending 0 for an unknown position would
+		// park every progress bar at the start of the file.
+		session.Subtitle = optionalString(item.Subtitle)
+		session.User = optionalString(item.User)
+		session.Client = optionalString(item.Client)
+		session.PositionSeconds = optionalInt(item.PositionSeconds)
+		session.DurationSeconds = optionalInt(item.DurationSeconds)
+		items = append(items, session)
+	}
+	return &gen.NowPlaying{
+		Sessions:    playing.Sessions,
+		Transcoding: playing.Transcoding,
+		Items:       items,
+	}
+}
+
+func toGenTransfers(moving *domain.Transfers) *gen.Transfers {
+	if moving == nil {
+		return nil
+	}
+	items := make([]gen.TransferItem, 0, len(moving.Items))
+	for _, item := range moving.Items {
+		entry := gen.TransferItem{
+			Id:       item.ID,
+			Name:     item.Name,
+			State:    item.State,
+			Progress: item.Progress,
+		}
+		entry.SizeBytes = optionalInt64(item.SizeBytes)
+		entry.DownloadRateBytes = optionalInt64(item.DownloadRateBytes)
+		entry.EtaSeconds = optionalInt(item.ETASeconds)
+		items = append(items, entry)
+	}
+	return &gen.Transfers{
+		Active:            moving.Active,
+		Total:             moving.Total,
+		DownloadRateBytes: moving.DownloadRateBytes,
+		UploadRateBytes:   moving.UploadRateBytes,
+		Items:             items,
+	}
+}
+
+func optionalString(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func optionalInt(v int) *int {
+	if v == 0 {
+		return nil
+	}
+	return &v
+}
+
+func optionalInt64(v int64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	return &v
+}
