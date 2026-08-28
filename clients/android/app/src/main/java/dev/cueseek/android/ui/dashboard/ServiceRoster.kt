@@ -182,7 +182,12 @@ private fun ServiceRow(
                 // one node per row *and* keeps the action, so `onClickLabel` above is what
                 // gets announced.
                 .semantics(mergeDescendants = true) {
-                    contentDescription = "${service.name}, ${style.label}"
+                    // The supporting line, not the status label. The two were the same
+                    // until activity arrived on the row, and then they diverged: the
+                    // screen said "1 playing" while this still said "Healthy". A screen
+                    // reader that describes a different row from the one on display is
+                    // worse than one that describes less.
+                    contentDescription = "${service.name}, $supporting"
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {

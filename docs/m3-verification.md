@@ -335,3 +335,66 @@ hardware; both are covered by unit tests only.
   for ldflags injection and the documented build command does not set it, so no deployment
   can be told apart from another through the API. Noticed during this run; a packaging
   concern rather than an M3.4 one, and deliberately left alone.
+
+---
+
+## M3.5 — Activity: `transfers` and `now_playing` ✅
+
+Verified on the OnePlus CPH2707 over Tailscale against `kushal-HP-paviliong6`, agent from
+commit `9d66267`, with real playback and a real torrent library.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | `now_playing` renders live | "1 session · direct play" · 3 Idiots · "2009 · kushal · Chrome" · "1:37:33 / 2:51:07 · paused" |
+| 2 | **Transcode detection, both branches** | An incompatible format played to the phone reported **1 transcoding** alongside a direct-play session on the laptop — 2 sessions, 1 transcoding |
+| 3 | Subtitle picks the right source | "2009" for a film, from `ProductionYear`; the series branch is covered by test |
+| 4 | `transfers` renders live | Real names, progress, rates, ETAs and sizes across 11 torrents |
+| 5 | **State crosses verbatim** | `downloading`, `uploading`, `stalledUP` and **`missingFiles`** — the last is a state the agent never enumerated and it passed through untouched |
+| 6 | Aggregate rates, not summed | "↓ 11.5 MB/s ↑ 234 kB/s" from `/transfer/info`, matching qBittorrent's own display |
+| 7 | Idle says nothing | With every torrent finished, the row reads "Healthy" rather than "0 active" |
+| 8 | Sample cap and remainder | "and 1 more transfer" at 11 torrents against a cap of 10 |
+| 9 | **Ordering** | After the ranking fix, the most recently added torrent leads; before it, it was invisible |
+| 10 | Stale | Headline collapses to "—", progress rules go achromatic, `client_stale` reason shown |
+| 11 | Dark and light | Both correct; sage rules legible on each surface |
+| 12 | Row semantics match the display | "Jellyfin, 1 playing" |
+
+### Six defects, all found by using it
+
+None of these were caught by the 31 tests written for the phase, because each one is about
+how the pieces meet rather than about what any of them computes.
+
+1. **The renderers had no route.** `CapabilitySection` draws only in the detail sheet, and
+   the sheet opened only for a service *without* a `web_ui`. On a host where every service
+   has one — which is this host — `now_playing` and `transfers` could not be reached at all.
+2. **`web_ui` had no renderer**, so the sheet said "Update CueSeek to view this" for a
+   capability supported since M3.2. Invisible until the sheet became reachable.
+3. **The sheet could not scroll.** Content past the fold was clipped rather than below the
+   fold, so the tail of any transfers list was unreachable.
+4. **The facts line clipped to one line**, silently dropping the size: "11m …".
+5. **Ordering ranked only downloads.** `sort=dlspeed` ties everything seeding, paused or
+   finished at zero, so past the first item the order was arbitrary — a torrent that
+   finished a minute ago dropped to zero and vanished from the sample. Which one fell off
+   was luck.
+6. **Row semantics diverged from the row.** The activity line changed the visible text but
+   not the `contentDescription`, so a screen reader said "Healthy" while the screen said
+   "1 playing".
+
+Defect 1 is the one worth keeping. The unit tests all passed throughout, because they test
+the mapping and not the way in — a renderer can be correct, registered, and unreachable.
+
+### Changed as a result
+
+- **Activity moved onto the service row**, which is where a glanceable fact belongs. A
+  health reason still outranks it, and an idle service says nothing at all.
+- **The row and the ⋮ menu swapped jobs.** The body opens the detail; the menu opens the web
+  interface. Recorded in [`m3-plan.md`](m3-plan.md) and [`DESIGN.md`](DESIGN.md), both of
+  which described the old model.
+- **The sample cap went from 10 to 20**, since the sheet now scrolls.
+
+### Not claimed
+
+- **"and N more" has not been re-verified at the new cap of 20.** It was confirmed at 10;
+  exercising it now needs 21 or more torrents.
+- **A library larger than `torrentsFetchLimit` (200)** was not tested. Beyond that `total`
+  understates, and the oldest torrents are dropped before ranking.
+- `-race` did not run locally (no cgo on the development machine); CI runs it.

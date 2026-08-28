@@ -47,7 +47,7 @@ without the user maintaining two addresses.
 | M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 | ✅ verified |
 | M3.3a | On-demand refresh: nudged polls and pull-to-refresh | M3.3 | ✅ verified |
 | M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ verified |
-| M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | 🟡 built, not device-verified |
+| M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ✅ verified |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
 | M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
 | M3.8 | Verification, documentation, ADR closure | all | ⬜ |
@@ -209,7 +209,7 @@ is what the `web_ui` capability is for; CueSeek handles the service, not the tor
 
 ---
 
-### M3.5 — Activity: `transfers` and `now_playing` 🟡
+### M3.5 — Activity: `transfers` and `now_playing` ✅ verified
 
 Deliberately after M3.4. `adapters/adapter.go` warns that shaping `now_playing` before a
 second media server exists bakes Jellyfin's DTOs into a contract Plex and Emby must also
