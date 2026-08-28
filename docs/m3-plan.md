@@ -15,15 +15,22 @@ variant of the same idea; that history is merged and public and is left alone.)
 
 Two rules, applied to every service rather than to Jellyfin specially:
 
-- **The main row body means "use this thing."** If the service advertises `web_ui`, tapping
-  it opens that service's own interface in a browser. Nothing is prioritised or hardcoded —
-  no native-app preference, no per-service knowledge in the client.
-- **The trailing ⋮ menu means "do something to this thing."** It lists whichever actions
-  the agent advertises for that service right now, gated by the risk level the agent
-  assigns.
+- **The main row body means "tell me about this thing."** Tapping it opens the service's
+  detail — health, what it is playing, what it is transferring, everything the agent knows.
+- **The trailing ⋮ menu is everything else.** Opening the service's own web interface, plus
+  whichever lifecycle actions the agent advertises right now, gated by the risk level the
+  agent assigns.
 
-A service with no `web_ui` falls back to the detail sheet on body tap. That is a useful
-destination, not a disabled state.
+**Reversed in M3.5, after using it.** The body originally opened the web interface and the
+sheet was the fallback for a service without one. Two things were wrong with that. On a
+host where every service has a `web_ui` the detail sheet became unreachable entirely, which
+is how the M3.5 activity renderers shipped with no route to the screen. And more
+fundamentally it put the gesture that *leaves the app* on the largest, easiest target: the
+reason to open a console is to find out, and going to the service is what you do once the
+answer warrants it. Leaving is a deliberate act and now takes a deliberate tap.
+
+Nothing is prioritised or hardcoded in either direction — no native-app preference, no
+per-service knowledge in the client.
 
 The URL is **composed client-side** from the paired host address plus a scheme, port and
 path supplied by the agent. Never a whole URL from the server: composing it locally means a
@@ -40,7 +47,7 @@ without the user maintaining two addresses.
 | M3.3 | Android: row interaction model and ⋮ menu | M3.1, M3.2 | ✅ verified |
 | M3.3a | On-demand refresh: nudged polls and pull-to-refresh | M3.3 | ✅ verified |
 | M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ verified |
-| M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ⬜ |
+| M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ✅ verified |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
 | M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
 | M3.8 | Verification, documentation, ADR closure | all | ⬜ |
@@ -202,13 +209,53 @@ is what the `web_ui` capability is for; CueSeek handles the service, not the tor
 
 ---
 
-### M3.5 — Activity: `transfers` and `now_playing`
+### M3.5 — Activity: `transfers` and `now_playing` ✅ verified
 
 Deliberately after M3.4. `adapters/adapter.go` warns that shaping `now_playing` before a
 second media server exists bakes Jellyfin's DTOs into a contract Plex and Emby must also
 satisfy. Two adapters first, then the shape.
 
-Contract, agent and new client renderers, with golden images.
+**The shape, and why it is this one.** Both capabilities carry **aggregate counts plus a
+bounded sample**, and the counts are the truth. A seedbox with four hundred torrents must
+not put four hundred objects on an SSE frame every thirty seconds, so `items` is capped at
+ten by the agent while `active` and `total` stay correct. A client that rendered
+`items.size` as the total would understate a busy server at exactly the moment the number
+mattered.
+
+Neither payload borrows its vocabulary from the service that implemented it first:
+
+- `now_playing` breaks out **`transcoding`** as its own count. On a self-hosted box direct
+  play is nearly free and one 4K transcode can saturate the CPU every other service shares,
+  so a session count alone would hide the fact that explains a hot machine. What is
+  deliberately *not* carried is Jellyfin's transcode reasons and codec detail — those are
+  Jellyfin's, and this name belongs to Plex and Emby too.
+- `transfers` keeps the service's own **`state` word verbatim** — `stalledDL`, `queuedDL`,
+  `seeding`. Flattening those into a shared enum would discard the distinction between
+  "stalled" and "queued", which is precisely what tells an operator whether to care.
+
+**Absent is not empty.** A capability the agent could not read is omitted entirely rather
+than sent as a zero. `null` means "we could not ask"; `{"sessions": 0}` means "we asked, and
+nothing is playing". Collapsing them would let a failed request render as an idle server,
+and the distinction is asserted at three layers — the poller, the wire, and the client
+mapping.
+
+**Activity never affects health.** A media server that answers `/System/Info` and refuses
+`/Sessions` is up. Reporting it as unhealthy would send an operator hunting an outage that
+is not happening, which is the same class of error as conflating "unreachable" with
+"degraded". The payload goes missing; the status does not move.
+
+**Structural change.** `Cache.Put` now takes an `Observation` struct rather than a growing
+parameter list. Its arity had already changed once in M3.1 and broke every fake in the tree;
+M3.6 adds host metrics behind it.
+
+**Client.** Two renderers in the existing capability registry — no new screen, no parallel
+pattern. Both reuse the rule motif for progress rather than introducing a component, since
+the dashboard has already taught the reader what a rule means.
+
+**Tests:** 31 new. Agent — Jellyfin session mapping including the idle-session and
+transcode-detection judgement calls, qBittorrent state and ETA normalisation, the poller's
+collection and bounding, and the wire's absent-versus-zero encoding. Client — formatters,
+the model's null-progress rules, and the mapping's forward tolerance of unknown states.
 
 ---
 

@@ -51,21 +51,24 @@ type Controllable interface {
 	Invoke(ctx context.Context, actionID string) (*host.Job, error)
 }
 
-// NowPlayingProvider and TransferProvider are declared here, unimplemented by any adapter
-// yet, because their existence is what makes capability discovery meaningful rather than
-// a single-branch formality. They land in M3.
+// NowPlayingProvider and TransferProvider are the activity capabilities.
 //
-// Their payload types are deliberately absent: shaping now_playing before a second
-// media server exists would bake Jellyfin's DTOs into a contract that Plex and Emby also
-// have to satisfy, which ADR-0005 explicitly warns against.
+// They were markers until M3.5, deliberately: shaping `now_playing` before a second
+// adapter existed would have baked Jellyfin's DTOs into a name Plex and Emby also have to
+// satisfy, which ADR-0005 warns about by name. Two adapters shipped first, then the shape.
+//
+// Both take a context and both may fail. A failure is not a health problem — a media
+// server that answers /System/Info and refuses /Sessions is up, and reporting it as
+// unhealthy would send an operator looking for an outage that is not there. The poller
+// records the payload it got and leaves health to Health().
 type (
 	// NowPlayingProvider reports what a media service is currently playing.
 	NowPlayingProvider interface {
-		NowPlayingCapability()
+		NowPlaying(ctx context.Context) (domain.NowPlaying, error)
 	}
 	// TransferProvider reports in-flight transfers, e.g. torrents or downloads.
 	TransferProvider interface {
-		TransfersCapability()
+		Transfers(ctx context.Context) (domain.Transfers, error)
 	}
 )
 

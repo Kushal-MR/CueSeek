@@ -236,15 +236,21 @@ func (p *Poller) pollOnce(ctx context.Context, service Service, timeout time.Dur
 		slog.Warn("adapter health check failed",
 			"service", service.ID(), "error", err, "elapsed", time.Since(started))
 
-		p.cache.Put(service.ID(), domain.Health{
-			Status:     domain.StatusUnreachable,
-			Reachable:  false,
-			ObservedAt: time.Now().UTC(),
-			Reasons: []domain.HealthReason{{
-				Code:    domain.ReasonUnreachable,
-				Message: "The agent could not determine this service's state: " + err.Error(),
-			}},
-		}, actions)
+		// Activity is deliberately not collected here. A service the agent cannot form
+		// an opinion about has no activity worth reporting, and asking would spend
+		// another timeout on something already known to be unresponsive.
+		p.cache.Put(service.ID(), Observation{
+			Health: domain.Health{
+				Status:     domain.StatusUnreachable,
+				Reachable:  false,
+				ObservedAt: time.Now().UTC(),
+				Reasons: []domain.HealthReason{{
+					Code:    domain.ReasonUnreachable,
+					Message: "The agent could not determine this service's state: " + err.Error(),
+				}},
+			},
+			Actions: actions,
+		})
 		return
 	}
 
@@ -262,5 +268,53 @@ func (p *Poller) pollOnce(ctx context.Context, service Service, timeout time.Dur
 		})
 	}
 
-	p.cache.Put(service.ID(), health, actions)
+	p.cache.Put(service.ID(), Observation{
+		Health:     health,
+		Actions:    actions,
+		NowPlaying: p.nowPlaying(pollCtx, service),
+		Transfers:  p.transfers(pollCtx, service),
+	})
+}
+
+// nowPlaying and transfers read the activity capabilities, on the poll path.
+//
+// Both return nil rather than an error, and neither can change the service's health. A
+// media server that answers /System/Info and then refuses /Sessions is **up**; reporting
+// it as unhealthy would send an operator hunting an outage that is not happening. What is
+// lost is the activity payload, and nil says exactly that — "not known" rather than
+// "nothing is playing".
+//
+// They share the poll's deadline rather than taking their own. That is the point: the
+// whole observation of one service is bounded by one budget, so a slow /Sessions delays
+// this service's next poll and nothing else's.
+func (p *Poller) nowPlaying(ctx context.Context, service Service) *domain.NowPlaying {
+	provider, ok := service.(NowPlayingProvider)
+	if !ok {
+		return nil
+	}
+	playing, err := provider.NowPlaying(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.Warn("now_playing unavailable", "service", service.ID(), "error", err)
+		}
+		return nil
+	}
+	playing.Items = domain.Bounded(playing.Items)
+	return &playing
+}
+
+func (p *Poller) transfers(ctx context.Context, service Service) *domain.Transfers {
+	provider, ok := service.(TransferProvider)
+	if !ok {
+		return nil
+	}
+	moving, err := provider.Transfers(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			slog.Warn("transfers unavailable", "service", service.ID(), "error", err)
+		}
+		return nil
+	}
+	moving.Items = domain.Bounded(moving.Items)
+	return &moving
 }

@@ -299,10 +299,15 @@ text.
 "Stream open" beside "no data 34s". Stating both at once is the clearest way to say that a
 connection being alive is not evidence the data is.
 
-**Service row — two targets.** The body *uses* the service; the trailing ⋮ *operates on* it.
-Body tap opens the service's own web interface, or falls back to the detail sheet when there
-is none. The ⋮ carries lifecycle actions gated by risk: safe fires, disruptive asks,
-destructive must be held. The two targets are announced separately to screen readers.
+**Service row — two targets.** The body *inspects* the service; the trailing ⋮ is
+everything else. Body tap opens the detail sheet — health, activity, everything observed.
+The ⋮ carries "Open web interface" plus lifecycle actions gated by risk: safe fires,
+disruptive asks, destructive must be held. The two targets are announced separately to
+screen readers.
+
+Reversed in M3.5 after use: the body used to open the web interface, which put the gesture
+that leaves the app on the easiest target and made the detail sheet unreachable on a host
+where every service has one.
 
 **Risk ladder.** `safe` → tap. `disruptive` → dialog with a button. `destructive` and
 anything unrecognised → dialog with a hold-to-confirm bar, 1200ms, where the fill *is* the

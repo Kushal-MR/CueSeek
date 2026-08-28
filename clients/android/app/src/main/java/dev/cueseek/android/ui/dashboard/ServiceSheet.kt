@@ -1,6 +1,8 @@
 package dev.cueseek.android.ui.dashboard
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -41,6 +43,12 @@ fun ServiceSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Scrollable, because the content is no longer bounded. Health and control
+                // fitted on any screen; a transfers list of ten items does not, and without
+                // this the sheet simply clipped at whatever the screen height allowed — the
+                // eleventh item, the "and N more" line and everything after it were
+                // unreachable rather than merely below the fold.
+                .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {

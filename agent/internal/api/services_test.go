@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 	"github.com/Kushal-MR/CueSeek/agent/internal/host"
 )
@@ -82,19 +83,19 @@ func TestListServicesServesFromCache(t *testing.T) {
 	token := env.pairDevice(t, "Phone", domain.ScopeRead)
 
 	observed := time.Now().UTC().Truncate(time.Second)
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status:     domain.StatusDegraded,
 		Reachable:  true,
 		ObservedAt: observed,
 		Reasons: []domain.HealthReason{{
 			Code: domain.ReasonAuthFailed, Message: "Jellyfin rejected the API key.",
 		}},
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	services := decode[[]wireService](t, env.do(t, http.MethodGet, "/v1/services", token, nil))
 	if len(services) != 1 {
@@ -130,16 +131,16 @@ func TestServiceExposesDiscoveredCapabilitiesAndActions(t *testing.T) {
 	// apply depends on the unit's state. A service the poller has not reached yet
 	// therefore advertises none — the same window in which its health is Unknown, and
 	// honest for the same reason: we do not yet know what state the unit is in.
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status:     domain.StatusHealthy,
 		Reachable:  true,
 		ObservedAt: time.Now().UTC(),
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	svc := decode[wireService](t, env.do(t, http.MethodGet, "/v1/services/jellyfin", token, nil))
 
@@ -189,16 +190,16 @@ func TestStaleCacheIsReportedAsUnknown(t *testing.T) {
 	token := env.pairDevice(t, "Phone", domain.ScopeRead)
 
 	// Observed two hours ago, against a one-minute tolerance.
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status:     domain.StatusHealthy,
 		Reachable:  true,
 		ObservedAt: time.Now().UTC().Add(-2 * time.Hour),
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	svc := decode[wireService](t, env.do(t, http.MethodGet, "/v1/services/jellyfin", token, nil))
 	if svc.Health.Status != "unknown" {
@@ -422,27 +423,27 @@ func TestOverallHealthIsComputedByTheAgent(t *testing.T) {
 		t.Errorf("status = %q before polling, want unknown", got)
 	}
 
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: time.Now().UTC(),
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 	if got := env.api.OverallHealth().Status; got != domain.StatusHealthy {
 		t.Errorf("status = %q with a healthy service, want healthy", got)
 	}
 
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusUnreachable, ObservedAt: time.Now().UTC(),
 		Reasons: []domain.HealthReason{{Code: domain.ReasonUnreachable, Message: "refused"}},
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 	overall := env.api.OverallHealth()
 	if overall.Status != domain.StatusUnreachable {
 		t.Errorf("status = %q with the only service unreachable, want unreachable", overall.Status)
@@ -574,9 +575,9 @@ func TestActionCompletionNudgesTheService(t *testing.T) {
 	env := newTestEnv(t)
 	token := env.pairDevice(t, "Phone", domain.ScopeRead, domain.ScopeServiceControl)
 
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: time.Now().UTC(),
-	}, []domain.Action{{ID: "restart", Label: "Restart Jellyfin", Risk: domain.RiskDisruptive}})
+	}, Actions: []domain.Action{{ID: "restart", Label: "Restart Jellyfin", Risk: domain.RiskDisruptive}}})
 
 	resp := env.do(t, http.MethodPost,
 		"/v1/services/jellyfin/actions/restart", token, nil)

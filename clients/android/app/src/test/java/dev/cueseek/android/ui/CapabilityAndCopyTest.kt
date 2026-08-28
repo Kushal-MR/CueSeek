@@ -21,16 +21,20 @@ class CapabilityAndCopyTest {
     fun `the capabilities the agent emits today have renderers`() {
         assertNotNull(CapabilityRegistry.rendererFor("health"))
         assertNotNull(CapabilityRegistry.rendererFor("control"))
+        assertNotNull(CapabilityRegistry.rendererFor("web_ui"))
+        assertNotNull(CapabilityRegistry.rendererFor("now_playing"))
+        assertNotNull(CapabilityRegistry.rendererFor("transfers"))
     }
 
     @Test
     fun `a capability this build predates has no renderer, and that is a normal path`() {
-        // `now_playing` and `transfers` exist in the agent's vocabulary but no adapter
-        // implements them yet; `immich_jobs` does not exist at all. All three must fall to
-        // the same honest fallback rather than to a crash or an empty box (ADR-0007).
-        assertNull(CapabilityRegistry.rendererFor("now_playing"))
-        assertNull(CapabilityRegistry.rendererFor("transfers"))
+        // `now_playing` and `transfers` landed in M3.5, so the placeholders for them are
+        // gone. `immich_jobs` and `sonarr_queue` do not exist at all, and stand in for the
+        // permanent case: a client meets capabilities that postdate it for the whole life
+        // of the project, and must fall to the honest fallback rather than crash (ADR-0007).
         assertNull(CapabilityRegistry.rendererFor("immich_jobs"))
+        assertNull(CapabilityRegistry.rendererFor("sonarr_queue"))
+        assertNull(CapabilityRegistry.rendererFor(""))
     }
 
     // ------------------------------------------------------------------ the ADR-0005 guard

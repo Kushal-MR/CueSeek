@@ -17,6 +17,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +44,35 @@ const (
 	// loginPath exchanges credentials for a session cookie.
 	loginPath = "/api/v2/auth/login"
 
+	// torrentsPath lists torrents, newest first.
+	//
+	// Sorted by `added_on` rather than by speed, and fetched far more generously than the
+	// sample needs. Both were wrong before, in the same way.
+	//
+	// `sort=dlspeed` only ranks torrents that are *downloading*. Everything seeding, paused
+	// or finished ties at zero, so past the first item the order was whatever qBittorrent
+	// happened to return — and which torrent fell off the end was luck rather than
+	// interest. A torrent that finished a minute ago dropped to zero and vanished.
+	//
+	// Fetching only cap+1 made that unfixable, because the adapter never saw the items it
+	// would have wanted to rank. It can afford to see them: the agent and qBittorrent share
+	// a machine, so this is a loopback call, and the expensive resource is the tailnet
+	// frame rather than the local fetch. Fetch broadly, rank properly, then trim.
+	torrentsPath = "/api/v2/torrents/info?sort=added_on&reverse=true&limit="
+
+	// torrentsFetchLimit is how many torrents to consider before ranking.
+	//
+	// Generous enough that `total` is the real count for any plausible home library, and
+	// bounded so a pathological one cannot blow the response cap. Beyond this the oldest
+	// are dropped, which is the right thing to lose.
+	torrentsFetchLimit = 200
+
+	// etaNever is qBittorrent's placeholder for "not in any useful timeframe".
+	//
+	// 8640000 seconds is one hundred days. Passed through it renders as a real estimate
+	// and looks like a defect in CueSeek, so it is normalised to "unknown" instead.
+	etaNever = 8640000
+
 	// maxResponseBytes caps how much will be read from the upstream. The same reasoning
 	// as every other adapter: the thing at base_url is only *assumed* to be qBittorrent.
 	maxResponseBytes = 1 << 20 // 1 MiB
@@ -63,6 +94,44 @@ const (
 // nothing reads and that qBittorrent is free to rename.
 type transferInfo struct {
 	ConnectionStatus string `json:"connection_status"`
+
+	// Aggregate rates, in bytes per second. Read here rather than summed from the torrent
+	// list because the list is a bounded sample and summing it would understate a busy
+	// client — the contract says these are the service's own totals.
+	DownloadSpeed int64 `json:"dl_info_speed"`
+	UploadSpeed   int64 `json:"up_info_speed"`
+}
+
+// torrent is the subset of /api/v2/torrents/info this adapter uses.
+type torrent struct {
+	Hash     string  `json:"hash"`
+	Name     string  `json:"name"`
+	State    string  `json:"state"`
+	Progress float32 `json:"progress"`
+	Size     int64   `json:"size"`
+	DlSpeed  int64   `json:"dlspeed"`
+	ETA      int     `json:"eta"`
+
+	// AddedOn is a Unix timestamp, and the secondary sort key.
+	//
+	// Deliberately not `last_activity`, which would be a better measure of "interesting"
+	// and a much worse one of "stable": a list of seeding torrents all touching peers
+	// reorders itself between polls, and rows that shuffle under a thumb every thirty
+	// seconds are worse than rows in a slightly less clever order.
+	AddedOn int64 `json:"added_on"`
+}
+
+// activeStates are the states that count toward Transfers.Active.
+//
+// Only these move data. Seeding is excluded deliberately: it is upload, it is usually
+// permanent, and counting it would mean a client that finished everything last week still
+// reports "12 active" forever — which trains an operator to ignore the number.
+var activeStates = map[string]bool{
+	"downloading":  true,
+	"forcedDL":     true,
+	"metaDL":       true,
+	"forcedMetaDL": true,
+	"checkingDL":   true,
 }
 
 // authError marks a failure that came from the login exchange rather than the network.
@@ -94,6 +163,14 @@ type adapter struct {
 	// credential — losing it costs one extra request, not an error.
 	mu  sync.Mutex
 	sid string
+
+	// rates caches the aggregate speeds from the most recent health poll.
+	//
+	// Health already calls /api/v2/transfer/info, which is where these live, so Transfers
+	// reuses them rather than making the same request twice per poll. Guarded because the
+	// two run on the same goroutine today and there is no reason to depend on that.
+	ratesMu sync.Mutex
+	rates   transferInfo
 
 	// webUI is what the operator configured, or the zero value when they configured
 	// nothing. hasWebUI is what capability discovery keys on.
@@ -221,7 +298,20 @@ func (a *adapter) Health(ctx context.Context) (domain.Health, error) {
 		}, nil
 	}
 
+	a.rememberRates(info)
 	return a.healthFromInfo(observedAt, info), nil
+}
+
+func (a *adapter) rememberRates(info transferInfo) {
+	a.ratesMu.Lock()
+	defer a.ratesMu.Unlock()
+	a.rates = info
+}
+
+func (a *adapter) lastRates() transferInfo {
+	a.ratesMu.Lock()
+	defer a.ratesMu.Unlock()
+	return a.rates
 }
 
 // healthFromStatus maps HTTP status codes. The second return reports whether the code was
@@ -529,4 +619,141 @@ func (c *controllable) Invoke(ctx context.Context, actionID string) (*host.Job, 
 		return nil, fmt.Errorf("qbittorrent: %w", err)
 	}
 	return job, nil
+}
+
+// ---------------------------------------------------------------- Transfers
+
+// Transfers reports what qBittorrent is moving.
+//
+// On *adapter rather than *controllable, so a client configured with no systemd unit still
+// reports its transfers. The capabilities are independent.
+//
+// Read-only, and that is the product rule rather than a limitation: pausing, prioritising
+// and deleting torrents belong to qBittorrent's own interface, which `web_ui` exists to
+// reach. A console that grew half a torrent manager would be worse at it than the real one
+// and would still not replace it.
+func (a *adapter) Transfers(ctx context.Context) (domain.Transfers, error) {
+	path := torrentsPath + strconv.Itoa(torrentsFetchLimit)
+
+	resp, err := a.get(ctx, path)
+	if err != nil {
+		return domain.Transfers{}, err
+	}
+	if resp.StatusCode == http.StatusForbidden && a.canLogIn() {
+		resp.Body.Close()
+		a.forgetSession()
+		if err := a.logIn(ctx); err != nil {
+			return domain.Transfers{}, err
+		}
+		if resp, err = a.get(ctx, path); err != nil {
+			return domain.Transfers{}, err
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return domain.Transfers{}, fmt.Errorf("torrents returned HTTP %d", resp.StatusCode)
+	}
+
+	var torrents []torrent
+	body := io.LimitReader(resp.Body, maxResponseBytes)
+	if err := json.NewDecoder(body).Decode(&torrents); err != nil {
+		return domain.Transfers{}, fmt.Errorf("decode torrents: %w", err)
+	}
+
+	return transfersFrom(torrents, a.lastRates()), nil
+}
+
+// transfersFrom translates qBittorrent's torrents into the contract's shape, ranked.
+//
+// Split from the request so the judgement calls — which states count as active, how an ETA
+// placeholder is handled, what order the sample is in — are testable against fixtures.
+//
+// `total` is the number of torrents the response carried. qBittorrent has no cheap count
+// endpoint, so with more than [torrentsFetchLimit] this understates — but at two hundred
+// that is a library, not a home server.
+func transfersFrom(torrents []torrent, rates transferInfo) domain.Transfers {
+	moving := domain.Transfers{
+		Total:             len(torrents),
+		DownloadRateBytes: rates.DownloadSpeed,
+		UploadRateBytes:   rates.UploadSpeed,
+		Items:             []domain.TransferItem{},
+	}
+
+	ranked := rank(torrents)
+	for _, t := range ranked {
+		if activeStates[t.State] {
+			moving.Active++
+		}
+		moving.Items = append(moving.Items, domain.TransferItem{
+			ID:                t.Hash,
+			Name:              t.Name,
+			State:             t.State,
+			Progress:          clampProgress(t.Progress),
+			SizeBytes:         t.Size,
+			DownloadRateBytes: t.DlSpeed,
+			ETASeconds:        normaliseETA(t.ETA),
+		})
+	}
+	return moving
+}
+
+// rank orders torrents most-interesting first, so the sample the client sees is the part
+// worth seeing.
+//
+// Two tiers, and the split is the whole point:
+//
+//  1. **Actively downloading, fastest first.** These are the only ones where speed is a
+//     meaningful ranking, and they are what "is anything happening" is asking about.
+//  2. **Everything else, newest first.** Seeding, paused and finished torrents all sit at
+//     zero speed, so ranking them by it ranks nothing; recency at least answers "what did
+//     I do recently", which is why a torrent that finished a minute ago now stays near the
+//     top instead of falling off the end.
+//
+// Stable within each tier — `SliceStable`, and `added_on` as the tiebreak rather than
+// anything live — because this list is redrawn every thirty seconds and rows that reorder
+// under a thumb are worse than rows in a slightly duller order.
+//
+// Active count is unaffected: it is computed over everything fetched, not over the sample.
+func rank(torrents []torrent) []torrent {
+	ordered := make([]torrent, len(torrents))
+	copy(ordered, torrents)
+
+	sort.SliceStable(ordered, func(i, j int) bool {
+		a, b := ordered[i], ordered[j]
+		activeA, activeB := activeStates[a.State], activeStates[b.State]
+
+		if activeA != activeB {
+			return activeA
+		}
+		if activeA && a.DlSpeed != b.DlSpeed {
+			return a.DlSpeed > b.DlSpeed
+		}
+		return a.AddedOn > b.AddedOn
+	})
+	return ordered
+}
+
+// normaliseETA turns "never" and nonsense into "unknown".
+func normaliseETA(eta int) int {
+	if eta <= 0 || eta >= etaNever {
+		return 0
+	}
+	return eta
+}
+
+// clampProgress keeps the contract's 0..1 promise.
+//
+// Defensive rather than theoretical: the field crosses into a progress bar, and a value
+// outside the range would render as an overflowing or negative-width element rather than
+// as an obviously wrong number somebody would notice.
+func clampProgress(p float32) float32 {
+	switch {
+	case p < 0:
+		return 0
+	case p > 1:
+		return 1
+	default:
+		return p
+	}
 }

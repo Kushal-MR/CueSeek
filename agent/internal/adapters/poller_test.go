@@ -45,9 +45,9 @@ func TestCacheStoresObservation(t *testing.T) {
 	c.Track("jellyfin", time.Minute)
 
 	observed := time.Now().UTC()
-	c.Put("jellyfin", domain.Health{
+	c.Put("jellyfin", Observation{Health: domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: observed,
-	}, nil)
+	}})
 
 	snapshot, _ := c.Get("jellyfin")
 	if snapshot.Health.Status != domain.StatusHealthy {
@@ -70,9 +70,9 @@ func TestCacheDowngradesStaleStateToUnknown(t *testing.T) {
 	c.now = func() time.Time { return now }
 	c.Track("jellyfin", 30*time.Second)
 
-	c.Put("jellyfin", domain.Health{
+	c.Put("jellyfin", Observation{Health: domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: now,
-	}, nil)
+	}})
 
 	if snapshot, _ := c.Get("jellyfin"); snapshot.Health.Status != domain.StatusHealthy {
 		t.Fatalf("status = %q immediately after a poll, want healthy", snapshot.Health.Status)
@@ -107,11 +107,11 @@ func TestCacheStatusSinceTracksTransitions(t *testing.T) {
 	c.now = func() time.Time { return now }
 	c.Track("jellyfin", time.Hour)
 
-	c.Put("jellyfin", domain.Health{Status: domain.StatusHealthy, ObservedAt: now}, nil)
+	c.Put("jellyfin", Observation{Health: domain.Health{Status: domain.StatusHealthy, ObservedAt: now}})
 	first, _ := c.Get("jellyfin")
 
 	now = now.Add(time.Minute)
-	c.Put("jellyfin", domain.Health{Status: domain.StatusHealthy, ObservedAt: now}, nil)
+	c.Put("jellyfin", Observation{Health: domain.Health{Status: domain.StatusHealthy, ObservedAt: now}})
 	second, _ := c.Get("jellyfin")
 
 	if !second.StatusSince.Equal(first.StatusSince) {
@@ -120,7 +120,7 @@ func TestCacheStatusSinceTracksTransitions(t *testing.T) {
 	}
 
 	now = now.Add(time.Minute)
-	c.Put("jellyfin", domain.Health{Status: domain.StatusUnreachable, ObservedAt: now}, nil)
+	c.Put("jellyfin", Observation{Health: domain.Health{Status: domain.StatusUnreachable, ObservedAt: now}})
 	third, _ := c.Get("jellyfin")
 
 	if !third.StatusSince.Equal(now) {
@@ -132,7 +132,7 @@ func TestCacheSnapshots(t *testing.T) {
 	c := NewCache()
 	c.Track("a", time.Minute)
 	c.Track("b", time.Minute)
-	c.Put("a", domain.Health{Status: domain.StatusHealthy, ObservedAt: time.Now().UTC()}, nil)
+	c.Put("a", Observation{Health: domain.Health{Status: domain.StatusHealthy, ObservedAt: time.Now().UTC()}})
 
 	snapshots := c.Snapshots()
 	if len(snapshots) != 2 {
@@ -165,7 +165,7 @@ func TestCacheIsConcurrencySafe(t *testing.T) {
 			defer wg.Done()
 			for i := range 100 {
 				id := []string{"a", "b", "c"}[i%3]
-				c.Put(id, domain.Health{Status: domain.StatusHealthy, ObservedAt: time.Now().UTC()}, nil)
+				c.Put(id, Observation{Health: domain.Health{Status: domain.StatusHealthy, ObservedAt: time.Now().UTC()}})
 				c.Get(id)
 				c.Snapshots()
 			}

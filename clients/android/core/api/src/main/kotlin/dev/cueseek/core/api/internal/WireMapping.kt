@@ -14,12 +14,16 @@ import dev.cueseek.core.model.Health
 import dev.cueseek.core.model.HealthReason
 import dev.cueseek.core.model.HealthStatus
 import dev.cueseek.core.model.HostId
+import dev.cueseek.core.model.NowPlaying
+import dev.cueseek.core.model.PlaybackSession
 import dev.cueseek.core.model.Pairing
 import dev.cueseek.core.model.Platform
 import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.WebUi
 import dev.cueseek.core.model.SystemInfo
+import dev.cueseek.core.model.TransferItem
+import dev.cueseek.core.model.Transfers
 import java.time.Instant
 import java.time.OffsetDateTime
 import dev.cueseek.core.api.wire.Action as WireAction
@@ -30,7 +34,11 @@ import dev.cueseek.core.api.wire.Device as WireDevice
 import dev.cueseek.core.api.wire.Health as WireHealth
 import dev.cueseek.core.api.wire.HealthReason as WireHealthReason
 import dev.cueseek.core.api.wire.PairResponse as WirePairResponse
+import dev.cueseek.core.api.wire.NowPlaying as WireNowPlaying
+import dev.cueseek.core.api.wire.PlaybackSession as WirePlaybackSession
 import dev.cueseek.core.api.wire.Service as WireService
+import dev.cueseek.core.api.wire.TransferItem as WireTransferItem
+import dev.cueseek.core.api.wire.Transfers as WireTransfers
 import dev.cueseek.core.api.wire.WebUI as WireWebUI
 import dev.cueseek.core.api.wire.System as WireSystem
 
@@ -96,6 +104,54 @@ internal fun WireService.toDomain() = Service(
     health = health.toDomain(),
     actions = actions.map { it.toDomain() },
     webUi = webUi?.toDomain(),
+    nowPlaying = nowPlaying?.toDomain(),
+    transfers = transfers?.toDomain(),
+)
+
+/**
+ * The activity payloads.
+ *
+ * Nullability is carried through rather than defaulted. A wire `null` means the agent
+ * never managed to observe this, and turning it into an empty list here would tell every
+ * screen that nothing is playing — a claim the agent did not make.
+ *
+ * `state` stays a string for the same reason it is one in the contract: every download
+ * client has its own vocabulary, and an enum would either lose values or throw on them.
+ */
+internal fun WireNowPlaying.toDomain() = NowPlaying(
+    sessions = sessions,
+    transcoding = transcoding,
+    items = items.map { it.toDomain() },
+)
+
+internal fun WirePlaybackSession.toDomain() = PlaybackSession(
+    id = id,
+    title = title,
+    subtitle = subtitle,
+    user = user,
+    client = client,
+    positionSeconds = positionSeconds,
+    durationSeconds = durationSeconds,
+    paused = paused,
+    transcoding = transcoding,
+)
+
+internal fun WireTransfers.toDomain() = Transfers(
+    active = active,
+    total = total,
+    downloadRateBytes = downloadRateBytes,
+    uploadRateBytes = uploadRateBytes,
+    items = items.map { it.toDomain() },
+)
+
+internal fun WireTransferItem.toDomain() = TransferItem(
+    id = id,
+    name = name,
+    state = state,
+    progress = progress,
+    sizeBytes = sizeBytes,
+    downloadRateBytes = downloadRateBytes,
+    etaSeconds = etaSeconds,
 )
 
 /**

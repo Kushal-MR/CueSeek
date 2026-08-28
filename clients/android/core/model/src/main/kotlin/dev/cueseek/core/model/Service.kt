@@ -86,4 +86,12 @@ data class Service(
     val actions: List<Action>,
     /** Absent unless the service advertises the `web_ui` capability. */
     val webUi: WebUi? = null,
+    /**
+     * Absent unless the service advertises `now_playing` — or the agent's last attempt to
+     * read it failed. Null and empty are different: null is "not known", empty is "asked,
+     * and nothing is playing".
+     */
+    val nowPlaying: NowPlaying? = null,
+    /** Absent unless the service advertises `transfers`. Same null-versus-empty rule. */
+    val transfers: Transfers? = null,
 )

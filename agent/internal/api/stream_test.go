@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/api/gen"
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
@@ -110,14 +111,14 @@ func TestStreamSendsSnapshotFirst(t *testing.T) {
 	env := newTestEnv(t)
 	token := env.pairDevice(t, "Phone", domain.ScopeRead)
 
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusHealthy, Reachable: true, ObservedAt: time.Now().UTC(),
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	frames, _ := openStream(t, env, token)
 	first := nextFrame(t, frames, "the snapshot")
@@ -189,15 +190,15 @@ func TestStreamSendsServiceDeltas(t *testing.T) {
 	frames, _ := openStream(t, env, token)
 	nextFrame(t, frames, "the snapshot")
 
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusUnreachable, ObservedAt: time.Now().UTC(),
 		Reasons: []domain.HealthReason{{Code: domain.ReasonUnreachable, Message: "refused"}},
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	delta := nextFrame(t, frames, "a service_updated delta")
 	if delta.envelope.Type != gen.StreamEventTypeServiceUpdated {
@@ -316,14 +317,14 @@ func TestMultipleClientsAllReceiveEvents(t *testing.T) {
 
 	waitFor(t, "all clients to be registered", func() bool { return env.api.hub.count() == clients })
 
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusDegraded, Reachable: true, ObservedAt: time.Now().UTC(),
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	for i, s := range streams {
 		delta := nextFrame(t, s, "a delta on client")
@@ -364,14 +365,14 @@ func TestSlowClientDoesNotStallOthers(t *testing.T) {
 		if i%2 == 0 {
 			status = domain.StatusDegraded
 		}
-		env.cache.Put("jellyfin", domain.Health{
+		env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 			Status: status, Reachable: true, ObservedAt: time.Now().UTC(),
-		}, []domain.Action{{
+		}, Actions: []domain.Action{{
 			ID:          "restart",
 			Label:       "Restart Jellyfin",
 			Description: "Restarts the Jellyfin service.",
 			Risk:        domain.RiskDisruptive,
-		}})
+		}}})
 		time.Sleep(2 * time.Millisecond)
 	}
 
@@ -384,14 +385,14 @@ func TestSlowClientDoesNotStallOthers(t *testing.T) {
 
 	// And the working client is unaffected: it is still connected and still receiving
 	// events published after the laggard was cut loose.
-	env.cache.Put("jellyfin", domain.Health{
+	env.cache.Put("jellyfin", adapters.Observation{Health: domain.Health{
 		Status: domain.StatusUnreachable, ObservedAt: time.Now().UTC(),
-	}, []domain.Action{{
+	}, Actions: []domain.Action{{
 		ID:          "restart",
 		Label:       "Restart Jellyfin",
 		Description: "Restarts the Jellyfin service.",
 		Risk:        domain.RiskDisruptive,
-	}})
+	}}})
 
 	deadline := time.After(10 * time.Second)
 	for {

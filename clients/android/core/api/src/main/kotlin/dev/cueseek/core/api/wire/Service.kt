@@ -18,6 +18,8 @@ package dev.cueseek.core.api.wire
 import dev.cueseek.core.api.wire.Action
 import dev.cueseek.core.api.wire.Capability
 import dev.cueseek.core.api.wire.Health
+import dev.cueseek.core.api.wire.NowPlaying
+import dev.cueseek.core.api.wire.Transfers
 import dev.cueseek.core.api.wire.WebUI
 
 import kotlinx.serialization.Serializable
@@ -33,6 +35,8 @@ import kotlinx.serialization.Contextual
  * @param health 
  * @param actions Empty if the service does not implement the `control` capability.
  * @param webUi Absent unless the service advertises the `web_ui` capability. Same pairing as `control` and `actions`: the capability declares that something exists, the sibling field carries what a client needs to use it. 
+ * @param nowPlaying Absent unless the service advertises the `now_playing` capability. Same capability-plus-sibling pairing as `control` and `web_ui`. 
+ * @param transfers Absent unless the service advertises the `transfers` capability. Same capability-plus-sibling pairing as `control` and `web_ui`. 
  */
 @Serializable
 
@@ -58,7 +62,15 @@ data class Service (
 
     /* Absent unless the service advertises the `web_ui` capability. Same pairing as `control` and `actions`: the capability declares that something exists, the sibling field carries what a client needs to use it.  */
     @SerialName(value = "web_ui")
-    val webUi: WebUI? = null
+    val webUi: WebUI? = null,
+
+    /* Absent unless the service advertises the `now_playing` capability. Same capability-plus-sibling pairing as `control` and `web_ui`.  */
+    @SerialName(value = "now_playing")
+    val nowPlaying: NowPlaying? = null,
+
+    /* Absent unless the service advertises the `transfers` capability. Same capability-plus-sibling pairing as `control` and `web_ui`.  */
+    @SerialName(value = "transfers")
+    val transfers: Transfers? = null
 
 ) {
 

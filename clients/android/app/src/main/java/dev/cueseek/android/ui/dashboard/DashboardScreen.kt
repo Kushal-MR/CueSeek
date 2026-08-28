@@ -132,26 +132,25 @@ fun DashboardScreen(
                     host = state.host,
                     stale = stale,
                     now = now,
-                    // The row's two destinations, decided here rather than inside the
-                    // roster: composing the URL needs the paired address, and launching it
-                    // needs an Android context, neither of which a presentational list
-                    // should hold.
+                    // The body always inspects. One destination, no branching, and
+                    // nothing that can surprise the person who tapped it.
+                    onServiceClick = viewModel::openService,
+                    onInvoke = { service, action ->
+                        viewModel.invoke(state.host, service.id, action.id, action.label)
+                    },
+                    // Composing the URL needs the paired address and launching it needs an
+                    // Android context, neither of which a presentational list should hold —
+                    // so the decision stays here and the roster only reports the intent.
                     //
-                    // Falling back to the sheet — rather than to nothing — is the point. A
-                    // service with no configured interface, or a phone with nothing that
-                    // can open one, still answers the tap with something worth reading.
-                    onServiceClick = { service ->
+                    // A URL this client will not vouch for falls back to the sheet rather
+                    // than doing nothing, which is the same answer the body tap gives.
+                    onOpenWebUi = { service ->
                         when (val to = rowDestination(service, state.host.address)) {
-                            // Even a resolved URL can fail to launch on a device with
-                            // nothing that opens links, so the fallback covers that too.
                             is RowDestination.WebUi ->
                                 if (!openWebUi(context, to.url)) viewModel.openService(service)
 
                             RowDestination.Details -> viewModel.openService(service)
                         }
-                    },
-                    onInvoke = { service, action ->
-                        viewModel.invoke(state.host, service.id, action.id, action.label)
                     },
                 )
 
