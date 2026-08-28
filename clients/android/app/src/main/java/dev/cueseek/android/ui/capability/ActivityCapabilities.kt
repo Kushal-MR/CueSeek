@@ -46,8 +46,8 @@ import dev.cueseek.core.model.Transfers
  * already taught the reader what a rule means.
  *
  * Neither offers a control. Pausing a torrent and seeking a stream belong to the service's
- * own interface, which the row body already opens — a console that grew half a torrent
- * manager would be worse at it than the real one and would still not replace it.
+ * own interface, which the row's ⋮ menu opens — a console that grew half a torrent manager
+ * would be worse at it than the real one and would still not replace it.
  */
 
 // ---------------------------------------------------------------- now playing
@@ -198,11 +198,15 @@ private fun TransferRow(item: TransferItem, stale: Boolean) {
             etaOrNull(item.etaSeconds),
             item.sizeBytes?.let(::byteSize),
         )
+        // Two lines, not one. A downloading torrent carries percentage, state, rate, ETA
+        // and size, and on a phone that clipped to "11m …" — dropping the size entirely
+        // while leaving an ellipsis that looked like a rendering fault. These are five
+        // short facts; letting them wrap costs one line and keeps all five.
         Text(
             facts.joinToString("  ·  "),
             style = CueSeekType.Data.Small,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }

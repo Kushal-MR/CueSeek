@@ -15,15 +15,22 @@ variant of the same idea; that history is merged and public and is left alone.)
 
 Two rules, applied to every service rather than to Jellyfin specially:
 
-- **The main row body means "use this thing."** If the service advertises `web_ui`, tapping
-  it opens that service's own interface in a browser. Nothing is prioritised or hardcoded —
-  no native-app preference, no per-service knowledge in the client.
-- **The trailing ⋮ menu means "do something to this thing."** It lists whichever actions
-  the agent advertises for that service right now, gated by the risk level the agent
-  assigns.
+- **The main row body means "tell me about this thing."** Tapping it opens the service's
+  detail — health, what it is playing, what it is transferring, everything the agent knows.
+- **The trailing ⋮ menu is everything else.** Opening the service's own web interface, plus
+  whichever lifecycle actions the agent advertises right now, gated by the risk level the
+  agent assigns.
 
-A service with no `web_ui` falls back to the detail sheet on body tap. That is a useful
-destination, not a disabled state.
+**Reversed in M3.5, after using it.** The body originally opened the web interface and the
+sheet was the fallback for a service without one. Two things were wrong with that. On a
+host where every service has a `web_ui` the detail sheet became unreachable entirely, which
+is how the M3.5 activity renderers shipped with no route to the screen. And more
+fundamentally it put the gesture that *leaves the app* on the largest, easiest target: the
+reason to open a console is to find out, and going to the service is what you do once the
+answer warrants it. Leaving is a deliberate act and now takes a deliberate tap.
+
+Nothing is prioritised or hardcoded in either direction — no native-app preference, no
+per-service knowledge in the client.
 
 The URL is **composed client-side** from the paired host address plus a scheme, port and
 path supplied by the agent. Never a whole URL from the server: composing it locally means a

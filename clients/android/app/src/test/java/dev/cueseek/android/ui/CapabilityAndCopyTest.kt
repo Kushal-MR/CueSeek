@@ -21,6 +21,7 @@ class CapabilityAndCopyTest {
     fun `the capabilities the agent emits today have renderers`() {
         assertNotNull(CapabilityRegistry.rendererFor("health"))
         assertNotNull(CapabilityRegistry.rendererFor("control"))
+        assertNotNull(CapabilityRegistry.rendererFor("web_ui"))
         assertNotNull(CapabilityRegistry.rendererFor("now_playing"))
         assertNotNull(CapabilityRegistry.rendererFor("transfers"))
     }

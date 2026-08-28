@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,13 +44,28 @@ const (
 	// loginPath exchanges credentials for a session cookie.
 	loginPath = "/api/v2/auth/login"
 
-	// torrentsPath lists torrents, most recently active first.
+	// torrentsPath lists torrents, newest first.
 	//
-	// Sorted and limited server-side rather than client-side: a seedbox with four hundred
-	// torrents should not send four hundred objects over the tailnet for a list that is
-	// capped at ten anyway. `sort=dlspeed&reverse=true` puts whatever is actually moving
-	// at the top, which is what a glance is asking about.
-	torrentsPath = "/api/v2/torrents/info?sort=dlspeed&reverse=true&limit="
+	// Sorted by `added_on` rather than by speed, and fetched far more generously than the
+	// sample needs. Both were wrong before, in the same way.
+	//
+	// `sort=dlspeed` only ranks torrents that are *downloading*. Everything seeding, paused
+	// or finished ties at zero, so past the first item the order was whatever qBittorrent
+	// happened to return — and which torrent fell off the end was luck rather than
+	// interest. A torrent that finished a minute ago dropped to zero and vanished.
+	//
+	// Fetching only cap+1 made that unfixable, because the adapter never saw the items it
+	// would have wanted to rank. It can afford to see them: the agent and qBittorrent share
+	// a machine, so this is a loopback call, and the expensive resource is the tailnet
+	// frame rather than the local fetch. Fetch broadly, rank properly, then trim.
+	torrentsPath = "/api/v2/torrents/info?sort=added_on&reverse=true&limit="
+
+	// torrentsFetchLimit is how many torrents to consider before ranking.
+	//
+	// Generous enough that `total` is the real count for any plausible home library, and
+	// bounded so a pathological one cannot blow the response cap. Beyond this the oldest
+	// are dropped, which is the right thing to lose.
+	torrentsFetchLimit = 200
 
 	// etaNever is qBittorrent's placeholder for "not in any useful timeframe".
 	//
@@ -95,6 +111,14 @@ type torrent struct {
 	Size     int64   `json:"size"`
 	DlSpeed  int64   `json:"dlspeed"`
 	ETA      int     `json:"eta"`
+
+	// AddedOn is a Unix timestamp, and the secondary sort key.
+	//
+	// Deliberately not `last_activity`, which would be a better measure of "interesting"
+	// and a much worse one of "stable": a list of seeding torrents all touching peers
+	// reorders itself between polls, and rows that shuffle under a thumb every thirty
+	// seconds are worse than rows in a slightly less clever order.
+	AddedOn int64 `json:"added_on"`
 }
 
 // activeStates are the states that count toward Transfers.Active.
@@ -609,9 +633,7 @@ func (c *controllable) Invoke(ctx context.Context, actionID string) (*host.Job, 
 // reach. A console that grew half a torrent manager would be worse at it than the real one
 // and would still not replace it.
 func (a *adapter) Transfers(ctx context.Context) (domain.Transfers, error) {
-	// One more than the cap, so the sample can be trimmed to the cap while `total` still
-	// reflects what the service reports below.
-	path := torrentsPath + strconv.Itoa(domain.MaxActivityItems+1)
+	path := torrentsPath + strconv.Itoa(torrentsFetchLimit)
 
 	resp, err := a.get(ctx, path)
 	if err != nil {
@@ -642,15 +664,14 @@ func (a *adapter) Transfers(ctx context.Context) (domain.Transfers, error) {
 	return transfersFrom(torrents, a.lastRates()), nil
 }
 
-// transfersFrom translates qBittorrent's torrents into the contract's shape.
+// transfersFrom translates qBittorrent's torrents into the contract's shape, ranked.
 //
 // Split from the request so the judgement calls — which states count as active, how an ETA
-// placeholder is handled — are testable against fixtures.
+// placeholder is handled, what order the sample is in — are testable against fixtures.
 //
-// Note what `total` is here: the number of torrents *this response* carried, which is
-// capped by the `limit` query. qBittorrent has no cheap count endpoint, so a client with
-// more than the cap reports the cap. That is a known understatement rather than a lie by
-// omission, and it is recorded in the verification notes.
+// `total` is the number of torrents the response carried. qBittorrent has no cheap count
+// endpoint, so with more than [torrentsFetchLimit] this understates — but at two hundred
+// that is a library, not a home server.
 func transfersFrom(torrents []torrent, rates transferInfo) domain.Transfers {
 	moving := domain.Transfers{
 		Total:             len(torrents),
@@ -659,7 +680,8 @@ func transfersFrom(torrents []torrent, rates transferInfo) domain.Transfers {
 		Items:             []domain.TransferItem{},
 	}
 
-	for _, t := range torrents {
+	ranked := rank(torrents)
+	for _, t := range ranked {
 		if activeStates[t.State] {
 			moving.Active++
 		}
@@ -674,6 +696,42 @@ func transfersFrom(torrents []torrent, rates transferInfo) domain.Transfers {
 		})
 	}
 	return moving
+}
+
+// rank orders torrents most-interesting first, so the sample the client sees is the part
+// worth seeing.
+//
+// Two tiers, and the split is the whole point:
+//
+//  1. **Actively downloading, fastest first.** These are the only ones where speed is a
+//     meaningful ranking, and they are what "is anything happening" is asking about.
+//  2. **Everything else, newest first.** Seeding, paused and finished torrents all sit at
+//     zero speed, so ranking them by it ranks nothing; recency at least answers "what did
+//     I do recently", which is why a torrent that finished a minute ago now stays near the
+//     top instead of falling off the end.
+//
+// Stable within each tier — `SliceStable`, and `added_on` as the tiebreak rather than
+// anything live — because this list is redrawn every thirty seconds and rows that reorder
+// under a thumb are worse than rows in a slightly duller order.
+//
+// Active count is unaffected: it is computed over everything fetched, not over the sample.
+func rank(torrents []torrent) []torrent {
+	ordered := make([]torrent, len(torrents))
+	copy(ordered, torrents)
+
+	sort.SliceStable(ordered, func(i, j int) bool {
+		a, b := ordered[i], ordered[j]
+		activeA, activeB := activeStates[a.State], activeStates[b.State]
+
+		if activeA != activeB {
+			return activeA
+		}
+		if activeA && a.DlSpeed != b.DlSpeed {
+			return a.DlSpeed > b.DlSpeed
+		}
+		return a.AddedOn > b.AddedOn
+	})
+	return ordered
 }
 
 // normaliseETA turns "never" and nonsense into "unknown".

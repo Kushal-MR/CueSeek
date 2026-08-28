@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,10 +43,14 @@ import dev.cueseek.core.model.Service
 /**
  * A service's operational actions, behind the row's trailing button.
  *
- * The row now has two jobs and therefore two targets. Tapping the body *uses* the service —
- * it opens the thing itself. This button *operates on* it: restart, stop, start. Keeping
- * them apart is what makes the body safe to tap, and it is the same separation a desktop
- * makes between opening a file and right-clicking it.
+ * The row has two targets. Tapping the body *inspects* the service — health, activity,
+ * everything it is doing. This button is everything else: opening the service's own
+ * interface, and the lifecycle verbs.
+ *
+ * That split was originally the other way round, with the body opening the web interface.
+ * Reversed after using it, because the fastest gesture on the screen should not be the one
+ * that leaves the app — the reason to open a console is to find out, and going to the
+ * service is what you do once the answer warrants it.
  *
  * Nothing here knows what a Jellyfin is. The menu lists whatever [Service.actions] contains
  * and gates each entry on the risk the agent assigned, so a verb this build has never heard
@@ -56,6 +61,7 @@ fun ServiceActionMenu(
     service: Service,
     host: PairedHost,
     onInvoke: (Action) -> Unit,
+    onOpenWebUi: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -85,6 +91,34 @@ fun ServiceActionMenu(
             shape = CueSeekShapes.Shapes.large,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
+            // Opening the service's own interface lives here, not on the row body.
+            //
+            // The two were the other way round until this was used on a phone. Putting the
+            // browser on the largest target meant the fastest gesture always left the app,
+            // and a service's own state — health, what it is playing, what it is moving —
+            // was reachable only through a menu. That inverts what the app is for: you open
+            // CueSeek to find out, and go to the service afterwards if the answer warrants
+            // it. Leaving is a deliberate act and belongs behind a deliberate tap.
+            //
+            // Absent, not disabled, when the operator configured no interface. A greyed
+            // item invites a tap that can only disappoint.
+            if (service.webUi != null) {
+                DropdownMenuItem(
+                    text = { Text("Open web interface") },
+                    onClick = {
+                        open = false
+                        onOpenWebUi()
+                    },
+                )
+
+                if (service.actions.isNotEmpty() || !host.canControlServices()) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+            }
+
             if (!host.canControlServices()) {
                 // Client-side gating is user experience, not a control: the agent enforces
                 // scopes and every call still handles a 403. An empty menu would read as a

@@ -11,11 +11,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Where the body of a service row sends the user.
+ * Where "Open web interface" sends the user.
  *
- * The rule under test is a product decision, not an implementation detail: the row's body
- * *uses* the service. It opens the thing itself when there is a thing to open, and falls
- * back to the detail sheet when there is not — never to nothing.
+ * This resolved the row's *body* tap until the interaction was reversed after use on a
+ * phone: the body now inspects the service and the browser moved into the ⋮ menu. The
+ * resolution itself is unchanged and still the piece that can be wrong silently, since a
+ * refused URL and a working one both end in "the tap did something".
+ *
+ * The fallback still matters. A menu entry that resolved to nothing would be a dead item,
+ * so an unusable URL lands on the detail sheet — the same place the body tap goes.
  */
 class RowDestinationTest {
 

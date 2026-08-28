@@ -15,11 +15,16 @@ package domain
 
 // MaxActivityItems bounds every sampled list.
 //
-// Ten because a phone shows five or six before scrolling and a watch shows two, so the
-// eleventh item has never been looked at by anyone. The cap is the agent's, not the
-// client's: bandwidth on a tailnet is the scarce resource, and trimming after transmission
-// would save nothing.
-const MaxActivityItems = 10
+// Twenty. It was ten while the detail sheet could not scroll, on the reasoning that nobody
+// looks past the fold — true at the time, and wrong once the sheet scrolled. Twenty covers
+// an ordinary home library almost entirely at roughly three kilobytes per service per
+// frame, which is nothing on a tailnet.
+//
+// The cap is the agent's, not the client's: bandwidth is the scarce resource, and trimming
+// after transmission would save nothing. It is also not a substitute for ordering — a
+// sample is only useful if the *right* items are in it, which is why adapters sort before
+// they trim.
+const MaxActivityItems = 20
 
 // NowPlaying is the active playback on a media server.
 type NowPlaying struct {

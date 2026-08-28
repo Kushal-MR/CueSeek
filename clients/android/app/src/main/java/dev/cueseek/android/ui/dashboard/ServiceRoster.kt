@@ -63,6 +63,7 @@ fun ServiceRoster(
     now: Instant,
     onServiceClick: (Service) -> Unit,
     onInvoke: (Service, Action) -> Unit,
+    onOpenWebUi: (Service) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val dark = isSystemInDarkTheme()
@@ -110,6 +111,7 @@ fun ServiceRoster(
                     now = now,
                     onClick = { onServiceClick(service) },
                     onInvoke = { action -> onInvoke(service, action) },
+                    onOpenWebUi = { onOpenWebUi(service) },
                 )
             }
         }
@@ -124,17 +126,21 @@ private fun ServiceRow(
     now: Instant,
     onClick: () -> Unit,
     onInvoke: (Action) -> Unit,
+    onOpenWebUi: () -> Unit,
 ) {
     val dark = isSystemInDarkTheme()
     val style = statusStyle(service.health.status, stale)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
+    // Priority, worst news first. A degraded service leads with its reason even while
+    // three things are playing — the problem is what the operator is here for, and
+    // activity is what they get when there is no problem to report.
     val supporting = when {
         stale -> "Last verified " + localClock(service.health.observedAt)
 
         service.health.reasons.isNotEmpty() -> service.health.reasons.first().message
-        else -> style.label
+        else -> activityLine(service) ?: style.label
     }
 
     // The row's own press tint, under the ripple. It exists so the two targets read as two
@@ -210,28 +216,29 @@ private fun ServiceRow(
         // Width is reserved whether or not there is a menu, so the age column stays true
         // down the list. A service the agent offers nothing for has nothing to press, and
         // an enabled button that could only ever 403 is worse than no button.
-        if (service.actions.isNotEmpty()) {
-            ServiceActionMenu(
-                service = service,
-                host = host,
-                onInvoke = onInvoke,
-                modifier = Modifier.padding(end = CueSeekSpacing.menuInset),
-            )
-        } else {
-            Spacer(Modifier.width(TrailingSlotWidth))
-        }
+        // Always rendered now. It used to appear only for a service with actions, which
+        // was right when the menu held nothing else; it now also carries the only route to
+        // the detail sheet, and a service with no actions still has health worth reading.
+        ServiceActionMenu(
+            service = service,
+            host = host,
+            onInvoke = onInvoke,
+            onOpenWebUi = onOpenWebUi,
+            modifier = Modifier.padding(end = CueSeekSpacing.menuInset),
+        )
     }
 }
 
 /**
  * What the body tap will do, said before it happens.
  *
- * The two destinations are genuinely different — one leaves the app — and a row that
- * announced "Open Jellyfin" and then showed a sheet would be lying to exactly the users
- * who most depend on it being accurate.
+ * One destination now, and always the same one. The body used to open the service's own
+ * web interface, which put the thing that leaves the app on the largest, easiest target
+ * and buried the service's own state behind a menu. On a phone that is backwards: the
+ * reason to open CueSeek at all is to see what a service is doing, and the browser is
+ * where you go afterwards if the answer warrants it.
  */
-private fun openLabel(service: Service): String =
-    if (service.webUi != null) "Open ${service.name} in your browser" else "Show ${service.name} details"
+private fun openLabel(service: Service): String = "Show ${service.name} details"
 
 /** The trailing slot, at Material's minimum touch target plus the row's own end inset. */
 private val TrailingSlotWidth = 48.dp + 4.dp

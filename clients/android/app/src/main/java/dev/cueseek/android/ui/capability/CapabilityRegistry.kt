@@ -40,6 +40,7 @@ object CapabilityRegistry {
     private val renderers: Map<String, CapabilityContent> = mapOf(
         "health" to { service, stale -> HealthCapability(service, stale) },
         "control" to { service, _ -> ControlCapability(service) },
+        "web_ui" to { service, _ -> WebUiCapability(service) },
         "now_playing" to { service, stale -> NowPlayingCapability(service, stale) },
         "transfers" to { service, stale -> TransfersCapability(service, stale) },
     )
@@ -156,3 +157,31 @@ private fun ControlCapability(service: Service) {
 
 private fun stable(stale: Boolean) = !stale
 
+/**
+ * The web interface, described rather than linked.
+ *
+ * It had no renderer until M3.5, which meant the sheet told the reader to "update CueSeek
+ * to view this" for a capability the app has fully supported since M3.2 — the one message
+ * the fallback must never show for something that works. Nobody saw it because the sheet
+ * itself was unreachable for any service with a web_ui; adding the Details route exposed it.
+ *
+ * No link here on purpose. The ⋮ menu already opens it, and a second tappable route to the
+ * same place would be one more thing to keep in step for no gain. Saying where it is and
+ * how to reach it is the useful half.
+ */
+@Composable
+private fun WebUiCapability(service: Service) {
+    val webUi = service.webUi
+    Text(
+        if (webUi == null) {
+            // Advertised without a payload. The agent should not do this, so say so
+            // plainly rather than rendering an empty section.
+            "Advertised, but the agent sent no address."
+        } else {
+            "Served over ${webUi.scheme} on port ${webUi.port}. " +
+                "Open it from the row's ⋮ menu."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}

@@ -3,6 +3,7 @@ package qbittorrent
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -137,34 +138,6 @@ func TestNothingQueuedIsEmptyNotNil(t *testing.T) {
 
 // ---------------------------------------------------------------- transport
 
-// TestTransfersAsksForABoundedList — a seedbox with four hundred torrents must not send
-// four hundred objects over a tailnet for a list capped at ten.
-func TestTransfersAsksForABoundedList(t *testing.T) {
-	var gotQuery string
-	server := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/v2/torrents") {
-			gotQuery = r.URL.RawQuery
-			writeTorrents(w, `[]`)
-			return
-		}
-		writeTransferInfo(w, "connected")
-	})
-
-	svc := newAdapter(t, server.URL, adapters.Deps{})
-	if _, err := svc.(adapters.TransferProvider).Transfers(t.Context()); err != nil {
-		t.Fatalf("Transfers: %v", err)
-	}
-
-	if !strings.Contains(gotQuery, fmt.Sprintf("limit=%d", domain.MaxActivityItems+1)) {
-		t.Errorf("query = %q, want a limit of cap+1", gotQuery)
-	}
-	// Sorted server-side, so the sample is what is actually moving rather than whatever
-	// qBittorrent happened to list first.
-	if !strings.Contains(gotQuery, "sort=dlspeed") || !strings.Contains(gotQuery, "reverse=true") {
-		t.Errorf("query = %q, want most-active-first ordering", gotQuery)
-	}
-}
-
 // TestTransfersRetriesAnExpiredSession mirrors the health path: a cookie has a lifetime,
 // and an idle agent will outlive one.
 func TestTransfersRetriesAnExpiredSession(t *testing.T) {
@@ -262,5 +235,137 @@ func TestTransfersRejectsAMalformedBody(t *testing.T) {
 
 	if _, err := svc.(adapters.TransferProvider).Transfers(t.Context()); err == nil {
 		t.Fatal("expected a decode error")
+	}
+}
+
+// ---------------------------------------------------------------- ranking
+
+func torrentAt(hash, state string, speed, addedOn int64) torrent {
+	return torrent{Hash: hash, Name: hash, State: state, DlSpeed: speed, AddedOn: addedOn}
+}
+
+// TestFinishedTorrentsDoNotFallOffTheEnd is the defect a real library exposed.
+//
+// The old query sorted by `dlspeed`, which ranks only the torrents that are downloading.
+// Everything seeding, paused or finished ties at zero, so past the first item the order was
+// whatever qBittorrent happened to return — and a torrent that finished a minute ago
+// dropped to zero speed and vanished from the sample. Which one fell off was luck.
+func TestFinishedTorrentsDoNotFallOffTheEnd(t *testing.T) {
+	torrents := []torrent{
+		torrentAt("old-seed", "stalledUP", 0, 1_000),
+		torrentAt("older-seed", "stalledUP", 0, 500),
+		torrentAt("just-finished", "uploading", 0, 9_000),
+		torrentAt("downloading", "downloading", 11_000_000, 2_000),
+	}
+
+	moving := transfersFrom(torrents, transferInfo{})
+	order := make([]string, 0, len(moving.Items))
+	for _, item := range moving.Items {
+		order = append(order, item.ID)
+	}
+
+	want := []string{"downloading", "just-finished", "old-seed", "older-seed"}
+	if !slices.Equal(order, want) {
+		t.Errorf("order = %v, want %v", order, want)
+	}
+}
+
+// TestActiveDownloadsLeadRankedBySpeed — the first tier, where speed is the meaningful
+// ranking because these are the only torrents actually moving.
+func TestActiveDownloadsLeadRankedBySpeed(t *testing.T) {
+	torrents := []torrent{
+		torrentAt("newest-seed", "stalledUP", 0, 99_000),
+		torrentAt("slow-dl", "downloading", 1_000, 10),
+		torrentAt("fast-dl", "downloading", 9_000_000, 20),
+	}
+
+	moving := transfersFrom(torrents, transferInfo{})
+
+	if moving.Items[0].ID != "fast-dl" || moving.Items[1].ID != "slow-dl" {
+		t.Errorf("downloads should lead fastest-first, got %v", moving.Items)
+	}
+	// Even the newest torrent in the library sits behind anything actually downloading.
+	if moving.Items[2].ID != "newest-seed" {
+		t.Errorf("an idle torrent outranked a download: %v", moving.Items)
+	}
+}
+
+// TestRankingIsStableAcrossPolls — the list redraws every thirty seconds, and rows that
+// reorder under a thumb are worse than rows in a duller order. `added_on` never changes,
+// unlike speed or last-activity.
+func TestRankingIsStableAcrossPolls(t *testing.T) {
+	base := []torrent{
+		torrentAt("a", "stalledUP", 0, 300),
+		torrentAt("b", "uploading", 0, 200),
+		torrentAt("c", "pausedUP", 0, 100),
+	}
+
+	first := transfersFrom(base, transferInfo{})
+
+	// A later poll: the same torrents, upload rates churning, order from qBittorrent
+	// arbitrarily different. Nothing that affects the ranking has changed.
+	shuffled := []torrent{base[2], base[0], base[1]}
+	second := transfersFrom(shuffled, transferInfo{})
+
+	for i := range first.Items {
+		if first.Items[i].ID != second.Items[i].ID {
+			t.Fatalf("order changed between polls: %v then %v", first.Items, second.Items)
+		}
+	}
+}
+
+// TestActiveCountCoversEverythingFetchedNotJustTheSample — the count is the truth and the
+// sample is a view of it, so trimming must not change the number.
+func TestActiveCountCoversEverythingFetchedNotJustTheSample(t *testing.T) {
+	torrents := make([]torrent, 0, domain.MaxActivityItems+5)
+	// More downloads than fit in the sample.
+	for i := range domain.MaxActivityItems + 5 {
+		torrents = append(torrents,
+			torrentAt(fmt.Sprintf("dl-%d", i), "downloading", int64(i), int64(i)))
+	}
+
+	moving := transfersFrom(torrents, transferInfo{})
+
+	if moving.Active != domain.MaxActivityItems+5 {
+		t.Errorf("Active = %d, want every fetched download counted", moving.Active)
+	}
+	if moving.Total != domain.MaxActivityItems+5 {
+		t.Errorf("Total = %d", moving.Total)
+	}
+	// transfersFrom does not trim; the poller does. Everything fetched is ranked and
+	// returned, so the cap applies to one place rather than two.
+	if len(moving.Items) != domain.MaxActivityItems+5 {
+		t.Errorf("items = %d; trimming belongs to the poller", len(moving.Items))
+	}
+}
+
+// TestFetchesGenerouslyRatherThanExactly — ranking needs to see the items it is ranking,
+// and this is a loopback call, so the fetch is cheap and the tailnet frame is what is not.
+func TestFetchesGenerouslyRatherThanExactly(t *testing.T) {
+	var gotQuery string
+	server := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/v2/torrents") {
+			gotQuery = r.URL.RawQuery
+			writeTorrents(w, `[]`)
+			return
+		}
+		writeTransferInfo(w, "connected")
+	})
+
+	svc := newAdapter(t, server.URL, adapters.Deps{})
+	if _, err := svc.(adapters.TransferProvider).Transfers(t.Context()); err != nil {
+		t.Fatalf("Transfers: %v", err)
+	}
+
+	if !strings.Contains(gotQuery, fmt.Sprintf("limit=%d", torrentsFetchLimit)) {
+		t.Errorf("query = %q, want limit=%d", gotQuery, torrentsFetchLimit)
+	}
+	// Newest-first from the server, so the generous fetch drops the oldest rather than an
+	// arbitrary slice, and `rank` reorders what it gets.
+	if !strings.Contains(gotQuery, "sort=added_on") {
+		t.Errorf("query = %q, want newest-first ordering", gotQuery)
+	}
+	if strings.Contains(gotQuery, "dlspeed") {
+		t.Errorf("query = %q still sorts by speed, which ranks only downloads", gotQuery)
 	}
 }
