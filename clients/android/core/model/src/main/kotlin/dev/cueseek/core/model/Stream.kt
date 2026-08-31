@@ -20,6 +20,15 @@ sealed interface StreamEvent {
     data class Snapshot(
         val system: SystemInfo,
         val services: List<Service>,
+        /**
+         * The host's vitals as of the agent's last collection.
+         *
+         * Null in the first seconds after an agent restart, before anything has been
+         * measured, and for the whole session on a platform that cannot read them. There
+         * is no replay buffer, so whatever the snapshot omits is simply absent until the
+         * next [HostUpdated] arrives.
+         */
+        val hostMetrics: HostMetrics? = null,
     ) : StreamEvent
 
     /**
@@ -29,6 +38,15 @@ sealed interface StreamEvent {
      * identical events differing only in `observed_at` are normal. Replace by id.
      */
     data class ServiceUpdated(val service: Service) : StreamEvent
+
+    /**
+     * A fresh measurement of the machine itself. Replace wholesale.
+     *
+     * Emitted on the agent's own faster ticker rather than with service updates, because
+     * a CPU figure averaged over a service poll interval hides exactly the spike worth
+     * seeing.
+     */
+    data class HostUpdated(val metrics: HostMetrics) : StreamEvent
 
     /** The outcome of an invocation, correlated by [ActionProgress.actionId]. */
     data class ActionOutcome(val progress: ActionProgress) : StreamEvent

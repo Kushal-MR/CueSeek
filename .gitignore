@@ -86,3 +86,9 @@ desktop.ini
 
 # Local scratch: agent doubles, screenshots and test databases used by hand.
 .demo/
+
+# ---------- Local deployment scratch ----------
+# Staging scripts, cross-compiled binaries and device screenshots produced while
+# verifying a phase against the real host. The reusable parts belong in deploy/;
+# what lands here is per-session and names local paths.
+.deploy/

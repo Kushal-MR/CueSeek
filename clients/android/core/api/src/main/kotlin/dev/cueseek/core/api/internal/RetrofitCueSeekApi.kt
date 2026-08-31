@@ -7,6 +7,7 @@ import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Device
 import dev.cueseek.core.model.DeviceId
+import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.Pairing
 import dev.cueseek.core.model.Platform
 import dev.cueseek.core.model.Service
@@ -56,6 +57,22 @@ internal class RetrofitCueSeekApi(
 
     override suspend fun requestRefresh(): ApiResult<Unit> =
         callEmpty { service.requestRefresh() }
+
+    /**
+     * Host metrics, where an absent body is a success rather than a fault.
+     *
+     * [call] would reject the 204 as malformed, because for every other operation a 2xx
+     * without a body means the agent broke its own contract. Here it is the contract: 204
+     * says the request was answered and there is nothing to report.
+     */
+    override suspend fun hostMetrics(): ApiResult<HostMetrics?> = guard {
+        val response = service.hostMetrics()
+        if (!response.isSuccessful) {
+            ApiResult.Failure(response.toApiError(json))
+        } else {
+            ApiResult.Success(response.body()?.toDomain())
+        }
+    }
 
     override suspend fun services(): ApiResult<List<Service>> =
         call({ service.services() }) { services -> services.map { it.toDomain() } }

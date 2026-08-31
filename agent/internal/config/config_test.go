@@ -476,3 +476,60 @@ func TestCredentialsAreOptional(t *testing.T) {
 		t.Error("nothing should have been invented")
 	}
 }
+
+// ---------------------------------------------------------------- host metrics
+
+func TestHostMetricsDefaults(t *testing.T) {
+	// A config that never mentions the host must still measure it. Metrics are the kind
+	// of thing an operator expects to work out of the box, and requiring a block to turn
+	// them on would mean most installs silently have none.
+	cfg, err := Parse([]byte("services: []\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !cfg.Host.Metrics.IsEnabled() {
+		t.Error("host metrics are off by default")
+	}
+	if got := cfg.Host.Metrics.EffectiveInterval(); got != DefaultHostMetricsInterval {
+		t.Errorf("interval = %v, want %v", got, DefaultHostMetricsInterval)
+	}
+}
+
+func TestHostMetricsExplicitlyDisabled(t *testing.T) {
+	// The reason Enabled is a pointer. With a plain bool this config would be
+	// indistinguishable from one that says nothing, and the right default for the two is
+	// opposite.
+	cfg, err := Parse([]byte("host:\n  metrics:\n    enabled: false\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Host.Metrics.IsEnabled() {
+		t.Error("host metrics stayed on after being turned off")
+	}
+}
+
+func TestHostMetricsConfigured(t *testing.T) {
+	cfg, err := Parse([]byte(
+		"host:\n  metrics:\n    interval: 5s\n    storage_mounts: [\"/\", \"/mnt/media\"]\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := cfg.Host.Metrics.EffectiveInterval(); got != 5*time.Second {
+		t.Errorf("interval = %v, want 5s", got)
+	}
+	if len(cfg.Host.Metrics.StorageMounts) != 2 {
+		t.Errorf("storage_mounts = %v", cfg.Host.Metrics.StorageMounts)
+	}
+}
+
+func TestHostMetricsRejectsRelativeMounts(t *testing.T) {
+	// A relative mount is measured against the agent's working directory, which for a
+	// systemd unit is nowhere the operator meant.
+	_, err := Parse([]byte("host:\n  metrics:\n    storage_mounts: [\"media\"]\n"))
+	if err == nil {
+		t.Fatal("a relative storage mount was accepted")
+	}
+	if !strings.Contains(err.Error(), "storage_mounts") {
+		t.Errorf("error does not name the field: %v", err)
+	}
+}

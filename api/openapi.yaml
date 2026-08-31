@@ -108,6 +108,35 @@ paths:
               schema: { $ref: "#/components/schemas/System" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /v1/host/metrics:
+    get:
+      operationId: getHostMetrics
+      tags: [system]
+      summary: The host machine's current vitals
+      description: |
+        The polling equivalent of the stream's `host_updated` event, and what a manual
+        refresh reads so that a pull does not blank values the agent still holds.
+
+        Served from the last collection rather than by measuring on demand, for the same
+        reason service state is served from a cache: a request handler must never wait
+        on the machine it is describing (ADR-0003).
+      x-required-scope: read
+      responses:
+        "200":
+          description: The most recent collection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HostMetrics" }
+        "204":
+          description: |
+            Nothing has been collected. Either the agent started moments ago, metrics are
+            disabled, or this platform cannot read them.
+
+            Empty rather than an error, and rather than a zero-filled body: the request
+            succeeded and there is genuinely nothing to report, which is a different fact
+            from a machine measured and found idle.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /v1/pair:
     post:
       operationId: pairDevice
@@ -464,6 +493,182 @@ components:
           type: string
           format: date-time
           description: When the agent process started.
+
+    HostMetrics:
+      type: object
+      description: |
+        The host machine's own vitals.
+
+        Separate from `System` on purpose. `System` is identity — it is delivered once,
+        at connect, and never changes for the life of the process. These change
+        continuously, so they travel as their own `host_updated` stream event. Putting
+        them inside `System` would have frozen them at the moment the client connected,
+        which on a console whose entire premise is that staleness must be visible is the
+        worst possible failure.
+
+        **Every field but `collected_at` is optional, and absence means "could not
+        read", never zero.** Hardware and kernels differ: a machine may expose no
+        temperature sensors, a container may see no `/proc/stat`, and the first
+        collection after startup has no previous CPU sample to difference against. A
+        client must render nothing for an absent field rather than rendering a zero,
+        which would report an idle CPU on a machine that never answered.
+      required: [collected_at]
+      properties:
+        collected_at:
+          type: string
+          format: date-time
+          description: |
+            When these values were read. Required, because a metric without a clock
+            cannot be judged stale, and every other field here is worthless once it is.
+        uptime_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How long the host has been up.
+        cpu: { $ref: "#/components/schemas/CpuMetrics" }
+        memory: { $ref: "#/components/schemas/MemoryMetrics" }
+        storage:
+          type: array
+          description: |
+            One entry per filesystem the operator asked to be watched.
+
+            Absent means the agent could not read any of them. An empty array means it
+            looked and none were readable — a configured mount that has gone away is
+            information, and it is not the same as never having asked.
+          items: { $ref: "#/components/schemas/StorageMetrics" }
+        thermal:
+          type: array
+          description: |
+            Temperature sensors, where the hardware exposes them.
+
+            Absent means the agent could not enumerate sensors at all. An empty array
+            means it enumerated them and this machine has none worth reporting, which is
+            an ordinary answer on consumer hardware and in virtual machines.
+          items: { $ref: "#/components/schemas/ThermalMetrics" }
+
+    CpuMetrics:
+      type: object
+      description: Processor load. No field is required.
+      properties:
+        usage_percent:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: |
+            Busy time as a percentage over the interval since the previous collection,
+            across all cores.
+
+            **Absent on the first collection after the agent starts**, and that is not a
+            defect. The kernel reports cumulative counters, so utilisation only exists
+            as a difference between two samples; with one sample there is no answer, and
+            zero would be a lie about an idle machine.
+          example: 12.4
+        cores:
+          type: integer
+          minimum: 1
+          description: Logical cores, for reading `load1` against.
+        load1:
+          type: number
+          format: float
+          minimum: 0
+          description: |
+            One-minute load average. Reported alongside `usage_percent` rather than
+            instead of it: load counts processes waiting on disk as well as on CPU, so a
+            machine can be at 4% usage and still be unusable, and only the pair says so.
+        load5:
+          type: number
+          format: float
+          minimum: 0
+        load15:
+          type: number
+          format: float
+          minimum: 0
+
+    MemoryMetrics:
+      type: object
+      description: |
+        Physical memory and swap. No field is required.
+
+        `available_bytes` is the number that matters and is not `total - used`: the
+        kernel's estimate accounts for reclaimable cache, and reporting cache as
+        consumed is the classic way to make a healthy Linux box look like it is out of
+        memory.
+      properties:
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        available_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: What a new process could actually get, per the kernel's estimate.
+        used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total minus available. Present only when both of those are.
+        swap_total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        swap_used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+
+    StorageMetrics:
+      type: object
+      description: One watched filesystem.
+      required: [mount, total_bytes, free_bytes]
+      properties:
+        mount:
+          type: string
+          description: The path the operator configured, verbatim.
+          example: "/"
+        filesystem:
+          type: string
+          description: Device or source backing this mount, when known. Display only.
+          example: "/dev/sda2"
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        free_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Space available to an unprivileged process, which is what the operator can
+            actually use. Deliberately not the raw free count, which includes the
+            reserve only root may spend.
+
+    ThermalMetrics:
+      type: object
+      description: One temperature sensor.
+      required: [label, celsius]
+      properties:
+        label:
+          type: string
+          description: |
+            The sensor's own name, **verbatim and unmapped** — `coretemp Package id 0`,
+            `nvme Composite`, `acpitz`. Deliberately not an enum, for the same reason a
+            transfer's `state` is not: naming is hardware-specific, and a shared
+            vocabulary would either drop sensors or mislabel them.
+          example: "coretemp Package id 0"
+        celsius:
+          type: number
+          format: float
+          description: Current reading.
+          example: 47.5
+        high_celsius:
+          type: number
+          format: float
+          description: |
+            The temperature the hardware itself calls high, when it reports one. Present
+            so a client can say whether a number is bad without hard-coding a threshold
+            for somebody else's silicon.
 
     # --------------------------------------------------------------- pairing
     Scope:
@@ -899,7 +1104,7 @@ components:
     # endpoint today, but if A7 changes the transport they carry over unchanged.
     StreamEventType:
       type: string
-      enum: [snapshot, service_updated, action_progress, heartbeat]
+      enum: [snapshot, service_updated, host_updated, action_progress, heartbeat]
 
     StreamEnvelope:
       type: object
@@ -926,6 +1131,12 @@ components:
         service:
           allOf: [{ $ref: "#/components/schemas/Service" }]
           description: Present when `type` is `service_updated`.
+        host_metrics:
+          allOf: [{ $ref: "#/components/schemas/HostMetrics" }]
+          description: |
+            Present when `type` is `host_updated`, and on a faster cadence than service
+            updates because a CPU figure averaged over a service poll interval hides
+            exactly the spike worth seeing.
         action_progress:
           allOf: [{ $ref: "#/components/schemas/ActionProgress" }]
           description: Present when `type` is `action_progress`.
@@ -941,3 +1152,9 @@ components:
         services:
           type: array
           items: { $ref: "#/components/schemas/Service" }
+        host_metrics:
+          allOf: [{ $ref: "#/components/schemas/HostMetrics" }]
+          description: |
+            The host's vitals as of the last collection. Absent on a platform where the
+            agent cannot read them, and during the first seconds after startup before
+            the first collection has run.

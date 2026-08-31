@@ -48,7 +48,7 @@ without the user maintaining two addresses.
 | M3.3a | On-demand refresh: nudged polls and pull-to-refresh | M3.3 | ✅ verified |
 | M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ verified |
 | M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ✅ verified |
-| M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ⬜ |
+| M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ✅ verified |
 | M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
 | M3.8 | Verification, documentation, ADR closure | all | ⬜ |
 
@@ -259,17 +259,63 @@ the model's null-progress rules, and the mapping's forward tolerance of unknown 
 
 ---
 
-### M3.6 — Host metrics
+### M3.6 — Host metrics ✅ verified
 
 The HP server's own vitals: **CPU usage, memory usage, storage usage, and thermals where
 the hardware exposes them.**
 
-These are not a service capability — they belong to the host. Placement follows the
-existing shape rather than inventing one: `SystemInfo` already carries host identity, so
-metrics extend the system surface rather than pretending to be a service.
+These are not a service capability — they belong to the host, and they are deliberately not
+modelled as a pseudo-service. That would have reused the poller, the cache and the row
+renderer almost for free, and put the machine into the dashboard's own tally, so "two of
+three healthy" would count the computer as one of its own services. It also gets worse with
+time: once M3.7 lands, "restart the host" and "restart Jellyfin" would sit in the same list
+as the same affordance.
 
-Read from `/proc` and `/sys` directly. No new privilege: this is reading, and the agent
-already runs on the machine.
+**Where the original plan was wrong.** This section said metrics "extend the system surface"
+because `SystemInfo` already carries host identity. Right about ownership, silent about
+delivery. `System` is sent twice — once from `GET /v1/system` and once in the snapshot — and
+never again, because nothing in it changes. Metrics change every few seconds, so inside
+`System` a CPU figure would have frozen at the moment the client connected while sitting
+under a live indicator. So metrics travel as their **own `host_updated` stream event**, with
+`host_metrics` on the snapshot and `GET /v1/host/metrics` for clients not holding a stream
+(ADR-0004 Amendment 4).
+
+The read endpoint is not symmetry for its own sake. Without it a manual refresh composes its
+snapshot from REST, carries no metrics, and blanks the vitals off the screen on every pull —
+which would look exactly like the pull having broken something.
+
+**Cadence.** 10s, against the service poll's 30s, on its own goroutine. Nothing in the
+adapter poller applies: no adapter, no upstream timeout, no health, no nudge. And
+utilisation averaged over thirty seconds hides the five-second spike that explains a hot
+machine.
+
+Read from `/proc` and `/sys` directly. No new privilege: those are world-readable, this is
+reading, and the agent already runs on the machine. No polkit change.
+
+**Absent is not zero, harder than in M3.5.** Every field but `collected_at` is optional, and
+`null` and `[]` are distinguished at every layer. Hardware differs more than services do: a
+virtual machine has no sensors, a container may see no usable `/proc/stat`, and **the first
+collection after a restart cannot report utilisation at all** — the kernel counts
+cumulatively, so one sample is not a measurement. Zero would have claimed an idle machine
+nobody measured. The collector takes a baseline sample a second before its first publish so
+that window is one second rather than one interval.
+
+**Client.** A vitals strip under the summary header, reusing the tally's rule motif rather
+than introducing a gauge or a card. Colour only where it means something: memory and storage
+tint at 85% and 95%, thermals against the sensor's **own** reported threshold, and CPU never
+— a processor at 95% is a transcode doing its job, and colouring it would spend the
+attention this palette reserves for decisions.
+
+Stale metrics are **dropped**, not degraded. A service keeps its timestamps through
+staleness because "healthy three minutes ago" is still information; a three-minute-old CPU
+percentage is not, and there is no last-known value worth preserving.
+
+**Tests:** 41 new. Agent — `/proc/stat` differencing including the first-sample, wrapped and
+zero-elapsed cases, `meminfo` parsing and the available-versus-free distinction, hwmon
+labelling and the zero-sentinel, mount unescaping, ordering stability, the nil-versus-empty
+wire encoding, the event fan-out and the 200/204 endpoint. Client — the full mapping
+including 204 and forward tolerance, the live state's replace/clear/drop-on-stale rules, and
+the strip's judgement calls.
 
 ---
 

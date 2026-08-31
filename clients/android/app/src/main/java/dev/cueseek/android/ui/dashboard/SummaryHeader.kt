@@ -33,6 +33,7 @@ import dev.cueseek.core.design.token.CueSeekMotion
 import dev.cueseek.core.design.token.CueSeekType
 import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.Freshness
+import dev.cueseek.core.model.HostMetrics
 import java.time.Duration
 import java.time.Instant
 
@@ -102,6 +103,19 @@ fun SummaryHeader(
             tally = tally,
             now = now,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 11.dp),
+        )
+
+        // Below the provenance line on purpose. The order down this column is the order of
+        // the questions being asked: is anything wrong, can I believe this, and only then
+        // how is the machine itself. Reversing the last two would put a CPU figure above
+        // the line that says whether to trust it.
+        //
+        // Null when stale, which is why nothing here re-checks freshness: the data layer
+        // has already dropped the metrics rather than degraded them, so this simply has
+        // nothing to draw.
+        HostVitals(
+            metrics = state.hostMetrics,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp),
         )
     }
 }
@@ -215,15 +229,60 @@ private fun connectionPhrase(state: AgentState): String =
         dev.cueseek.core.model.StreamStatus.Idle -> "Not connected"
     }
 
-/** The verdict, in the user's terms rather than the system's. */
-private fun verdict(state: AgentState, tally: Tally): String {
+/**
+ * The verdict, in the user's terms rather than the system's.
+ *
+ * Ordered by how definite the problem is, not by subject. Services needing attention come
+ * first because that is what the console is for. **Host pressure comes next, ahead of
+ * unknown services**, and that ordering is the point of it existing: a filesystem at 97% is
+ * a fact somebody has to act on, while `unknown` is the absence of a fact. Before this, a
+ * disk could sit at 97% with its rule drawn red while the headline directly above it read
+ * "All good" — the console being cheerful about the one thing on screen that was not.
+ *
+ * It stops at the headline. The tally rule and the roster stay about services, because a
+ * machine is not one of its own services and counting it as one would make "2 healthy" mean
+ * two different kinds of thing at once (ADR-0004 Amendment 4).
+ */
+internal fun verdict(state: AgentState, tally: Tally): String {
     if (state.freshness.isStale) return "Unverified"
     if (state.services.isEmpty()) return "No services"
+
     val attention = tally.needingAttention
     return when {
-        attention == 0 && tally.unknown == 0 -> "All good"
-        attention == 0 -> "${tally.unknown} unknown"
         attention == 1 -> "1 needs attention"
-        else -> "$attention need attention"
+        attention > 1 -> "$attention need attention"
+        else -> hostConcern(state.hostMetrics)
+            ?: if (tally.unknown > 0) "${tally.unknown} unknown" else "Operational"
     }
 }
+
+/**
+ * What the machine itself is complaining about, or null when it is not.
+ *
+ * Thresholds match the vitals strip exactly rather than being restated, so the headline and
+ * the rule beneath it can never disagree about whether something is wrong — which was the
+ * original defect in a different form.
+ *
+ * Temperature is judged against the sensor's own stated limit, never a number invented here.
+ * CPU is deliberately absent: a processor at 100% is a transcode doing its job, and a
+ * console that announced it would be crying wolf every time somebody watched a film.
+ */
+internal fun hostConcern(metrics: HostMetrics?): String? {
+    if (metrics == null) return null
+
+    val disk = fullest(metrics.storage)?.usedFraction
+    val memory = metrics.memory?.usedFraction
+
+    // Critical first, across both resources, so the worse of the two wins rather than
+    // whichever happens to be checked first.
+    if (disk != null && disk >= CRITICAL) return "Disk almost full"
+    if (memory != null && memory >= CRITICAL) return "Memory almost full"
+
+    if (metrics.thermal?.any { it.isHot } == true) return "Running hot"
+
+    if (disk != null && disk >= PRESSURE) return "Disk filling up"
+    if (memory != null && memory >= PRESSURE) return "Memory under pressure"
+
+    return null
+}
+

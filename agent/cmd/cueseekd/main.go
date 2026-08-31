@@ -28,6 +28,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/Kushal-MR/CueSeek/agent/internal/config"
 	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 	"github.com/Kushal-MR/CueSeek/agent/internal/host"
+	"github.com/Kushal-MR/CueSeek/agent/internal/host/metrics"
 	"github.com/Kushal-MR/CueSeek/agent/internal/store"
 )
 
@@ -160,17 +162,54 @@ func runServe(args []string) error {
 	// state rather than from `unknown`.
 	poller.Start(ctx)
 
+	var hostMetrics sync.WaitGroup
+	startHostMetrics(ctx, cfg, server, &hostMetrics)
+
 	err = server.ListenAndServe(ctx, cfg.Bind)
 
 	// Polling goroutines observe the same cancelled context; waiting for them here means
 	// none is midway through a cache write when the process exits.
 	poller.Wait()
+	hostMetrics.Wait()
 
 	if err != nil {
 		return err
 	}
 	slog.Info("stopped")
 	return nil
+}
+
+// startHostMetrics launches the host vitals collector, or explains why it did not.
+//
+// Both silences are worth breaking. A platform that cannot read /proc and a config that
+// switched collection off produce exactly the same thing on screen — no metrics — and
+// without a line in the journal the operator has no way to tell which happened.
+func startHostMetrics(
+	ctx context.Context, cfg config.Config, server *api.Server, wg *sync.WaitGroup,
+) {
+	if !metrics.Supported {
+		slog.Info("host metrics unavailable on this platform", "platform", runtime.GOOS)
+		return
+	}
+	if !cfg.Host.Metrics.IsEnabled() {
+		slog.Info("host metrics disabled by configuration")
+		return
+	}
+
+	collector := metrics.New(cfg.Host.Metrics.StorageMounts)
+	interval := cfg.Host.Metrics.EffectiveInterval()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		collector.Run(ctx, interval, server.PublishHostMetrics)
+	}()
+
+	mounts := cfg.Host.Metrics.StorageMounts
+	if len(mounts) == 0 {
+		mounts = metrics.DefaultMounts
+	}
+	slog.Info("host metrics started", "interval", interval, "mounts", mounts)
 }
 
 // newUpstreamClient builds the HTTP client every adapter shares.

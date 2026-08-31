@@ -33,7 +33,41 @@ const DefaultPath = "/etc/cueseek/config.yaml"
 type Config struct {
 	Bind     Bind      `yaml:"bind"`
 	Storage  Storage   `yaml:"storage"`
+	Host     Host      `yaml:"host"`
 	Services []Service `yaml:"services"`
+}
+
+// Host configures observation of the machine itself, as opposed to anything running on it.
+type Host struct {
+	// Metrics controls the host vitals the agent reads and publishes.
+	Metrics HostMetrics `yaml:"metrics"`
+}
+
+// HostMetrics configures the CPU, memory, storage and thermal collection.
+type HostMetrics struct {
+	// Enabled turns collection off. Defaults to on.
+	//
+	// A pointer so that "absent" and "false" are distinguishable: with a plain bool, a
+	// config that never mentions metrics would be indistinguishable from one that
+	// deliberately disabled them, and the sensible default for the two is opposite.
+	Enabled *bool `yaml:"enabled"`
+
+	// Interval is how often the host is measured. Defaults to 10s.
+	//
+	// Faster than a service poll on purpose. These are local file reads costing
+	// microseconds rather than network calls to another daemon, and CPU usage averaged
+	// over thirty seconds hides exactly the spike worth seeing — a transcode starting is
+	// a five-second event.
+	Interval time.Duration `yaml:"interval"`
+
+	// StorageMounts are the filesystems to measure, as the operator writes them.
+	//
+	// Configured rather than discovered, because there is no honest way to guess. A box
+	// may keep its media on /mnt/media, /srv, a ZFS dataset or an SMB share, and
+	// enumerating every mounted filesystem would fill the dashboard with loop devices,
+	// tmpfs and container overlays. Defaults to just the root filesystem, which every
+	// machine has and every operator recognises.
+	StorageMounts []string `yaml:"storage_mounts"`
 }
 
 // Bind controls the network address the API listens on.
@@ -259,6 +293,7 @@ func (c Config) Validate() error {
 	var errs []error
 
 	errs = append(errs, c.Bind.validate()...)
+	errs = append(errs, c.Host.Metrics.validate()...)
 
 	if c.Storage.Path == "" {
 		errs = append(errs, errors.New("storage.path must not be empty"))
@@ -280,6 +315,42 @@ func (c Config) Validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// DefaultHostMetricsInterval is how often the host is measured when config says nothing.
+const DefaultHostMetricsInterval = 10 * time.Second
+
+// IsEnabled reports whether host metrics should be collected. On unless turned off.
+func (m HostMetrics) IsEnabled() bool { return m.Enabled == nil || *m.Enabled }
+
+// EffectiveInterval is the configured collection interval, or the default.
+func (m HostMetrics) EffectiveInterval() time.Duration {
+	if m.Interval <= 0 {
+		return DefaultHostMetricsInterval
+	}
+	return m.Interval
+}
+
+func (m HostMetrics) validate() []error {
+	var errs []error
+	if m.Interval < 0 {
+		errs = append(errs, fmt.Errorf(
+			"host.metrics.interval %s must not be negative", m.Interval))
+	}
+	for i, mount := range m.StorageMounts {
+		if mount == "" {
+			errs = append(errs, fmt.Errorf(
+				"host.metrics.storage_mounts[%d] must not be empty", i))
+			continue
+		}
+		if !isAbsPath(mount) {
+			// A relative mount would be measured against the agent's working directory,
+			// which for a systemd unit is nowhere the operator meant.
+			errs = append(errs, fmt.Errorf(
+				"host.metrics.storage_mounts[%d] %q must be absolute", i, mount))
+		}
+	}
+	return errs
 }
 
 // isAbsPath reports whether p is absolute, accepting Unix form on every platform.

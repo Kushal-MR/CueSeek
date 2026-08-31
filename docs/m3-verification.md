@@ -398,3 +398,175 @@ the mapping and not the way in — a renderer can be correct, registered, and un
 - **A library larger than `torrentsFetchLimit` (200)** was not tested. Beyond that `total`
   understates, and the oldest torrents are dropped before ranking.
 - `-race` did not run locally (no cgo on the development machine); CI runs it.
+
+---
+
+## M3.6 — Host metrics ✅
+
+Verified on `kushal-HP-paviliong6` (Ubuntu, kernel 7.0.0-28, 4 cores, 3.8 GiB, one ext4
+root) and the OnePlus CPH2707 over Tailscale, against an agent cross-compiled from the
+uncommitted M3.6 branch and reporting `agent_version=m3.6-uncommitted`.
+
+Driven over SSH with key auth rather than by hand; only the four privileged steps —
+installing the binary, the unit, the config and minting a pairing code — were run by the
+operator.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | Collector starts | `host metrics started interval=10s mounts=[/]` |
+| 2 | `GET /v1/host/metrics` | 200 with cpu, memory, storage, thermal and uptime |
+| 3 | **Memory matches the kernel** | `total_bytes` = 3894936 kB exactly; `available_bytes` tracks `MemAvailable`, not `MemFree` |
+| 4 | **Storage matches `df`** | 490577010688 / 174561456128 bytes, byte-identical to `df -B1 --output=size,avail`, confirming `Bavail` excludes the root reserve |
+| 5 | **CPU tracks real load** | 2–3% idle → **100.00%** with four cores pinned → 1.6% after; `load1` still 1.41 while usage had fallen to 1.58%, which is the pair measuring different things, observed |
+| 6 | Utilisation on the first payload | Present, not absent — the priming sample closes the window to one second |
+| 7 | Thermals, labelled | `coretemp Package id 0` / `Core 0` / `Core 1` at their own 87°C `_max`, plus unlabelled `acpitz` falling back to the chip name |
+| 8 | `_max` preferred over `_crit` | 87 reported, not 105 |
+| 9 | `host_updated` on the stream | Every 10s, interleaved with `service_updated` at 30s and heartbeats at 15s, one monotonic `seq` |
+| 10 | Snapshot carries metrics | `snapshot.host_metrics` present at `seq` 0 |
+| 11 | **Pull-to-refresh does not blank the strip** | Values updated in place; the read endpoint is what makes this true |
+| 12 | **Stale drops the strip entirely** | Wi-Fi off 40s → "Unverified", dashed hairline, "Stream open · no data 40s", services degraded to `unknown` keeping "Last verified 12:05:53" — and no vitals at all |
+| 13 | Dark and light | Both correct; meter tracks and fills legible on each surface |
+| 14 | M3.5 unaffected | Detail sheet still opens from the row body with health, controls, web interface and now-playing |
+
+### Forward compatibility, observed a third time
+
+Before upgrading the phone, the **M3.5 build** was left running against the M3.6 agent for
+several minutes. It stayed live and correct while receiving a `host_updated` event every ten
+seconds that it had never heard of, treating each as `Unrecognised` — traffic that resets
+the freshness clock and renders nothing (ADR-0007). After M3.1's Start action and M3.4's
+whole new service, this is the third time the skew contract has held without a client
+rebuild, and the first time in the direction of a new *event type*.
+
+### Two defects, both found by using it
+
+1. **`ProcSubset=pid` hid the metrics from the agent.** The first live payload carried
+   storage and all four sensors and omitted CPU, memory and uptime. The unit's own
+   hardening mounts `/proc` with `subset=pid`, which hides `/proc/stat`, `/proc/meminfo`,
+   `/proc/loadavg` and `/proc/uptime` — and is exactly why `/proc/self/mounts` still
+   resolved the device name, since that one is per-process. The files are `-r--r--r--`, so
+   permissions were ruled out first.
+
+   The code was not wrong: an unreadable source produced an absent field rather than a
+   fabricated zero, which is the rule this payload is built on. It was the deployment that
+   made the feature useless, and no unit test could have found it because the sandbox does
+   not exist in a test.
+
+   Fixed by `ProcSubset=all` in `deploy/cueseekd.service`, with the cost written into the
+   file. `ProtectProc=invisible` is kept, so other users' processes stay hidden;
+   `/proc/sys` stays read-only and `/proc/kmsg` stays gone. systemd offers no setting
+   between `pid` and `all`.
+
+2. **The footnote wrapped, stranding a word.** "45°C coretemp Core 0" pushed the line to
+   two, leaving "Core 0" alone on the second — while "45°C acpitz" on the same machine
+   fitted. Which sensor is hottest changes minute to minute, so the layout broke and healed
+   on its own, which is the worst kind of defect to meet later. The footnote now shows the
+   chip (`coretemp`) and screen readers still get the full label.
+
+### Follow-up round
+
+Four of the five items below were open after the first pass. Three were closed by testing
+the machine as it is, rather than by inventing hardware it does not have.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 15 | **204 when there is nothing to report** | `enabled: false`, restart → `HTTP 204`, body **0 bytes**, journal says "host metrics disabled by configuration" |
+| 16 | 204 end to end | The strip **left the phone** while collection was off and returned when it was restored — absent rendering as nothing, not as zeroes |
+| 17 | **Two watched filesystems** | `storage_mounts: ["/", "/srv/cueseek-vitals"]`, both reported |
+| 18 | **Fullest wins** | At 0% the strip showed `/` (64%); at 88% it switched to the tmpfs; emptying it switched back |
+| 19 | **Pressure at ≥85%** | 87.5% → amber rule |
+| 20 | **Pressure at ≥95%** | 96.9% → red rule |
+| 21 | Long mount labels | `/srv/cueseek-vitals` ellipsises to `/srv/cues…` and keeps its gap from the value |
+
+The 204 was produced deliberately rather than raced. The natural window on a running agent
+is the one second between the priming sample and the first publish, which is not a thing to
+sit and wait for; switching collection off reaches the same state and is the case an
+operator can actually cause.
+
+The thresholds were crossed on a **64 MB tmpfs** added as a second watched filesystem, not
+by filling the root disk. Reaching 85% of 457 GB means writing about 215 GB to the disk the
+media library lives on, which is slow and genuinely risky for no extra coverage — a tmpfs is
+memory, vanishes on unmount, and crosses the identical code path. It also closed the
+multiple-mounts and fullest-wins items, which one filesystem could never have exercised.
+
+### Two more defects from the follow-up
+
+7. **The vitals footnote belonged to nothing.** Uptime, load and temperature sat in one
+   full-width dot-separated line under a three-column grid, aligned to none of it. Each
+   column now carries its own second line — `load 0.1 of 4`, `3.1 GB free`, `175 GB free` —
+   and only the two host-level facts remain, anchored left and right the way the provenance
+   line above them is.
+
+   The storage value became a percentage in the same change. It read "175 GB free" above a
+   two-thirds-full bar, which made the one column most likely to matter the only one whose
+   number and rule disagreed. Free bytes moved to the line beneath.
+
+8. **A long mount label ran into its value**, rendering `/srv/cuese…88%` with no gap. Found
+   the moment a mount point longer than `/` existed.
+
+9. **The strip kept changing which sensor it was talking about.** `acpitz` (a chassis sensor
+   with no stated limit) and `coretemp` (the CPU, limit 87°C) sit within a few degrees on
+   this machine and traded places minute to minute, so picking the hottest made the label
+   flicker between unrelated hardware while nothing was happening. It now ranks by how close
+   each sensor is to **its own** limit and prefers sensors that state one — which is both
+   the more useful question and, on ordinary hardware, a stable answer.
+
+10. **"load 0.1 of 4" read as cores in use.** It is not: load average counts processes
+    waiting to run or blocked on disk, can exceed the core count, and is a different
+    measurement from the percentage above it — which is why both are shown. Now "0 queued",
+    with the core count moved under the CPU meter where it reads as capacity.
+
+11. **The host line was not on the grid.** Uptime and temperature spanned the full width
+    anchored to opposite edges, so uptime sat under one column's left edge and the
+    temperature against the screen edge — nothing lined up with anything and the line read
+    as overflow. Both now sit in grid cells, left-aligned like the detail lines above them.
+
+### Not claimed
+
+- **No machine without sensors was tested.** The empty-versus-absent thermal distinction is
+  asserted by tests only. This hardware has four working sensors and there is no honest way
+  to remove them — pointing the collector at a fake `/sys` would be a worse unit test, not a
+  real-device one.
+- **Memory pressure was never crossed on real readings.** Deliberately: `pressureTint` is
+  one function shared by memory and storage, so item 19 and item 20 exercise the same code.
+  Filling 3.8 GB of RAM on a box running Jellyfin and qBittorrent risks the OOM killer
+  taking a real service for no additional coverage.
+- **A single sensor reading above its own `high_celsius`** has not been seen, so "Running
+  hot" and the hot colour on the temperature are unit-tested only. This machine idles around
+  45°C against an 87°C limit, and heating a laptop past 87°C to watch a label change is not
+  a test worth running.
+- **"Memory almost full" and "Memory under pressure"** were not seen on real readings, for
+  the reason given above: they are the same `hostConcern` branch as the disk, and filling
+  3.8 GB of RAM risks the OOM killer taking a real service.
+- The `m36-probe` device (scope `read`) is still paired and its token is in `/tmp` on the
+  host, which clears at reboot.
+
+### Decided, not deferred
+
+A filesystem at 97% turned its rule red while the headline above it still read "All good" —
+the console being cheerful about the one thing on screen that was not. **Host pressure now
+reaches the headline and stops there**: the verdict says "Disk almost full", while the tally
+rule and the roster stay about services, because a machine is not one of its own services.
+
+Ranked above `unknown` services on purpose. A filesystem at 97% is a fact somebody has to
+act on; `unknown` is the absence of a fact. Services genuinely needing attention still
+outrank both. CPU is deliberately never a complaint — a processor at 100% is a transcode
+doing its job, and announcing it would cry wolf every time somebody watched a film.
+
+The thresholds are now one pair of constants shared by the headline and the rule, rather
+than two copies of 0.85, so the two can never disagree about whether something is wrong —
+which is the same defect in a different form.
+
+Verified on the phone against the same tmpfs:
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 22 | Headline at ≥85% | "Disk filling up", beside an amber rule |
+| 23 | Headline at ≥95% | "Disk almost full", beside a red rule |
+| 24 | Headline and rule agree | Both crossed on the same reading, which is what sharing the constants buys |
+| 25 | It recovers | Emptying the filesystem returned the headline to "Operational" and the strip to `/` — the state is derived, not latched |
+| 26 | Services are untouched | Tally stayed fully green and "✓ 2" throughout, and both rows stayed "Running" |
+
+Two words changed with it: the healthy verdict is **"Operational"** rather than "All good",
+and service rows read **"Running"** rather than "Healthy". Display labels only — the
+contract's `healthy` / `degraded` / `unreachable` / `unknown` vocabulary is public API and
+did not move.

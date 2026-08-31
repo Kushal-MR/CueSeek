@@ -92,6 +92,15 @@ type Server struct {
 	// wait for them instead of killing an in-flight restart's bookkeeping.
 	background sync.WaitGroup
 
+	// hostMetrics is the most recent collection, or nil before the first one.
+	//
+	// Held here rather than in the adapter cache because it is not an adapter's: the
+	// cache is keyed by service id and every entry in it has health and actions, none of
+	// which a machine has in the same sense. Guarded by its own mutex so a collection
+	// never contends with a service poll.
+	hostMetrics   *domain.HostMetrics
+	hostMetricsMu sync.RWMutex
+
 	requirements requirements
 	pairLimiter  *rateLimiter
 

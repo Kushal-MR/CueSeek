@@ -15,6 +15,7 @@
 
 package dev.cueseek.core.api.wire
 
+import dev.cueseek.core.api.wire.HostMetrics
 import dev.cueseek.core.api.wire.Service
 import dev.cueseek.core.api.wire.System
 
@@ -27,6 +28,7 @@ import kotlinx.serialization.Contextual
  *
  * @param system 
  * @param services 
+ * @param hostMetrics The host's vitals as of the last collection. Absent on a platform where the agent cannot read them, and during the first seconds after startup before the first collection has run. 
  */
 @Serializable
 
@@ -36,7 +38,11 @@ data class Snapshot (
     val system: System,
 
     @SerialName(value = "services")
-    val services: kotlin.collections.List<Service>
+    val services: kotlin.collections.List<Service>,
+
+    /* The host's vitals as of the last collection. Absent on a platform where the agent cannot read them, and during the first seconds after startup before the first collection has run.  */
+    @SerialName(value = "host_metrics")
+    val hostMetrics: HostMetrics? = null
 
 ) {
 

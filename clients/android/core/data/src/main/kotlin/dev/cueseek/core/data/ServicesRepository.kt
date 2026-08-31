@@ -3,6 +3,7 @@ package dev.cueseek.core.data
 import dev.cueseek.core.model.ActionAcceptance
 import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
+import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.StreamEvent
@@ -57,8 +58,11 @@ class ServicesRepository(
      * first. A capability added later rides along without touching this: it is already
      * inside `services`.
      *
-     * Both calls must succeed. A snapshot missing half of itself is not a snapshot, and
-     * applying one would replace the roster wholesale with a partial truth.
+     * The system and services calls must both succeed. A snapshot missing half of itself is
+     * not a snapshot, and applying one would replace the roster wholesale with a partial
+     * truth. Host metrics are the exception and are allowed to fail: they are one row of
+     * the screen rather than the screen, and losing them is no reason to refuse a refresh
+     * that otherwise worked.
      *
      * Note what this does *not* do: it does not make the agent poll upstream. Requests are
      * served from the agent's cache by design (ADR-0003), so this returns what the agent
@@ -68,6 +72,7 @@ class ServicesRepository(
     suspend fun snapshot(host: PairedHost): ApiResult<StreamEvent.Snapshot> = coroutineScope {
         val system = async { system(host) }
         val services = async { services(host) }
+        val metrics = async { hostMetrics(host) }
 
         when (val systemResult = system.await()) {
             is ApiResult.Failure -> ApiResult.Failure(systemResult.error)
@@ -77,11 +82,32 @@ class ServicesRepository(
                     StreamEvent.Snapshot(
                         system = systemResult.value,
                         services = servicesResult.value,
+                        // Read here rather than left out, because a snapshot replaces
+                        // state wholesale: omitting metrics would make every manual
+                        // refresh blank the machine's vitals until the next tick, which
+                        // would look exactly like a pull having broken something.
+                        //
+                        // Unlike the other two, a failure here is not fatal. Metrics are
+                        // one part of the screen; the services are the screen, and losing
+                        // the CPU row is no reason to refuse a refresh that otherwise
+                        // worked. The null it falls back to says "not known", which is
+                        // the truth in that case.
+                        hostMetrics = (metrics.await() as? ApiResult.Success)?.value,
                     )
                 )
             }
         }
     }
+
+    /**
+     * The host's vitals, or null when the agent has none to report.
+     *
+     * Null is a successful answer: an agent that started seconds ago, has metrics turned
+     * off, or runs on a platform that cannot read them all answer 204. Only a transport or
+     * authorisation failure is an [ApiResult.Failure].
+     */
+    suspend fun hostMetrics(host: PairedHost): ApiResult<HostMetrics?> =
+        withApi(host) { it.hostMetrics() }
 
     /**
      * Invokes an action, returning the agent's acknowledgement.

@@ -22,6 +22,18 @@ data class AgentState(
     val status: StreamStatus,
     val freshness: Freshness,
     /**
+     * The machine's own vitals, or null when there are none to show.
+     *
+     * Null in three cases that a screen treats identically and should: nothing has arrived
+     * yet, the agent cannot measure this host, and — the one worth naming — [freshness] has
+     * gone stale. Services degrade to `unknown` in that situation and keep their
+     * timestamps, because "it was healthy three minutes ago" is still useful. A CPU
+     * percentage from three minutes ago is not: it changes every few seconds, there is no
+     * last-known value worth preserving, and leaving one on screen under a live-looking
+     * layout would be exactly the confident wrongness this client is built to avoid.
+     */
+    val hostMetrics: HostMetrics? = null,
+    /**
      * Terminal action outcomes seen on the current connection, newest last, bounded.
      *
      * The stream is the only delivery mechanism — there is no endpoint to ask an action
