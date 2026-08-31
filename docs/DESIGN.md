@@ -317,10 +317,18 @@ progress so releasing early visibly abandons it. Effort in proportion to consequ
 same verbs three times, and a second entry point to a destructive action is a second thing
 to keep gated correctly forever.
 
-**Host vitals strip** (M3.6). CPU, memory and the fullest filesystem, as three labelled 8dp
-rules under the provenance line, with uptime, load and the hottest sensor as a footnote. The
-same rule motif as the tally, at the same height, because the screen has already taught what
-a rule means — proportion, nothing else. Not a card: the roster is the one substantial
+**Host vitals strip** (M3.6). A **3×3 grid**: CPU, memory and the fullest filesystem as
+three columns, each with a label and percentage, an 8dp rule, the absolute figure beneath it,
+and a machine-level fact on the last row — uptime, load, temperature. Everything left-aligns
+within its column except the percentage, which anchors right.
+
+The grid is the correction, not the starting point. The first version put the absolute
+numbers in one full-width dot-separated line under a three-column row, which belonged to
+none of the columns and read as text that had overflowed. Alignment is what turns a row of
+numbers into a table somebody trusts.
+
+The same rule motif as the tally, at the same height, because the screen has already taught
+what a rule means — proportion, nothing else. Not a card: the roster is the one substantial
 object on screen, and a second surface would flatten the hierarchy the header exists to make.
 
 Its position down the column is the order of the questions: is anything wrong, can I believe
@@ -333,6 +341,14 @@ tinted** — a processor at 95% is a transcode doing its job, and colouring it w
 attention this palette reserves for decisions. Temperature is judged against the sensor's
 *own* reported threshold rather than a number this app invented, so a laptop CPU and an NVMe
 drive at the same 85°C are read differently, correctly.
+
+**Words are chosen so they cannot be misread.** "load 0.1 of 4" was replaced because it
+read as cores in use, which load average is not — it counts processes waiting to run or
+blocked on disk and can exceed the core count, which is exactly why it appears next to a
+percentage rather than instead of one. The temperature shows the sensor **closest to its own
+stated limit**, not the hottest: on real hardware a chassis sensor and a CPU sensor sat a few
+degrees apart and traded places minute to minute, so the strip kept changing what it was
+talking about while nothing was happening.
 
 **Nothing absent is drawn.** No placeholder, no dash, no empty meter. A machine with no
 sensors shows no footnote; a first collection with no CPU figure shows two meters rather

@@ -343,16 +343,26 @@ internal fun mostConcerning(sensors: List<ThermalMetrics>?): ThermalMetrics? {
 }
 
 /**
+ * When a filling resource starts to matter.
+ *
+ * Shared with the headline rather than restated there, so the verdict and the rule beneath
+ * it cannot disagree about whether something is wrong. Two separate copies of 0.85 was the
+ * original "All good over a red rule" defect waiting to happen a second time.
+ */
+internal const val PRESSURE = 0.85f
+internal const val CRITICAL = 0.95f
+
+/**
  * The colour of a filling resource.
  *
- * Nothing until 85%, and only then. Memory and disk differ from CPU in that filling them up
- * is a state somebody has to act on rather than a machine doing its job, but a box sitting
- * at 70% is entirely normal and colouring it would spend attention on nothing.
+ * Nothing until [PRESSURE], and only then. Memory and disk differ from CPU in that filling
+ * them up is a state somebody has to act on rather than a machine doing its job, but a box
+ * sitting at 70% is entirely normal and colouring it would spend attention on nothing.
  */
 @Composable
 private fun pressureTint(fraction: Float): Color? = when {
-    fraction >= 0.95f -> CueSeekStatus.colors.unreachable
-    fraction >= 0.85f -> CueSeekStatus.colors.degraded
+    fraction >= CRITICAL -> CueSeekStatus.colors.unreachable
+    fraction >= PRESSURE -> CueSeekStatus.colors.degraded
     else -> null
 }
 

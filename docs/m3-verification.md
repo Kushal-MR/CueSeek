@@ -536,10 +536,23 @@ multiple-mounts and fullest-wins items, which one filesystem could never have ex
 - The `m36-probe` device (scope `read`) is still paired and its token is in `/tmp` on the
   host, which clears at reboot.
 
-### One thing worth deciding later
+### Decided, not deferred
 
-A filesystem at 97% turns its rule red while the headline still reads **"All good"** and the
-tally still counts two healthy services. Both are correct as specified — the verdict is
-about services, and a full disk is not a service being down — but an operations console
-arguably should say so at the top. Changing it means letting host state feed the fleet
-verdict, which is a real design decision rather than a bug fix. Left for M3.8.
+A filesystem at 97% turned its rule red while the headline above it still read "All good" —
+the console being cheerful about the one thing on screen that was not. **Host pressure now
+reaches the headline and stops there**: the verdict says "Disk almost full", while the tally
+rule and the roster stay about services, because a machine is not one of its own services.
+
+Ranked above `unknown` services on purpose. A filesystem at 97% is a fact somebody has to
+act on; `unknown` is the absence of a fact. Services genuinely needing attention still
+outrank both. CPU is deliberately never a complaint — a processor at 100% is a transcode
+doing its job, and announcing it would cry wolf every time somebody watched a film.
+
+The thresholds are now one pair of constants shared by the headline and the rule, rather
+than two copies of 0.85, so the two can never disagree about whether something is wrong —
+which is the same defect in a different form.
+
+Two words changed with it: the healthy verdict is **"Operational"** rather than "All good",
+and service rows read **"Running"** rather than "Healthy". Display labels only — the
+contract's `healthy` / `degraded` / `unreachable` / `unknown` vocabulary is public API and
+did not move.

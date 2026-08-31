@@ -60,12 +60,16 @@ fun statusStyle(status: HealthStatus, stale: Boolean = false): StatusStyle {
         )
     }
 
+    // These are display labels, not the contract's vocabulary. `healthy`, `degraded`,
+    // `unreachable` and `unknown` are public API and do not move (ADR-0005); what a phone
+    // draws over them is this app's business, and "Running" is the word an operator would
+    // use about a service on their own machine.
     return when (status) {
         HealthStatus.Healthy -> StatusStyle(
             icon = CueSeekIcons.Check,
             content = c.healthy,
             container = c.healthyContainer,
-            label = "Healthy",
+            label = "Running",
             verified = true,
         )
 
