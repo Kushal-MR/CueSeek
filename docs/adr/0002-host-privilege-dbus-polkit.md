@@ -96,3 +96,68 @@ when the unit is inactive, and Stop only when it is active. The list is derived 
 `host.UnitState` on each poll and shipped in `Service.actions`, so clients continue to
 render what they are given and gain no new branching. This costs nothing on the wire —
 actions were always data.
+
+### Amendment 2 — 2026-08-31: the ceiling widens to reboot and power off
+
+**What changed.** The agent may now call `Reboot` and `PowerOff` on
+`org.freedesktop.login1`, and the shipped polkit rule grants the four corresponding actions
+that were written and commented out when this ADR was first accepted. The dormant
+`host.power` scope, which has existed since M1 and guarded nothing, is now the thing that
+authorises them.
+
+**Why now, and not earlier.** The rule file's own comment states the reason it was disabled:
+
+> granting a service permission to reboot a machine it cannot ask to reboot is a standing
+> risk with no benefit
+
+That sentence stops being true the moment there is a code path, and not before. M0 proved
+the mechanism works — an unprivileged, session-less `cueseek` genuinely rebooted the target
+host — so nothing here is being discovered, only connected.
+
+**All four actions or none.** `reboot`, `power-off`, and the `-multiple-sessions` variant of
+each. logind consults the second form when another user is logged in, so a rule granting
+only the first works perfectly for the operator testing it alone and fails the day somebody
+is at the console. That is a failure mode which appears late, on someone else's machine, and
+looks like a permissions bug rather than a missing line.
+
+**What this costs, stated plainly.** Every previous grant was bounded by "the damage is one
+reboot". This one is the reboot. Two properties that held for service control do not hold
+here:
+
+1. **There is no allowlist to bound it.** A unit grant is scoped to named units; a power
+   grant has no target narrower than the machine.
+2. **Power off is not self-healing, and not reversible from the phone.** A reboot returns on
+   its own. A power-off requires physical access to undo, so a stolen `host.power` token can
+   take the machine off the network until somebody walks to it.
+
+Four things bound that, and only the last is new:
+
+1. **`host.power` is a separate scope**, granted per device and never by default.
+   `cueseekd pair` defaults to `read,service.control`, and printed a warning about this
+   grant before anything could use it.
+2. **Scope is enforced in the agent**, not in the client. A token without `host.power` is
+   refused by the API regardless of what UI produced the request.
+3. **`destructive` risk**, routing both actions to the client's press-and-hold confirmation
+   rather than a tap. Carried on the wire, so it holds for clients written later.
+4. **The confirmation names what is currently happening on the machine.** The agent already
+   knows there is a transcode running or a torrent mid-download (M3.5), and a console that
+   holds that information and does not mention it while asking about a power-off is wasting
+   the one thing it is uniquely placed to say.
+
+**What was considered and rejected.**
+
+*A fourth risk level above `destructive`.* Powering off is genuinely more consequential than
+stopping a service — a stop is undone from the same screen, a power-off is undone by walking
+across the room. But the risk vocabulary is public API shared with clients that already
+exist, and adding a level to express one distinction would force every client to handle a
+value it has no interaction for. The consequence is stated in the confirmation copy instead,
+which is where a user actually reads it.
+
+*Refusing the action while something is in flight.* Rejected. The operator owns the machine
+and may have very good reasons to power it off mid-transcode. Blocking would make the tool
+argue with the person it exists to serve; naming the consequence respects them and still
+prevents the accident.
+
+*`suspend` and `hibernate`.* Absent, and left absent. A suspended host is unreachable over
+the tailnet and cannot be woken by the thing that suspended it, which turns a remote console
+into a way to lock yourself out.

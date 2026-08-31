@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 )
 
 // These tests run on every platform, including Windows, because they exercise the policy
@@ -27,6 +29,10 @@ type fakeBackend struct {
 	stateErr   error
 	state      UnitState
 	results    chan string
+
+	powerCalls    []string
+	powerErr      error
+	powerDisabled bool
 }
 
 func newFakeBackend() *fakeBackend {
@@ -39,6 +45,18 @@ func (f *fakeBackend) StartUnit(_ context.Context, unit string) (*Job, error) {
 		return nil, f.restartErr
 	}
 	return newJob(1, unit, f.results), nil
+}
+
+func (f *fakeBackend) SupportsPower() bool { return !f.powerDisabled }
+
+func (f *fakeBackend) Reboot(_ context.Context) error {
+	f.powerCalls = append(f.powerCalls, "reboot")
+	return f.powerErr
+}
+
+func (f *fakeBackend) PowerOff(_ context.Context) error {
+	f.powerCalls = append(f.powerCalls, "power-off")
+	return f.powerErr
 }
 
 func (f *fakeBackend) StopUnit(_ context.Context, unit string) (*Job, error) {
@@ -514,5 +532,90 @@ func TestStartAndStopReachBackendForManagedUnit(t *testing.T) {
 	}
 	if len(backend.stopCalls) != 1 || backend.stopCalls[0] != "jellyfin.service" {
 		t.Errorf("stopCalls = %v", backend.stopCalls)
+	}
+}
+
+// ---------------------------------------------------------------- power
+
+func TestPowerActionsAreOfferedAndInvoked(t *testing.T) {
+	backend := newFakeBackend()
+	c, err := NewWithBackend(backend, []string{"jellyfin.service"})
+	if err != nil {
+		t.Fatalf("NewWithBackend: %v", err)
+	}
+
+	actions := c.PowerActions()
+	if len(actions) != 2 {
+		t.Fatalf("PowerActions = %v, want reboot and power-off", actions)
+	}
+	for _, a := range actions {
+		if a.Risk != domain.RiskDestructive {
+			t.Errorf("%s is %q, want destructive — both require press-and-hold", a.ID, a.Risk)
+		}
+		if a.Description == "" {
+			t.Errorf("%s has no description; the consequence is why a reader pauses", a.ID)
+		}
+	}
+
+	if err := c.InvokePower(context.Background(), ActionReboot); err != nil {
+		t.Fatalf("InvokePower(reboot): %v", err)
+	}
+	if err := c.InvokePower(context.Background(), ActionPowerOff); err != nil {
+		t.Fatalf("InvokePower(power-off): %v", err)
+	}
+	if got := strings.Join(backend.powerCalls, ","); got != "reboot,power-off" {
+		t.Errorf("backend calls = %q", got)
+	}
+}
+
+// TestPowerOffSaysItCannotBeUndone guards the one sentence that separates this action from
+// every other one in the app. A reboot returns on its own; this needs somebody in the room.
+func TestPowerOffSaysItCannotBeUndone(t *testing.T) {
+	c, err := NewWithBackend(newFakeBackend(), nil)
+	if err != nil {
+		t.Fatalf("NewWithBackend: %v", err)
+	}
+	for _, a := range c.PowerActions() {
+		if a.ID != ActionPowerOff {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(a.Description), "physically") {
+			t.Errorf("power-off description does not mention physical access: %q", a.Description)
+		}
+		return
+	}
+	t.Fatal("power-off was not offered")
+}
+
+// TestUnsupportedPlatformOffersNoPowerActions is what stops a client drawing buttons that
+// cannot work. Empty, not an error: the agent is fine, the machine simply cannot be asked.
+func TestUnsupportedPlatformOffersNoPowerActions(t *testing.T) {
+	backend := newFakeBackend()
+	backend.powerDisabled = true
+	c, err := NewWithBackend(backend, nil)
+	if err != nil {
+		t.Fatalf("NewWithBackend: %v", err)
+	}
+	if got := c.PowerActions(); len(got) != 0 {
+		t.Errorf("PowerActions = %v, want none", got)
+	}
+	if c.SupportsPower() {
+		t.Error("SupportsPower is true on a backend that said otherwise")
+	}
+}
+
+func TestUnknownPowerActionIsRejected(t *testing.T) {
+	backend := newFakeBackend()
+	c, err := NewWithBackend(backend, nil)
+	if err != nil {
+		t.Fatalf("NewWithBackend: %v", err)
+	}
+	// Distinct from an authorisation failure: the caller may be perfectly entitled to
+	// power the machine off and have asked for something that does not exist.
+	if err := c.InvokePower(context.Background(), "suspend"); !errors.Is(err, ErrUnknownPowerAction) {
+		t.Errorf("error = %v, want ErrUnknownPowerAction", err)
+	}
+	if len(backend.powerCalls) != 0 {
+		t.Errorf("an unknown action reached the backend: %v", backend.powerCalls)
 	}
 }

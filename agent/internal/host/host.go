@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Kushal-MR/CueSeek/agent/internal/domain"
 )
 
 // Errors returned by this package. Callers should compare with errors.Is rather than
@@ -29,6 +31,11 @@ var (
 
 	// ErrUnsupportedPlatform is returned by every operation on non-Linux builds.
 	ErrUnsupportedPlatform = errors.New("host control requires a systemd-based Linux host")
+
+	// ErrUnknownPowerAction means the id is not one this agent offers. Distinct from an
+	// authorisation failure: the caller may be perfectly entitled to power the machine
+	// off and simply have asked for something that does not exist.
+	ErrUnknownPowerAction = errors.New("unknown host power action")
 )
 
 // UnitState is a point-in-time view of a systemd unit.
@@ -139,6 +146,25 @@ type Backend interface {
 	// widened ceiling and what bounds it.
 	StartUnit(ctx context.Context, unit string) (*Job, error)
 	StopUnit(ctx context.Context, unit string) (*Job, error)
+
+	// Reboot and PowerOff act on the machine itself, through logind.
+	//
+	// Neither returns a job, and neither has a meaningful success value: the only
+	// answer they can deliver is a failure, because a call that worked takes the process
+	// with it before it can return. Callers must treat a nil error as "accepted", not as
+	// "done" (ADR-0002 Amendment 2).
+	//
+	// PowerOff is the first grant in this package that is not undoable from a phone. A
+	// reboot comes back on its own; recovering from a power-off needs somebody in the
+	// same room as the machine.
+	Reboot(ctx context.Context) error
+	PowerOff(ctx context.Context) error
+
+	// SupportsPower reports whether this platform can do the two above at all.
+	//
+	// Asked rather than inferred from an error, so an agent on an unsupported platform
+	// advertises no power actions instead of offering buttons that fail when pressed.
+	SupportsPower() bool
 
 	// Platform names the implementation, for logs and diagnostics.
 	Platform() string
@@ -262,6 +288,66 @@ func (c *Controller) StopUnit(ctx context.Context, unit string) (*Job, error) {
 		return nil, err
 	}
 	return c.backend.StopUnit(ctx, unit)
+}
+
+// ---------------------------------------------------------------- power
+
+// Power action ids. Public API: a client keys its confirmation copy on them, so renaming
+// one silently changes what an older build shows before it powers a machine off.
+const (
+	ActionReboot   = "reboot"
+	ActionPowerOff = "power-off"
+)
+
+// PowerActions is what this agent offers for the machine itself.
+//
+// Empty rather than absent on a platform that cannot perform them, so a client renders
+// nothing instead of buttons that fail when held. Both are `destructive`, which routes
+// them to the client's press-and-hold confirmation.
+//
+// Both carry the *consequence* in the description rather than a restatement of the verb.
+// "Reboot the host" tells a reader nothing they did not get from the label; what they
+// need at the moment of deciding is what it costs and whether they can undo it.
+func (c *Controller) PowerActions() []domain.Action {
+	if !c.backend.SupportsPower() {
+		return nil
+	}
+	return []domain.Action{
+		{
+			ID:          ActionReboot,
+			Label:       "Restart machine",
+			Description: "Everything on this machine stops and comes back in a minute or two.",
+			Risk:        domain.RiskDestructive,
+		},
+		{
+			ID:    ActionPowerOff,
+			Label: "Shut down machine",
+			// The only action in CueSeek that cannot be undone from the phone, and the
+			// description says so plainly rather than leaving the user to work it out.
+			Description: "The machine turns off and stays off. " +
+				"Turning it back on needs someone physically there.",
+			Risk: domain.RiskDestructive,
+		},
+	}
+}
+
+// SupportsPower reports whether power actions exist on this platform at all.
+func (c *Controller) SupportsPower() bool { return c.backend.SupportsPower() }
+
+// InvokePower performs a power action by id.
+//
+// A nil error means logind accepted the request, **not** that the machine has rebooted.
+// There is no way to observe the latter from inside the process about to be ended, which
+// is why callers acknowledge before they call this rather than after.
+func (c *Controller) InvokePower(ctx context.Context, action string) error {
+	switch action {
+	case ActionReboot:
+		return c.backend.Reboot(ctx)
+	case ActionPowerOff:
+		return c.backend.PowerOff(ctx)
+	default:
+		return fmt.Errorf("%w: %q", ErrUnknownPowerAction, action)
+	}
 }
 
 // Close releases the backend's resources.
