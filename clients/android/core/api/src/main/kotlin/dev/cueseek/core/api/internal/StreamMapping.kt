@@ -24,10 +24,15 @@ internal fun WireEnvelope.toDomain(frameType: String?): StreamEnvelope {
             StreamEvent.Snapshot(
                 system = it.system.toDomain(),
                 services = it.services.map { service -> service.toDomain() },
+                // Nullable all the way through: an agent that has not measured the host
+                // yet, or cannot, says nothing rather than sending an empty object.
+                hostMetrics = it.hostMetrics?.toDomain(),
             )
         }
 
         "service_updated" -> service?.let { StreamEvent.ServiceUpdated(it.toDomain()) }
+
+        "host_updated" -> hostMetrics?.let { StreamEvent.HostUpdated(it.toDomain()) }
 
         "action_progress" -> actionProgress?.let { StreamEvent.ActionOutcome(it.toDomain()) }
 

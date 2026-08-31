@@ -43,6 +43,38 @@ storage:
   # pair again — which is also the recovery route if you lose every token.
   path: /var/lib/cueseek/cueseek.db
 
+# ---------------------------------------------------------------- host
+#
+# The machine itself, as opposed to anything running on it. This whole block is
+# optional and every value below is its default — delete it and nothing changes.
+#
+# No privilege is involved. These come from /proc and /sys, which are readable by
+# any user, so unlike service restarts there is no polkit rule behind them.
+host:
+  metrics:
+    # Turn the whole thing off. Metrics are on by default.
+    enabled: true
+
+    # How often the machine is measured.
+    #
+    # Faster than a service poll on purpose: these are local file reads costing
+    # microseconds, not network calls, and CPU usage averaged over thirty seconds
+    # hides the spike worth seeing — a transcode starting is a five-second event.
+    interval: 10s
+
+    # Which filesystems to report, written the way you would type them.
+    #
+    # Configured rather than discovered because there is no honest guess: your
+    # media may live on /mnt/media, /srv, a ZFS dataset or nothing at all, and
+    # listing every mounted filesystem would fill the screen with loop devices,
+    # tmpfs and container overlays. Add the ones you would actually check:
+    #
+    #   storage_mounts: ["/", "/mnt/media"]
+    #
+    # Paths must be absolute. A mount that has gone away is simply not reported,
+    # rather than reported as a full disk.
+    storage_mounts: ["/"]
+
 # ---------------------------------------------------------------- services
 #
 # Each entry is one managed service. `type` selects the adapter implementation;

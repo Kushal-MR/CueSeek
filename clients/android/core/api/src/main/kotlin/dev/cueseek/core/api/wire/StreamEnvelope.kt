@@ -16,6 +16,7 @@
 package dev.cueseek.core.api.wire
 
 import dev.cueseek.core.api.wire.ActionProgress
+import dev.cueseek.core.api.wire.HostMetrics
 import dev.cueseek.core.api.wire.Service
 import dev.cueseek.core.api.wire.Snapshot
 
@@ -32,6 +33,7 @@ import kotlinx.serialization.Contextual
  * @param schemaVersion Version of the event payload schema.
  * @param snapshot 
  * @param service Present when `type` is `service_updated`.
+ * @param hostMetrics Present when `type` is `host_updated`, and on a faster cadence than service updates because a CPU figure averaged over a service poll interval hides exactly the spike worth seeing. 
  * @param actionProgress Present when `type` is `action_progress`.
  */
 @Serializable
@@ -58,6 +60,10 @@ data class StreamEnvelope (
     /* Present when `type` is `service_updated`. */
     @SerialName(value = "service")
     val service: Service? = null,
+
+    /* Present when `type` is `host_updated`, and on a faster cadence than service updates because a CPU figure averaged over a service poll interval hides exactly the spike worth seeing.  */
+    @SerialName(value = "host_metrics")
+    val hostMetrics: HostMetrics? = null,
 
     /* Present when `type` is `action_progress`. */
     @SerialName(value = "action_progress")

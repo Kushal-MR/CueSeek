@@ -177,3 +177,50 @@ first.
 enforcement, reads-as-stream and writes-as-async-RPC. The contract still cannot disagree
 with any client about shapes; a generator simply stopped being the way that guarantee is
 obtained for the parts where it was buying nothing.
+
+### Amendment 4 — 2026-08-31: the stream carries the host, not only its services
+
+**What changed.** The stream's event vocabulary gains a fourth type, `host_updated`, and
+`Snapshot` gains an optional `host_metrics`. A new `HostMetrics` schema carries CPU,
+memory, storage and thermal readings, and `GET /v1/host/metrics` serves the same payload for
+clients that are not holding a stream.
+
+**Why not on `System`.** M3's plan placed host metrics on the system surface, reasoning that
+`SystemInfo` already carries host identity. That is right about ownership and silent about
+delivery, and delivery is where it breaks. `System` is sent exactly twice — once from
+`GET /v1/system`, once as `snapshot.system` at the moment a stream opens — because nothing
+in it changes for the life of the process. Metrics change every few seconds. Inside `System`
+a CPU figure would have been correct for one second and then frozen until the client
+reconnected, sitting under a live heartbeat indicator claiming to be current. On a console
+whose entire premise is that staleness must be visible (Amendment 2), that is the worst
+available outcome, and it would have been invisible in every test that did not wait.
+
+**Why not a pseudo-service.** Modelling the host as a service would have reused the poller,
+the cache, the capability registry and the row renderer, for a fraction of the code. It was
+rejected because it lies about the domain in a way the UI then has to work around: the host
+would appear in the roster and the tally, so "two of three healthy" would count the computer
+as one of its own services, against ADR-0005's scope rule. It also gets worse rather than
+better with time — once M3.7 adds power actions, "restart the host" and "restart Jellyfin"
+would be the same affordance in the same list, which is precisely the confusion M3.7 was
+separated from M3.1 to avoid.
+
+**Cadence.** Metrics are collected on their own ticker, defaulting to 10s against the
+service poll's 30s, and the collector is a separate goroutine rather than part of the
+adapter poller. Nothing in that loop applies here: there is no adapter, no upstream to time
+out against, no health to report and no nudge semantics. The faster interval is not
+gratuitous — utilisation averaged over thirty seconds hides the five-second spike that
+explains a hot machine.
+
+**Absent is not zero, again.** Every field but `collected_at` is optional, and `null` and
+`[]` are distinguished on the wire. Hardware differs more than services do: a virtual
+machine exposes no temperature sensors, a container may see no usable `/proc/stat`, and the
+first collection after a restart cannot compute utilisation at all, because the kernel
+reports cumulative counters and one sample is not a measurement. `204 No Content` on the
+read endpoint says the same thing at the request level. This is the M3.5 rule applied where
+it is harder to get right and easier to get away with.
+
+**What did not change.** Spec-first with a CI drift gate, snapshot-on-connect with no replay
+buffer, reads-as-stream and writes-as-async-RPC, and the freshness rules from Amendment 2 —
+which metrics obey more strictly than services do. A stale service degrades to `unknown` and
+keeps its timestamps, because "healthy three minutes ago" is still information; stale
+metrics are dropped entirely, because a three-minute-old CPU percentage is not.

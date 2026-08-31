@@ -103,6 +103,19 @@ fun SummaryHeader(
             now = now,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 11.dp),
         )
+
+        // Below the provenance line on purpose. The order down this column is the order of
+        // the questions being asked: is anything wrong, can I believe this, and only then
+        // how is the machine itself. Reversing the last two would put a CPU figure above
+        // the line that says whether to trust it.
+        //
+        // Null when stale, which is why nothing here re-checks freshness: the data layer
+        // has already dropped the metrics rather than degraded them, so this simply has
+        // nothing to draw.
+        HostVitals(
+            metrics = state.hostMetrics,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp),
+        )
     }
 }
 

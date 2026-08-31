@@ -317,6 +317,30 @@ progress so releasing early visibly abandons it. Effort in proportion to consequ
 same verbs three times, and a second entry point to a destructive action is a second thing
 to keep gated correctly forever.
 
+**Host vitals strip** (M3.6). CPU, memory and the fullest filesystem, as three labelled 8dp
+rules under the provenance line, with uptime, load and the hottest sensor as a footnote. The
+same rule motif as the tally, at the same height, because the screen has already taught what
+a rule means — proportion, nothing else. Not a card: the roster is the one substantial
+object on screen, and a second surface would flatten the hierarchy the header exists to make.
+
+Its position down the column is the order of the questions: is anything wrong, can I believe
+this, then how is the machine. A CPU figure above the line that says whether to trust it
+would be the wrong way round.
+
+**Colour here is unusually restrained, and deliberately.** Memory and storage tint at 85%
+and again at 95%, because filling them is a state somebody must act on. **CPU is never
+tinted** — a processor at 95% is a transcode doing its job, and colouring it would spend the
+attention this palette reserves for decisions. Temperature is judged against the sensor's
+*own* reported threshold rather than a number this app invented, so a laptop CPU and an NVMe
+drive at the same 85°C are read differently, correctly.
+
+**Nothing absent is drawn.** No placeholder, no dash, no empty meter. A machine with no
+sensors shows no footnote; a first collection with no CPU figure shows two meters rather
+than three. A placeholder would imply something was measured and found blank, which is the
+one claim this payload is shaped never to make. And when the data goes stale the strip
+**leaves** rather than greying out — a service keeps its timestamps because "healthy three
+minutes ago" is information, and a three-minute-old CPU percentage is not.
+
 ---
 
 ## 9. Accessibility floor

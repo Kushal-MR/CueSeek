@@ -7,6 +7,7 @@ import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Freshness
+import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.StreamEnvelope
@@ -252,6 +253,7 @@ class AgentLiveState(
     private data class Internal(
         val system: SystemInfo? = null,
         val services: List<Service> = emptyList(),
+        val hostMetrics: HostMetrics? = null,
         val status: StreamStatus = StreamStatus.Idle,
         val lastEventAt: Instant? = null,
         val outcomes: List<ActionProgress> = emptyList(),
@@ -285,11 +287,17 @@ class AgentLiveState(
                     // Replace wholesale. Merging assumes the old and new describe the same
                     // moment, and after a reconnect they do not.
                     services = event.services,
+                    // Including when it is null. An agent that has restarted and not yet
+                    // measured the host must clear what this client is holding, not keep
+                    // showing figures from before the restart.
+                    hostMetrics = event.hostMetrics,
                 )
 
                 is StreamEvent.ServiceUpdated -> base.copy(
                     services = services.replaceById(event.service),
                 )
+
+                is StreamEvent.HostUpdated -> base.copy(hostMetrics = event.metrics)
 
                 is StreamEvent.ActionOutcome -> base.copy(
                     outcomes = (outcomes + event.progress)
@@ -312,6 +320,11 @@ class AgentLiveState(
                 host = host,
                 system = system,
                 services = if (stale) services.map { it.degradedToUnknown() } else services,
+                // Dropped rather than degraded. A service keeps its timestamps through
+                // staleness because "healthy three minutes ago" is still worth saying; a
+                // CPU percentage from three minutes ago is worth nothing, and showing one
+                // would put a live-looking number under a stale banner.
+                hostMetrics = if (stale) null else hostMetrics,
                 status = status,
                 freshness = if (stale) Freshness.Stale(lastEventAt) else Freshness.Fresh,
                 actionOutcomes = outcomes,

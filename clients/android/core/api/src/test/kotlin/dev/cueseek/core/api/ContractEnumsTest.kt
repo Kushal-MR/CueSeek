@@ -76,9 +76,13 @@ class ContractEnumsTest {
     }
 
     @Test
-    fun `stream event types are the four P3 will have to handle`() {
+    fun `stream event types are the five the client has to handle`() {
+        // `host_updated` joined in M3.6. It is listed here rather than tolerated silently
+        // because the mapper turns an unknown type into `Unrecognised` — which is correct
+        // for an agent newer than this build and would be a bug for a type this build was
+        // written for. This assertion is what tells the two apart.
         assertEquals(
-            setOf("snapshot", "service_updated", "action_progress", "heartbeat"),
+            setOf("snapshot", "service_updated", "host_updated", "action_progress", "heartbeat"),
             wireValues(WireStreamEventType.entries, WireStreamEventType::value),
         )
     }

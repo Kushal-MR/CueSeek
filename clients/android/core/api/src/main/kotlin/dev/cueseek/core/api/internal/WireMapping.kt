@@ -10,16 +10,21 @@ import dev.cueseek.core.model.Capability
 import dev.cueseek.core.model.Device
 import dev.cueseek.core.model.DeviceId
 import dev.cueseek.core.model.DeviceToken
+import dev.cueseek.core.model.CpuMetrics
 import dev.cueseek.core.model.Health
 import dev.cueseek.core.model.HealthReason
 import dev.cueseek.core.model.HealthStatus
 import dev.cueseek.core.model.HostId
+import dev.cueseek.core.model.HostMetrics
+import dev.cueseek.core.model.MemoryMetrics
 import dev.cueseek.core.model.NowPlaying
 import dev.cueseek.core.model.PlaybackSession
 import dev.cueseek.core.model.Pairing
 import dev.cueseek.core.model.Platform
 import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
+import dev.cueseek.core.model.StorageMetrics
+import dev.cueseek.core.model.ThermalMetrics
 import dev.cueseek.core.model.WebUi
 import dev.cueseek.core.model.SystemInfo
 import dev.cueseek.core.model.TransferItem
@@ -30,13 +35,18 @@ import dev.cueseek.core.api.wire.Action as WireAction
 import dev.cueseek.core.api.wire.ActionAccepted as WireActionAccepted
 import dev.cueseek.core.api.wire.ActionProgress as WireActionProgress
 import dev.cueseek.core.api.wire.Capability as WireCapability
+import dev.cueseek.core.api.wire.CpuMetrics as WireCpuMetrics
 import dev.cueseek.core.api.wire.Device as WireDevice
 import dev.cueseek.core.api.wire.Health as WireHealth
 import dev.cueseek.core.api.wire.HealthReason as WireHealthReason
+import dev.cueseek.core.api.wire.HostMetrics as WireHostMetrics
+import dev.cueseek.core.api.wire.MemoryMetrics as WireMemoryMetrics
 import dev.cueseek.core.api.wire.PairResponse as WirePairResponse
 import dev.cueseek.core.api.wire.NowPlaying as WireNowPlaying
 import dev.cueseek.core.api.wire.PlaybackSession as WirePlaybackSession
 import dev.cueseek.core.api.wire.Service as WireService
+import dev.cueseek.core.api.wire.StorageMetrics as WireStorageMetrics
+import dev.cueseek.core.api.wire.ThermalMetrics as WireThermalMetrics
 import dev.cueseek.core.api.wire.TransferItem as WireTransferItem
 import dev.cueseek.core.api.wire.Transfers as WireTransfers
 import dev.cueseek.core.api.wire.WebUI as WireWebUI
@@ -142,6 +152,53 @@ internal fun WireTransfers.toDomain() = Transfers(
     downloadRateBytes = downloadRateBytes,
     uploadRateBytes = uploadRateBytes,
     items = items.map { it.toDomain() },
+)
+
+/**
+ * The host's vitals.
+ *
+ * Nullability is carried through exactly as it arrived, including the difference between a
+ * null list and an empty one. Null storage means the agent could not measure any filesystem;
+ * an empty list means it was asked about mounts and none answered. Defaulting either to
+ * `emptyList()` here would collapse a real distinction into a screen that says the same
+ * thing for both.
+ */
+internal fun WireHostMetrics.toDomain() = HostMetrics(
+    collectedAt = parseTimestamp(collectedAt),
+    uptimeSeconds = uptimeSeconds,
+    cpu = cpu?.toDomain(),
+    memory = memory?.toDomain(),
+    storage = storage?.map { it.toDomain() },
+    thermal = thermal?.map { it.toDomain() },
+)
+
+internal fun WireCpuMetrics.toDomain() = CpuMetrics(
+    usagePercent = usagePercent,
+    cores = cores,
+    load1 = load1,
+    load5 = load5,
+    load15 = load15,
+)
+
+internal fun WireMemoryMetrics.toDomain() = MemoryMetrics(
+    totalBytes = totalBytes,
+    availableBytes = availableBytes,
+    usedBytes = usedBytes,
+    swapTotalBytes = swapTotalBytes,
+    swapUsedBytes = swapUsedBytes,
+)
+
+internal fun WireStorageMetrics.toDomain() = StorageMetrics(
+    mount = mount,
+    totalBytes = totalBytes,
+    freeBytes = freeBytes,
+    filesystem = filesystem,
+)
+
+internal fun WireThermalMetrics.toDomain() = ThermalMetrics(
+    label = label,
+    celsius = celsius,
+    highCelsius = highCelsius,
 )
 
 internal fun WireTransferItem.toDomain() = TransferItem(

@@ -54,10 +54,11 @@ const (
 // stamps its own. emittedAt is set once at publish time, so every client agrees on when
 // the event happened rather than when it was delivered to them.
 type streamEvent struct {
-	typ       gen.StreamEventType
-	emittedAt time.Time
-	service   *gen.Service
-	action    *gen.ActionProgress
+	typ         gen.StreamEventType
+	emittedAt   time.Time
+	service     *gen.Service
+	hostMetrics *gen.HostMetrics
+	action      *gen.ActionProgress
 }
 
 // subscriber is one connected client's mailbox.
@@ -313,6 +314,7 @@ func (st *sseStream) send(
 		envelope.Snapshot = p
 	case streamEvent:
 		envelope.Service = p.service
+		envelope.HostMetrics = p.hostMetrics
 		envelope.ActionProgress = p.action
 	}
 
@@ -361,5 +363,9 @@ func (s *Server) buildSnapshot() *gen.Snapshot {
 			StartedAt:    s.startedAt,
 		},
 		Services: out,
+		// Absent until the first collection has run, and absent for the whole session on
+		// a platform that cannot read them. A client is told nothing rather than told
+		// zero, which would describe an idle machine that was never measured.
+		HostMetrics: s.currentHostMetrics(),
 	}
 }

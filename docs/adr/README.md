@@ -45,9 +45,9 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | [0001](0001-vpn-only-remote-access.md) | VPN-only remote access | Accepted |
 | [0002](0002-host-privilege-dbus-polkit.md) | Unprivileged agent via D-Bus and polkit | Accepted · amended ×1 (latest 2026-08-11) |
 | [0003](0003-agent-runtime-go.md) | Go for the agent runtime | Accepted · amended ×1 (latest 2026-08-13) |
-| [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended ×3 (latest 2026-08-09) |
+| [0004](0004-contract-openapi-sse.md) | Spec-first OpenAPI with SSE | Accepted · amended ×4 (latest 2026-08-31) |
 | [0005](0005-capability-based-adapters.md) | Capability-based adapters | Accepted |
-| [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended ×3 (latest 2026-08-09) |
+| [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended ×4 (latest 2026-08-31) |
 | [0007](0007-client-capability-registry.md) | Client-side capability registry | Accepted |
 | [0008](0008-multi-host-and-computed-health.md) | Multi-host model and agent-computed health | Accepted |
 | [0009](0009-monorepo-contract-drift-gate.md) | Monorepo with a contract-drift gate | Accepted |

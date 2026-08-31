@@ -3,6 +3,7 @@ package dev.cueseek.core.api
 import dev.cueseek.core.model.ActionAcceptance
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Device
+import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.DeviceId
 import dev.cueseek.core.model.Pairing
 import dev.cueseek.core.model.Platform
@@ -48,6 +49,16 @@ interface CueSeekApi {
      * the CLI's default `read,service.control` cannot revoke anything, including itself.
      */
     suspend fun revokeDevice(id: DeviceId): ApiResult<Unit>
+
+    /**
+     * `GET /v1/host/metrics` — scope `read`.
+     *
+     * Success with a null value is a real answer, not a failure: it means the agent has
+     * nothing to report about this machine. Distinguishing that from a failed request is
+     * the point of returning `ApiResult<HostMetrics?>` rather than treating 204 as an
+     * error — one says "no measurement exists", the other says "we could not ask".
+     */
+    suspend fun hostMetrics(): ApiResult<HostMetrics?>
 
     /** `GET /v1/services` — scope `read`. Configuration order. */
     /**

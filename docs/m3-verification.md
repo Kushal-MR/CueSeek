@@ -398,3 +398,80 @@ the mapping and not the way in — a renderer can be correct, registered, and un
 - **A library larger than `torrentsFetchLimit` (200)** was not tested. Beyond that `total`
   understates, and the oldest torrents are dropped before ranking.
 - `-race` did not run locally (no cgo on the development machine); CI runs it.
+
+---
+
+## M3.6 — Host metrics ✅
+
+Verified on `kushal-HP-paviliong6` (Ubuntu, kernel 7.0.0-28, 4 cores, 3.8 GiB, one ext4
+root) and the OnePlus CPH2707 over Tailscale, against an agent cross-compiled from the
+uncommitted M3.6 branch and reporting `agent_version=m3.6-uncommitted`.
+
+Driven over SSH with key auth rather than by hand; only the four privileged steps —
+installing the binary, the unit, the config and minting a pairing code — were run by the
+operator.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | Collector starts | `host metrics started interval=10s mounts=[/]` |
+| 2 | `GET /v1/host/metrics` | 200 with cpu, memory, storage, thermal and uptime |
+| 3 | **Memory matches the kernel** | `total_bytes` = 3894936 kB exactly; `available_bytes` tracks `MemAvailable`, not `MemFree` |
+| 4 | **Storage matches `df`** | 490577010688 / 174561456128 bytes, byte-identical to `df -B1 --output=size,avail`, confirming `Bavail` excludes the root reserve |
+| 5 | **CPU tracks real load** | 2–3% idle → **100.00%** with four cores pinned → 1.6% after; `load1` still 1.41 while usage had fallen to 1.58%, which is the pair measuring different things, observed |
+| 6 | Utilisation on the first payload | Present, not absent — the priming sample closes the window to one second |
+| 7 | Thermals, labelled | `coretemp Package id 0` / `Core 0` / `Core 1` at their own 87°C `_max`, plus unlabelled `acpitz` falling back to the chip name |
+| 8 | `_max` preferred over `_crit` | 87 reported, not 105 |
+| 9 | `host_updated` on the stream | Every 10s, interleaved with `service_updated` at 30s and heartbeats at 15s, one monotonic `seq` |
+| 10 | Snapshot carries metrics | `snapshot.host_metrics` present at `seq` 0 |
+| 11 | **Pull-to-refresh does not blank the strip** | Values updated in place; the read endpoint is what makes this true |
+| 12 | **Stale drops the strip entirely** | Wi-Fi off 40s → "Unverified", dashed hairline, "Stream open · no data 40s", services degraded to `unknown` keeping "Last verified 12:05:53" — and no vitals at all |
+| 13 | Dark and light | Both correct; meter tracks and fills legible on each surface |
+| 14 | M3.5 unaffected | Detail sheet still opens from the row body with health, controls, web interface and now-playing |
+
+### Forward compatibility, observed a third time
+
+Before upgrading the phone, the **M3.5 build** was left running against the M3.6 agent for
+several minutes. It stayed live and correct while receiving a `host_updated` event every ten
+seconds that it had never heard of, treating each as `Unrecognised` — traffic that resets
+the freshness clock and renders nothing (ADR-0007). After M3.1's Start action and M3.4's
+whole new service, this is the third time the skew contract has held without a client
+rebuild, and the first time in the direction of a new *event type*.
+
+### Two defects, both found by using it
+
+1. **`ProcSubset=pid` hid the metrics from the agent.** The first live payload carried
+   storage and all four sensors and omitted CPU, memory and uptime. The unit's own
+   hardening mounts `/proc` with `subset=pid`, which hides `/proc/stat`, `/proc/meminfo`,
+   `/proc/loadavg` and `/proc/uptime` — and is exactly why `/proc/self/mounts` still
+   resolved the device name, since that one is per-process. The files are `-r--r--r--`, so
+   permissions were ruled out first.
+
+   The code was not wrong: an unreadable source produced an absent field rather than a
+   fabricated zero, which is the rule this payload is built on. It was the deployment that
+   made the feature useless, and no unit test could have found it because the sandbox does
+   not exist in a test.
+
+   Fixed by `ProcSubset=all` in `deploy/cueseekd.service`, with the cost written into the
+   file. `ProtectProc=invisible` is kept, so other users' processes stay hidden;
+   `/proc/sys` stays read-only and `/proc/kmsg` stays gone. systemd offers no setting
+   between `pid` and `all`.
+
+2. **The footnote wrapped, stranding a word.** "45°C coretemp Core 0" pushed the line to
+   two, leaving "Core 0" alone on the second — while "45°C acpitz" on the same machine
+   fitted. Which sensor is hottest changes minute to minute, so the layout broke and healed
+   on its own, which is the worst kind of defect to meet later. The footnote now shows the
+   chip (`coretemp`) and screen readers still get the full label.
+
+### Not claimed
+
+- **204 was never observed live.** It is unit-tested on both sides, but the window on a real
+  agent is the one second between the priming sample and the first publish, and no restart
+  happened to land inside it.
+- **No machine without sensors was tested.** The empty-versus-absent thermal distinction is
+  asserted by tests only; this hardware has four sensors and always answered.
+- **`storage_mounts` was tested with one entry.** A second filesystem, and the
+  "fullest wins" rule that picks between them, were not exercised on hardware.
+- **Nothing above 85% was seen**, so neither pressure colour has been observed on a real
+  reading. Both thresholds are unit-tested.
+- The `m36-probe` device (scope `read`) is still paired and its token is in `/tmp` on the
+  host, which clears at reboot.

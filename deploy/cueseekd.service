@@ -60,8 +60,9 @@ StateDirectoryMode=0750
 
 # ---------------------------------------------------------------- hardening
 #
-# The agent needs three things: the D-Bus system socket, outbound TCP to
-# services on this host, and its state directory. Everything else is removed.
+# The agent needs four things: the D-Bus system socket, outbound TCP to services
+# on this host, its state directory, and — since M3.6 — the kernel's own
+# statistics under /proc. Everything else is removed.
 #
 # If the service fails to start after a distribution upgrade, relax in this
 # order — SystemCallFilter first, then MemoryDenyWriteExecute — and report it
@@ -75,8 +76,30 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
+# Other users' processes stay invisible. This is the half of /proc hardening that
+# is about *other people's* business, and it is kept.
 ProtectProc=invisible
-ProcSubset=pid
+
+# Changed from `pid` in M3.6, and it is a deliberate widening rather than a
+# relaxation made to get something working.
+#
+# `ProcSubset=pid` mounts /proc with `subset=pid`, which hides every file that is
+# not inside a per-process directory: /proc/stat, /proc/meminfo, /proc/loadavg,
+# /proc/uptime. Those four *are* the host metrics feature. With the subset in
+# place the agent reported storage and temperatures — read via statfs and
+# /sys — and silently omitted CPU, memory and uptime, which is the correct
+# behaviour for an unreadable source and a useless one for an operator.
+#
+# What this exposes: read-only, system-wide kernel statistics. What it does not
+# expose: /proc/sys stays read-only (ProtectKernelTunables), /proc/kmsg stays
+# gone (ProtectKernelLogs), module loading stays blocked, and other users'
+# process directories stay hidden (ProtectProc, above). The agent runs
+# unprivileged with an empty capability set, so kernel pointers in
+# /proc/kallsyms read as zeroes to it under the default kptr_restrict.
+#
+# There is no narrower setting. systemd offers `pid` or `all`, with nothing in
+# between, and no supported way to admit four files.
+ProcSubset=all
 
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
