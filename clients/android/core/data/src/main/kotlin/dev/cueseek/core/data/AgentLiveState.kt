@@ -18,8 +18,10 @@ import dev.cueseek.core.model.StreamStatus
 import dev.cueseek.core.model.SystemInfo
 import dev.cueseek.core.model.degradedToUnknown
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicReference
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -92,6 +95,22 @@ class AgentLiveState(
     private val staleAfter: Duration = Duration.ofSeconds(30),
     /** How often silence is re-checked. Cheap, and bounds how late a staleness flip is. */
     private val checkInterval: Duration = Duration.ofSeconds(1),
+    /**
+     * How long a stream may deliver nothing before it is treated as dead and replaced.
+     *
+     * Defaults to [staleAfter] on purpose: one number with one meaning — "silence this long
+     * means the connection is gone" — rather than two thresholds that can drift apart and
+     * leave the screen saying one thing while the transport believes another.
+     *
+     * This exists because the stream's read timeout is deliberately infinite. A quiet
+     * agent is normal and must not be disconnected, so OkHttp is told to wait forever;
+     * the cost is that a *frozen* socket also waits forever. A7 measured exactly that —
+     * the connection reports itself open and delivers nothing — and the client applied the
+     * lesson to rendering while still trusting the transport to notice its own death. It
+     * does not. Heartbeats arrive every 15s, so silence past this bound is not a quiet
+     * system; it is a dead one.
+     */
+    private val silenceTimeout: Duration = staleAfter,
     private val backoff: StreamBackoff = StreamBackoff(),
 ) {
 
@@ -193,7 +212,9 @@ class AgentLiveState(
                 return@channelFlow
             }
 
+            var delivered = false
             val failure = collectUntilFailure(stream) { envelope ->
+                delivered = true
                 publish { it.apply(envelope, now()) }
             }
 
@@ -209,6 +230,12 @@ class AgentLiveState(
                 return@channelFlow
             }
 
+            // A connection that delivered anything was a working connection, so the next
+            // reconnect starts from the bottom of the backoff rather than wherever an
+            // earlier bad patch left it. Without this the counter only ever climbs, and a
+            // stream that has dropped a few times over a long session sits at the 15s cap
+            // for the rest of that session — slowest exactly when it has been most reliable.
+            if (delivered) attempt = 0
             attempt += 1
             publish { it.copy(status = StreamStatus.Retrying(failure, attempt)) }
             // Whichever comes first: the backoff elapsing, or the user asking. A signal
@@ -221,34 +248,79 @@ class AgentLiveState(
     }.distinctUntilChanged()
 
     /**
-     * Collects [stream] until it fails, returning why, or `null` if cancelled.
+     * Collects [stream] until it fails **or goes silent**, returning why.
      *
      * A gap in `seq` is turned into a failure on purpose. The sequence detects loss within
      * one connection, and there is no way to ask for what was missed — so the only correct
      * response is to reconnect, which by contract yields a fresh snapshot.
+     *
+     * The silence half is the one that took a real phone to find. The stream's read timeout
+     * is infinite by design — a quiet agent must not be disconnected — so a socket that has
+     * died without saying so is indistinguishable from a socket with nothing to say, and
+     * OkHttp will wait on it for as long as the process lives. The freshness watchdog saw
+     * this and said "Unverified"; nothing acted on it, so the screen sat there being
+     * correct and useless until something else forced a reconnect.
+     *
+     * Two coroutines and whichever finishes first wins: one collects, one watches the
+     * clock. That mirrors the split in [stateFor] itself, and for the same reason — the
+     * absence of events cannot be detected by waiting for an event.
      */
     private suspend fun collectUntilFailure(
         stream: AgentStream,
         onEnvelope: suspend (StreamEnvelope) -> Unit,
-    ): ApiError? = try {
-        var previousSeq: Long? = null
-        stream.events().collect { envelope ->
-            val expected = previousSeq?.plus(1)
-            // seq restarts at 0 on every connection, so a snapshot is never a gap.
-            if (expected != null && envelope.seq != expected && envelope.seq != 0L) {
-                throw StreamFailure(
-                    ApiError.Transport(
-                        IOException("event sequence gap: expected $expected, got ${envelope.seq}")
-                    )
-                )
+    ): ApiError? = coroutineScope {
+        // Written by the collector, read by the watcher, so it crosses threads.
+        val lastActivity = AtomicReference(now())
+        val outcome = CompletableDeferred<ApiError>()
+
+        val collector = launch {
+            try {
+                var previousSeq: Long? = null
+                stream.events().collect { envelope ->
+                    lastActivity.set(now())
+                    val expected = previousSeq?.plus(1)
+                    // seq restarts at 0 on every connection, so a snapshot is never a gap.
+                    if (expected != null && envelope.seq != expected && envelope.seq != 0L) {
+                        throw StreamFailure(
+                            ApiError.Transport(
+                                IOException("event sequence gap: expected $expected, got ${envelope.seq}")
+                            )
+                        )
+                    }
+                    previousSeq = envelope.seq
+                    onEnvelope(envelope)
+                }
+                // A stream that completes without failing is still a stream that stopped.
+                outcome.complete(ApiError.Transport(IOException("the stream ended")))
+            } catch (e: StreamFailure) {
+                outcome.complete(e.error)
             }
-            previousSeq = envelope.seq
-            onEnvelope(envelope)
         }
-        // A stream that completes without failing is still a stream that stopped.
-        ApiError.Transport(IOException("the stream ended"))
-    } catch (e: StreamFailure) {
-        e.error
+
+        val silenceWatch = launch {
+            while (isActive) {
+                delay(checkInterval.toMillis())
+                val silent = Duration.between(lastActivity.get(), now())
+                if (silent >= silenceTimeout) {
+                    outcome.complete(
+                        ApiError.Transport(
+                            IOException(
+                                "no events for ${silent.seconds}s on an open connection; " +
+                                    "treating it as dead"
+                            )
+                        )
+                    )
+                    return@launch
+                }
+            }
+        }
+
+        val failure = outcome.await()
+        // Whichever one lost is torn down here. Cancelling the collector is what actually
+        // closes the dead socket; leaving it would leak a connection per reconnect.
+        collector.cancel()
+        silenceWatch.cancel()
+        failure
     }
 
     /** State held between events, before staleness is applied. */

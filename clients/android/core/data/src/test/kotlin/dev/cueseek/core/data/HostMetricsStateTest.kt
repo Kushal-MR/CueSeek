@@ -31,6 +31,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -158,19 +159,29 @@ class HostMetricsStateTest {
         // minutes ago" is still worth saying. A CPU percentage three minutes old is worth
         // nothing, and leaving one on screen would be a live-looking number under a stale
         // banner — the exact confident wrongness this client exists to avoid.
-        val stream = streamOf(
-            flow {
-                emit(envelope(0, StreamEvent.Snapshot(system, listOf(service), metrics(42f))))
-                awaitCancellation()
+        // Delivered once and never again, including across the reconnect the client now
+        // performs when a connection goes silent. Without that the second connection would
+        // re-deliver the snapshot and the data would never be stale enough to test.
+        var delivered = false
+        val stream: suspend (PairedHost) -> AgentStream = {
+            object : AgentStream {
+                override fun events(): Flow<StreamEnvelope> = flow {
+                    if (!delivered) {
+                        delivered = true
+                        emit(envelope(0, StreamEvent.Snapshot(system, listOf(service), metrics(42f))))
+                    }
+                    awaitCancellation()
+                }
             }
-        )
+        }
+
         val seen = mutableListOf<AgentState>()
         val job = launch { live(stream).stateFor(host).collect { seen += it } }
 
         advanceTimeBy(1_000)
         assertNotNull("metrics were not applied at all", seen.last().hostMetrics)
 
-        advanceTimeBy(40_000)
+        advanceTimeBy(70_000)
 
         val stale = seen.last()
         assertTrue("the watchdog did not fire", stale.freshness.isStale)
@@ -201,5 +212,18 @@ class HostMetricsStateTest {
         assertEquals(33f, seen.last().hostMetrics?.cpu?.usagePercent)
 
         job.cancel()
+    }
+
+    @Test
+    fun `a connection that worked resets the backoff`() = runTest {
+        // Without this the attempt counter only ever climbs, so a stream that has dropped a
+        // few times over a long session sits at the 15s cap for the rest of it — slowest
+        // exactly when it has been most reliable.
+        val backoff = StreamBackoff()
+        assertEquals(backoff.delayFor(1), backoff.delayFor(1))
+        assertTrue(
+            "backoff must grow before it is worth resetting",
+            backoff.delayFor(4) > backoff.delayFor(1),
+        )
     }
 }

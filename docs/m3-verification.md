@@ -636,3 +636,45 @@ was briefly stated as fact.
 - **`host_action_progress`** has never been seen on the wire, because no power action has
   failed. It is unit-tested on both sides. Producing one live would mean deliberately
   breaking the polkit rule.
+
+---
+
+## M3.7a — A stream that freezes is now replaced ✅
+
+Reported from use, not from testing: the app would sit on "Unverified" and only recover
+after a manual pull, and once needed a Wi-Fi restart and a force-quit.
+
+**Cause.** The SSE client sets `readTimeout(Duration.ZERO)`, which is correct — a quiet
+agent must not be disconnected — but it means a socket that dies without saying so never
+errors, and OkHttp waits on it for the life of the process. The freshness watchdog saw the
+silence and rendered it honestly; nothing acted on it. `reconnectNow` is only received
+during a backoff wait, so pull-to-refresh fetched a fresh snapshot over HTTP without ever
+touching the dead stream — which is exactly why refreshing appeared to fix it and it drifted
+back thirty seconds later.
+
+This is the A7 lesson applied to only half the problem. The client distrusts the connection
+for *rendering* and still trusted it to notice its own death.
+
+**Not introduced by M3.6 or M3.7.** `git log -L` over the reconnect loop shows it last
+changed in `6011228` (M3.3a) and `d689a0f` (M2 P3).
+
+**Fix.** Silence past the staleness tolerance now ends the connection as well as the trust:
+the collector races the stream against a clock, and whichever finishes first wins. The
+threshold is `staleAfter` itself rather than a second number, so the screen and the
+transport can never disagree about what silence means. Heartbeats arrive every 15s, so 30s
+of nothing is a dead connection, not a quiet one.
+
+Also fixed alongside it: the backoff attempt counter never reset, so a stream that had
+dropped a few times over a long session sat at the 15s cap for the rest of it — slowest
+exactly when it had been most reliable. A connection that delivered anything now resets it.
+
+**Evidence.** A test that connects, delivers a snapshot, then goes silent without erroring —
+what a frozen socket looks like from inside the app. It hangs forever on the old code and
+reconnects on the new one. Two existing tests had to change: both asserted that a silent
+connection stays `Open`, which was the bug written down as an expectation. The invariant they
+exist to protect — data goes `unknown` from the clock — is unchanged and still asserted.
+
+**Not claimed.** Resuming from Recents was checked once on the phone and came back live
+without a manual refresh, but a single clean resume does not prove the fix: the socket may
+not have been frozen that time. The deterministic evidence is the test. Reproducing a real
+frozen socket on demand would mean interfering with the tailnet mid-connection.
