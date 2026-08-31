@@ -530,9 +530,13 @@ multiple-mounts and fullest-wins items, which one filesystem could never have ex
   one function shared by memory and storage, so item 19 and item 20 exercise the same code.
   Filling 3.8 GB of RAM on a box running Jellyfin and qBittorrent risks the OOM killer
   taking a real service for no additional coverage.
-- **A single sensor reading above its own `high_celsius`** has not been seen, so the hot
-  colour on the temperature is unit-tested only. This machine idles around 45°C against an
-  87°C limit.
+- **A single sensor reading above its own `high_celsius`** has not been seen, so "Running
+  hot" and the hot colour on the temperature are unit-tested only. This machine idles around
+  45°C against an 87°C limit, and heating a laptop past 87°C to watch a label change is not
+  a test worth running.
+- **"Memory almost full" and "Memory under pressure"** were not seen on real readings, for
+  the reason given above: they are the same `hostConcern` branch as the disk, and filling
+  3.8 GB of RAM risks the OOM killer taking a real service.
 - The `m36-probe` device (scope `read`) is still paired and its token is in `/tmp` on the
   host, which clears at reboot.
 
@@ -551,6 +555,16 @@ doing its job, and announcing it would cry wolf every time somebody watched a fi
 The thresholds are now one pair of constants shared by the headline and the rule, rather
 than two copies of 0.85, so the two can never disagree about whether something is wrong —
 which is the same defect in a different form.
+
+Verified on the phone against the same tmpfs:
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 22 | Headline at ≥85% | "Disk filling up", beside an amber rule |
+| 23 | Headline at ≥95% | "Disk almost full", beside a red rule |
+| 24 | Headline and rule agree | Both crossed on the same reading, which is what sharing the constants buys |
+| 25 | It recovers | Emptying the filesystem returned the headline to "Operational" and the strip to `/` — the state is derived, not latched |
+| 26 | Services are untouched | Tally stayed fully green and "✓ 2" throughout, and both rows stayed "Running" |
 
 Two words changed with it: the healthy verdict is **"Operational"** rather than "All good",
 and service rows read **"Running"** rather than "Healthy". Display labels only — the
