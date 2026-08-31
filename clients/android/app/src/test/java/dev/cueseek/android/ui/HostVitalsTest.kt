@@ -1,6 +1,8 @@
 package dev.cueseek.android.ui
 
 import dev.cueseek.android.ui.dashboard.chipOf
+import dev.cueseek.android.ui.dashboard.loadPhrase
+import dev.cueseek.android.ui.dashboard.mostConcerning
 import dev.cueseek.android.ui.dashboard.fullest
 import dev.cueseek.android.ui.dashboard.trimZero
 import dev.cueseek.android.ui.dashboard.uptimePhrase
@@ -107,5 +109,44 @@ class HostVitalsTest {
         // Already one word on this machine's acpitz, and it must stay intact.
         assertEquals("acpitz", chipOf("acpitz"))
         assertEquals("", chipOf("   "))
+    }
+
+    @Test
+    fun `the sensor shown is the closest to its own limit`() {
+        // Not simply the hottest. On the test machine acpitz (a chassis sensor with no
+        // stated limit) and coretemp (the CPU, limit 87) sit within a few degrees and trade
+        // places minute to minute, so ranking by raw temperature made the strip keep
+        // changing what it was talking about while nothing was happening.
+        val chassis = ThermalMetrics("acpitz", celsius = 54f)
+        val cpu = ThermalMetrics("coretemp Package id 0", celsius = 47f, highCelsius = 87f)
+
+        assertEquals("the hotter unrated sensor must not win", cpu, mostConcerning(listOf(chassis, cpu)))
+
+        // A drive at 50 of 60 is more concerning than a CPU at 61 of 87, and only the
+        // hardware's own limits can say so.
+        val drive = ThermalMetrics("nvme Composite", celsius = 50f, highCelsius = 60f)
+        val warmCpu = ThermalMetrics("coretemp Package id 0", celsius = 61f, highCelsius = 87f)
+        assertEquals(drive, mostConcerning(listOf(warmCpu, drive)))
+    }
+
+    @Test
+    fun `with no stated limits the hottest sensor is all there is to go on`() {
+        val a = ThermalMetrics("acpitz", celsius = 54f)
+        val b = ThermalMetrics("thermal_zone1", celsius = 61f)
+        assertEquals(b, mostConcerning(listOf(a, b)))
+        assertNull(mostConcerning(null))
+        assertNull(mostConcerning(emptyList()))
+    }
+
+    @Test
+    fun `the cpu line does not claim load is cores in use`() {
+        // The old wording, "load 0.1 of 4", read as cores being used. Load average counts
+        // processes waiting to run or blocked on disk, can exceed the core count, and is a
+        // different measurement from the percentage above it.
+        assertEquals("0.1 queued", loadPhrase(CpuMetrics(load1 = 0.1f, cores = 4)))
+        assertEquals("0.1 queued", loadPhrase(CpuMetrics(load1 = 0.1f)))
+        // The core count is capacity and belongs under the meter, not beside the load.
+        assertNull(loadPhrase(CpuMetrics(cores = 4)))
+        assertNull(loadPhrase(CpuMetrics()))
     }
 }

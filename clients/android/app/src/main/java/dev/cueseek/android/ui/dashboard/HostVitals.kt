@@ -35,6 +35,7 @@ import dev.cueseek.core.design.token.CueSeekSpacing
 import dev.cueseek.core.design.token.CueSeekType
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.StorageMetrics
+import dev.cueseek.core.model.ThermalMetrics
 import kotlin.math.roundToInt
 
 /**
@@ -94,7 +95,7 @@ private fun Vitals(metrics: HostMetrics) {
                     // fault, and painting it red would train the reader to ignore the one
                     // colour this palette reserves for things that need a decision.
                     tint = null,
-                    detail = metrics.cpu?.let(::loadPhrase),
+                    detail = metrics.cpu?.cores?.let { "$it cores" },
                     description = "Processor ${usage.roundToInt()} percent",
                 )
             }
@@ -232,10 +233,12 @@ private fun RowScope.Meter(
  * The two facts that belong to the machine rather than to any one meter: how long it has
  * been up, and how hot it is.
  *
- * Uptime left, temperature right, which is the same shape as the provenance line directly
- * above. That is the point of the arrangement rather than a coincidence — a line that ran
- * left to right and stopped wherever it ran out of words read as something left over, while
- * two anchored ends read as a row that was placed.
+ * **On the same three-column grid as the meters above**, with uptime in the first column and
+ * temperature in the third, both left-aligned exactly like the detail lines they sit under.
+ * An earlier version spanned the full width with the two anchored to opposite edges, which
+ * put "up 43m" under the left edge of one column and the temperature against the screen edge
+ * under the right edge of another — so nothing on the strip lined up with anything, and the
+ * line read as text that had overflowed rather than as a row that was placed.
  *
  * Neither is a proportion, so neither gets a rule. Temperature has no ceiling this app
  * knows: that is the hardware's own business, which is why the agent carries the threshold
@@ -243,9 +246,10 @@ private fun RowScope.Meter(
  */
 @Composable
 private fun Footnote(metrics: HostMetrics) {
-    val hottest = metrics.thermal?.maxByOrNull { it.celsius }
+    val sensor = mostConcerning(metrics.thermal)
     val uptime = metrics.uptimeSeconds?.let { "up ${uptimePhrase(it)}" }
-    if (uptime == null && hottest == null) return
+    val load = metrics.cpu?.let(::loadPhrase)
+    if (uptime == null && sensor == null && load == null) return
 
     Row(
         modifier = Modifier
@@ -255,47 +259,87 @@ private fun Footnote(metrics: HostMetrics) {
                 // shortening stays a layout decision rather than a loss of information.
                 contentDescription = listOfNotNull(
                     uptime,
-                    hottest?.let { "${it.celsius.roundToInt()} degrees, ${it.label}" },
+                    load?.let { "load average $it" },
+                    sensor?.let { "${it.celsius.roundToInt()} degrees, ${it.label}" },
                 ).joinToString(", ")
             },
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(
-            uptime.orEmpty(),
-            style = CueSeekType.Data.Small,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
+        FootnoteCell(uptime, MaterialTheme.colorScheme.onSurfaceVariant)
+
+        // Load lives here rather than under the CPU meter, where it belongs by subject but
+        // would not fit: "4 cores · 0.1 queued" truncates to "4 cores · 0.1…" in a third of
+        // a phone. This row is machine-level facts placed on the grid rather than facts
+        // about the column above them — uptime is not about the processor either — so the
+        // move costs nothing and the word carries its own label.
+        FootnoteCell(load, MaterialTheme.colorScheme.onSurfaceVariant)
+
+        FootnoteCell(
+            text = sensor?.let { "${it.celsius.roundToInt()}°C ${chipOf(it.label)}" },
+            // Coloured only when the hardware itself says the reading is high. The
+            // threshold comes from the sensor, so a laptop CPU at 85°C and a drive at
+            // 85°C are judged by their own limits rather than by a number this app
+            // made up.
+            color = if (sensor?.isHot == true) {
+                CueSeekStatus.colors.degraded
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         )
-        if (hottest != null) {
-            Text(
-                "${hottest.celsius.roundToInt()}°C ${chipOf(hottest.label)}",
-                style = CueSeekType.Data.Small,
-                // Coloured only when the hardware itself says the reading is high. The
-                // threshold comes from the sensor, so a laptop CPU at 85°C and a drive at
-                // 85°C are judged by their own limits rather than by a number this app
-                // made up.
-                color = if (hottest.isHot) {
-                    CueSeekStatus.colors.degraded
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 1,
-            )
-        }
     }
 }
 
+/** One cell of the footnote row, on the same weights as the meters above it. */
+@Composable
+private fun RowScope.FootnoteCell(text: String?, color: Color) {
+    Text(
+        text.orEmpty(),
+        style = CueSeekType.Data.Small,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+    )
+}
+
 /**
- * Load against capacity, for the line under the CPU meter.
+ * The one-minute load average, worded so it does not claim to be something else.
  *
- * Reads "0.4 of 4" so the number has a denominator on screen: a load of 4 is saturation on
- * a quad-core and half idle on an eight, and the bare figure means nothing without it.
+ * "load 0.1 of 4" read as cores in use, which is wrong in a way that matters. Load average
+ * counts processes waiting to run *or* blocked on disk; it can legitimately exceed the core
+ * count, and it is a different measurement from the percentage above it — which is the whole
+ * reason both are on screen. A machine thrashing its swap reads near-zero usage and
+ * near-unusable load, and only the pair catches that.
+ *
+ * "queued" is the plainest true word available. It is not perfect — a running process is
+ * counted and is not queued — but it is honest about the shape of the number, where the old
+ * phrasing was confidently wrong about its meaning. The core count moved under the CPU
+ * meter, where it belongs and where it reads as capacity rather than as consumption.
  */
-internal fun loadPhrase(cpu: dev.cueseek.core.model.CpuMetrics): String? {
-    val load = cpu.load1 ?: return null
-    val cores = cpu.cores ?: return "load ${trimZero(load)}"
-    return "load ${trimZero(load)} of $cores"
+internal fun loadPhrase(cpu: dev.cueseek.core.model.CpuMetrics): String? =
+    cpu.load1?.let { "${trimZero(it)} queued" }
+
+/**
+ * The sensor worth showing, which is not simply the hottest one.
+ *
+ * Picking by raw temperature made the label flicker between unrelated pieces of hardware:
+ * on the test machine `acpitz` (a chassis sensor with no stated limit) and `coretemp` (the
+ * CPU, limit 87°C) sit within a few degrees of each other and trade places minute to minute,
+ * so the strip kept changing what it was talking about while nothing was happening.
+ *
+ * So: rank by **how close each sensor is to its own limit**, and prefer sensors that state
+ * one. A CPU at 61 of 87 is less concerning than a drive at 50 of 60, and saying so requires
+ * the hardware's own threshold rather than a number this app invents. Sensors with no stated
+ * limit cannot be compared that way and are used only when nothing else is available, which
+ * on ordinary hardware also makes the choice stable.
+ */
+internal fun mostConcerning(sensors: List<ThermalMetrics>?): ThermalMetrics? {
+    if (sensors.isNullOrEmpty()) return null
+    val rated = sensors.mapNotNull { sensor ->
+        sensor.highCelsius?.takeIf { it > 0f }?.let { limit -> sensor to sensor.celsius / limit }
+    }
+    if (rated.isEmpty()) return sensors.maxByOrNull { it.celsius }
+    return rated.maxByOrNull { (_, headroom) -> headroom }?.first
 }
 
 /**

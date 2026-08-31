@@ -503,6 +503,23 @@ multiple-mounts and fullest-wins items, which one filesystem could never have ex
 8. **A long mount label ran into its value**, rendering `/srv/cuese…88%` with no gap. Found
    the moment a mount point longer than `/` existed.
 
+9. **The strip kept changing which sensor it was talking about.** `acpitz` (a chassis sensor
+   with no stated limit) and `coretemp` (the CPU, limit 87°C) sit within a few degrees on
+   this machine and traded places minute to minute, so picking the hottest made the label
+   flicker between unrelated hardware while nothing was happening. It now ranks by how close
+   each sensor is to **its own** limit and prefers sensors that state one — which is both
+   the more useful question and, on ordinary hardware, a stable answer.
+
+10. **"load 0.1 of 4" read as cores in use.** It is not: load average counts processes
+    waiting to run or blocked on disk, can exceed the core count, and is a different
+    measurement from the percentage above it — which is why both are shown. Now "0 queued",
+    with the core count moved under the CPU meter where it reads as capacity.
+
+11. **The host line was not on the grid.** Uptime and temperature spanned the full width
+    anchored to opposite edges, so uptime sat under one column's left edge and the
+    temperature against the screen edge — nothing lined up with anything and the line read
+    as overflow. Both now sit in grid cells, left-aligned like the detail lines above them.
+
 ### Not claimed
 
 - **No machine without sensors was tested.** The empty-versus-absent thermal distinction is
