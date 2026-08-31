@@ -2,6 +2,8 @@ package dev.cueseek.core.api.internal
 
 import dev.cueseek.core.api.wire.ActionAccepted
 import dev.cueseek.core.api.wire.Device
+import dev.cueseek.core.api.wire.Action
+import dev.cueseek.core.api.wire.HostActionAccepted
 import dev.cueseek.core.api.wire.HostMetrics
 import dev.cueseek.core.api.wire.PairRequest
 import dev.cueseek.core.api.wire.PairResponse
@@ -16,7 +18,7 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 
 /**
- * The nine REST operations, hand-written against the generated wire types.
+ * The eleven REST operations, hand-written against the generated wire types.
  *
  * Every method returns `Response<T>` rather than `T`: a non-2xx response carries a problem
  * document that has to be read, and Retrofit's alternative is an exception that discards
@@ -39,6 +41,20 @@ internal interface CueSeekService {
      */
     @GET("v1/host/metrics")
     suspend fun hostMetrics(): Response<HostMetrics?>
+
+    /**
+     * Power actions the agent offers. Requires only `read`: what the agent offers is a
+     * property of the agent, what this device may do is a property of its token.
+     */
+    @GET("v1/host/actions")
+    suspend fun hostActions(): Response<List<Action>>
+
+    /**
+     * Reboot or power off. Answers 202 *before* the machine is touched — a handler that
+     * acted first would never write its response.
+     */
+    @POST("v1/host/actions/{actionId}")
+    suspend fun invokeHostAction(@Path("actionId") actionId: String): Response<HostActionAccepted>
 
     @Headers("${AuthInterceptor.NO_AUTH_HEADER}: 1")
     @POST("v1/pair")

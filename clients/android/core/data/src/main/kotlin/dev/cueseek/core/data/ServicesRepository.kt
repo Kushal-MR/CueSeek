@@ -3,6 +3,8 @@ package dev.cueseek.core.data
 import dev.cueseek.core.model.ActionAcceptance
 import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
+import dev.cueseek.core.model.Action
+import dev.cueseek.core.model.HostActionAcceptance
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.model.Service
@@ -73,6 +75,7 @@ class ServicesRepository(
         val system = async { system(host) }
         val services = async { services(host) }
         val metrics = async { hostMetrics(host) }
+        val actions = async { hostActions(host) }
 
         when (val systemResult = system.await()) {
             is ApiResult.Failure -> ApiResult.Failure(systemResult.error)
@@ -93,6 +96,12 @@ class ServicesRepository(
                         // worked. The null it falls back to says "not known", which is
                         // the truth in that case.
                         hostMetrics = (metrics.await() as? ApiResult.Success)?.value,
+                        // Same reasoning as the metrics: a snapshot replaces state
+                        // wholesale, so omitting these would empty the power menu on
+                        // every manual refresh. Also allowed to fail without failing
+                        // the refresh.
+                        hostActions = (actions.await() as? ApiResult.Success)?.value
+                            ?: emptyList(),
                     )
                 )
             }
@@ -108,6 +117,23 @@ class ServicesRepository(
      */
     suspend fun hostMetrics(host: PairedHost): ApiResult<HostMetrics?> =
         withApi(host) { it.hostMetrics() }
+
+    /** Power actions the agent offers. Empty when the platform cannot perform them. */
+    suspend fun hostActions(host: PairedHost): ApiResult<List<Action>> =
+        withApi(host) { it.hostActions() }
+
+    /**
+     * Asks the machine to reboot or shut down.
+     *
+     * Returning successfully means the agent accepted, not that anything happened — and for
+     * this call there is usually nothing further to learn, because a power action that
+     * worked ends the connection that would have reported it. Silence afterwards is the
+     * good outcome; a [dev.cueseek.core.model.HostActionOutcome] arriving means it failed.
+     */
+    suspend fun invokeHostAction(
+        host: PairedHost,
+        actionId: String,
+    ): ApiResult<HostActionAcceptance> = withApi(host) { it.invokeHostAction(actionId) }
 
     /**
      * Invokes an action, returning the agent's acknowledgement.

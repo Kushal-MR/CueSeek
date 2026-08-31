@@ -31,9 +31,11 @@ import dev.cueseek.core.design.status.Tally
 import dev.cueseek.core.design.status.TallyRule
 import dev.cueseek.core.design.token.CueSeekMotion
 import dev.cueseek.core.design.token.CueSeekType
+import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.Freshness
 import dev.cueseek.core.model.HostMetrics
+import dev.cueseek.core.model.Scope
 import java.time.Duration
 import java.time.Instant
 
@@ -52,6 +54,7 @@ fun SummaryHeader(
     onThemeChange: (ThemeChoice) -> Unit,
     onForgetRequested: () -> Unit,
     modifier: Modifier = Modifier,
+    onPowerRequested: (Action) -> Unit = {},
 ) {
     val stale = state.freshness.isStale
     val tally = Tally.of(state.services)
@@ -89,6 +92,12 @@ fun SummaryHeader(
                 onThemeChange = onThemeChange,
                 onForgetRequested = onForgetRequested,
                 modifier = Modifier.padding(top = 2.dp),
+                hostActions = state.hostActions,
+                // What this device may do, from the token it was paired with — a separate
+                // question from what the agent offers, and the user has to be able to tell
+                // the two apart.
+                canPower = state.host.scopes.contains(Scope.HostPower),
+                onPowerRequested = onPowerRequested,
             )
         }
 

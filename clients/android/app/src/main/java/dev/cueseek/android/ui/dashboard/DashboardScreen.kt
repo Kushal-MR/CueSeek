@@ -48,6 +48,7 @@ import dev.cueseek.android.ui.RowDestination
 import dev.cueseek.android.ui.openWebUi
 import dev.cueseek.android.ui.rowDestination
 import dev.cueseek.core.model.ActionStatus
+import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.AgentState
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -68,6 +69,10 @@ fun DashboardScreen(
     // A ticking clock, so ages count up while nothing arrives. Without it the screen would
     // silently freeze its own timestamps and look fresher than it is.
     var now by remember { mutableStateOf(Instant.now()) }
+
+    // The power action awaiting confirmation, if any. Held by the screen rather than the
+    // view model because it is a question this screen is asking, not work in flight.
+    var confirmingPower by remember { mutableStateOf<Action?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
             now = Instant.now()
@@ -121,6 +126,9 @@ fun DashboardScreen(
                     theme = theme,
                     onThemeChange = viewModel::setTheme,
                     onForgetRequested = viewModel::askToForget,
+                    // The menu only asks; the confirmation below does the deciding. A
+                    // machine must never be one tap inside a list somebody is scrolling.
+                    onPowerRequested = { confirmingPower = it },
                 )
 
                 SkewBanner(state)
@@ -195,6 +203,22 @@ fun DashboardScreen(
                 else -> Unit
             }
         }
+    }
+
+    confirmingPower?.let { action ->
+        HostPowerConfirmation(
+            action = action,
+            // The live roster, so the dialog can say what is playing or downloading right
+            // now. It does not block on any of it — the operator owns the machine — but a
+            // console that knows and stays quiet is wasting the one thing it is uniquely
+            // placed to say.
+            services = state.services,
+            onDismiss = { confirmingPower = null },
+            onConfirmed = {
+                confirmingPower = null
+                viewModel.invokeHostPower(state.host, action)
+            },
+        )
     }
 
     if (viewModel.confirmingForget) {

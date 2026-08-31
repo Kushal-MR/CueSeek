@@ -15,6 +15,7 @@
 
 package dev.cueseek.core.api.wire
 
+import dev.cueseek.core.api.wire.Action
 import dev.cueseek.core.api.wire.HostMetrics
 import dev.cueseek.core.api.wire.Service
 import dev.cueseek.core.api.wire.System
@@ -29,6 +30,7 @@ import kotlinx.serialization.Contextual
  * @param system 
  * @param services 
  * @param hostMetrics The host's vitals as of the last collection. Absent on a platform where the agent cannot read them, and during the first seconds after startup before the first collection has run. 
+ * @param hostActions Power actions the agent offers for the machine. Empty on a platform that cannot perform them, so a client renders nothing rather than buttons that would fail. Listed independently of the caller's scopes — see `GET /v1/host/actions`. 
  */
 @Serializable
 
@@ -42,7 +44,11 @@ data class Snapshot (
 
     /* The host's vitals as of the last collection. Absent on a platform where the agent cannot read them, and during the first seconds after startup before the first collection has run.  */
     @SerialName(value = "host_metrics")
-    val hostMetrics: HostMetrics? = null
+    val hostMetrics: HostMetrics? = null,
+
+    /* Power actions the agent offers for the machine. Empty on a platform that cannot perform them, so a client renders nothing rather than buttons that would fail. Listed independently of the caller's scopes — see `GET /v1/host/actions`.  */
+    @SerialName(value = "host_actions")
+    val hostActions: kotlin.collections.List<Action>? = null
 
 ) {
 

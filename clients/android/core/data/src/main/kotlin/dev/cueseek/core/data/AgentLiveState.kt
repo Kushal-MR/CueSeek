@@ -7,6 +7,8 @@ import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Freshness
+import dev.cueseek.core.model.Action
+import dev.cueseek.core.model.HostActionOutcome
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.model.Service
@@ -254,9 +256,11 @@ class AgentLiveState(
         val system: SystemInfo? = null,
         val services: List<Service> = emptyList(),
         val hostMetrics: HostMetrics? = null,
+        val hostActions: List<Action> = emptyList(),
         val status: StreamStatus = StreamStatus.Idle,
         val lastEventAt: Instant? = null,
         val outcomes: List<ActionProgress> = emptyList(),
+        val hostFailures: List<HostActionOutcome> = emptyList(),
         /** A request this client has outstanding. Says nothing about the data's age. */
         val refreshing: Boolean = false,
     ) {
@@ -291,6 +295,7 @@ class AgentLiveState(
                     // measured the host must clear what this client is holding, not keep
                     // showing figures from before the restart.
                     hostMetrics = event.hostMetrics,
+                    hostActions = event.hostActions,
                 )
 
                 is StreamEvent.ServiceUpdated -> base.copy(
@@ -298,6 +303,14 @@ class AgentLiveState(
                 )
 
                 is StreamEvent.HostUpdated -> base.copy(hostMetrics = event.metrics)
+
+                // A power action that failed, which means the machine is still here. Kept
+                // alongside service outcomes so one screen can surface either without
+                // caring which kind it was.
+                is StreamEvent.HostActionFailed -> base.copy(
+                    hostFailures = (hostFailures + event.outcome)
+                        .takeLast(AgentState.MAX_ACTION_OUTCOMES),
+                )
 
                 is StreamEvent.ActionOutcome -> base.copy(
                     outcomes = (outcomes + event.progress)
@@ -325,6 +338,12 @@ class AgentLiveState(
                 // CPU percentage from three minutes ago is worth nothing, and showing one
                 // would put a live-looking number under a stale banner.
                 hostMetrics = if (stale) null else hostMetrics,
+                // Not dropped when stale, unlike the metrics. What the agent *offers* does
+                // not expire the way a CPU reading does, and blanking the menu the moment
+                // a phone's screen slept would remove the buttons at the exact moment
+                // somebody went looking for them.
+                hostActions = hostActions,
+                hostActionFailures = hostFailures,
                 status = status,
                 freshness = if (stale) Freshness.Stale(lastEventAt) else Freshness.Fresh,
                 actionOutcomes = outcomes,

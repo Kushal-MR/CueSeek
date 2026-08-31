@@ -52,3 +52,33 @@ data class ActionProgress(
     /** Present when [status] is [ActionStatus.Failed]. */
     val error: String?,
 )
+
+/**
+ * Acknowledgement of a host power action.
+ *
+ * Deliberately not [ActionAcceptance], which carries a `serviceId`: a machine is not one of
+ * its own services, and a sentinel there would be a small lie told on every power action
+ * forever.
+ */
+data class HostActionAcceptance(
+    val actionId: ActionInvocationId,
+    val action: String,
+    val status: ActionStatus,
+    val acceptedAt: Instant,
+)
+
+/**
+ * The outcome of a host power action, which in practice means **the failure** of one.
+ *
+ * A power action that worked took the stream, the agent and the machine with it, so nothing
+ * can be delivered about it. Receiving this at all is the news: the machine is still here
+ * and the button did nothing.
+ */
+data class HostActionOutcome(
+    val actionId: ActionInvocationId,
+    val action: String,
+    val status: ActionStatus,
+    val at: Instant,
+    /** Present when [status] is [ActionStatus.Failed]. */
+    val error: String?,
+)

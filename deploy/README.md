@@ -45,14 +45,22 @@ do to the machine:
 Granted to the `cueseek` user and nobody else. Everything else returns `NOT_HANDLED`, so
 the rule only ever adds permissions and never revokes ones another rule granted.
 
-**Host power actions are shipped commented out.** M0 proved `login1.reboot` and
-`login1.power-off` work for a session-less `cueseek` — it genuinely rebooted the target
-host. They are disabled anyway because the agent has no code path that calls logind: the
-`host.power` scope is wired to nothing until M3. Granting a service permission to reboot a
-machine it cannot ask to reboot is a standing risk with no benefit. Uncomment all four
-actions together when M3 lands, including the `*-multiple-sessions` variants — omitting
-those is a classic cause of "works alone, fails in practice"
-([ADR-0002](../docs/adr/0002-host-privilege-dbus-polkit.md)).
+**Host power actions are enabled as of M3.7.** All four together — `reboot`, `power-off`
+and the `*-multiple-sessions` variant of each. logind consults the second form when another
+user is logged in, so granting only the plain ones works perfectly for whoever tests it
+alone and fails the first time somebody is sitting at the console.
+
+They were shipped commented out until there was a code path calling logind, because
+granting a service permission to reboot a machine it cannot ask to reboot is a standing
+risk with no benefit. That code path is now the `host.power` scope, which `cueseekd pair`
+never grants by default — **a device paired before M3.7 cannot power the machine off and
+must be paired again to gain it**, which is the scope model working rather than a bug.
+
+This is the one grant in the rule with no allowlist behind it: a unit grant is bounded to
+named units, and there is no target narrower than the machine. Note what stays absent —
+`suspend` and `hibernate`. A suspended host is unreachable over the tailnet and cannot be
+woken by the thing that suspended it, which turns a remote console into a way to lock
+yourself out ([ADR-0002 Amendment 2](../docs/adr/0002-host-privilege-dbus-polkit.md)).
 
 ### polkit 0.106 is a hard requirement
 

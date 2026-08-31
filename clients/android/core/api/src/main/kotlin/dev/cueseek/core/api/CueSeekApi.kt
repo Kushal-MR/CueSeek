@@ -1,8 +1,10 @@
 package dev.cueseek.core.api
 
+import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.ActionAcceptance
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Device
+import dev.cueseek.core.model.HostActionAcceptance
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.DeviceId
 import dev.cueseek.core.model.Pairing
@@ -59,6 +61,19 @@ interface CueSeekApi {
      * error — one says "no measurement exists", the other says "we could not ask".
      */
     suspend fun hostMetrics(): ApiResult<HostMetrics?>
+
+    /** `GET /v1/host/actions` — scope `read`. Empty when the platform cannot power off. */
+    suspend fun hostActions(): ApiResult<List<Action>>
+
+    /**
+     * `POST /v1/host/actions/{actionId}` — scope **`host.power`**.
+     *
+     * Success means accepted, not done, and for this endpoint there is usually no "done"
+     * to learn about: a reboot that worked ends the stream that would have reported it.
+     * Keep the returned id anyway — a [dev.cueseek.core.model.HostActionOutcome] carrying
+     * it means the machine is still running and the action failed.
+     */
+    suspend fun invokeHostAction(actionId: String): ApiResult<HostActionAcceptance>
 
     /** `GET /v1/services` — scope `read`. Configuration order. */
     /**

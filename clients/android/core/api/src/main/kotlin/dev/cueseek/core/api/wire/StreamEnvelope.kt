@@ -16,6 +16,7 @@
 package dev.cueseek.core.api.wire
 
 import dev.cueseek.core.api.wire.ActionProgress
+import dev.cueseek.core.api.wire.HostActionProgress
 import dev.cueseek.core.api.wire.HostMetrics
 import dev.cueseek.core.api.wire.Service
 import dev.cueseek.core.api.wire.Snapshot
@@ -34,6 +35,7 @@ import kotlinx.serialization.Contextual
  * @param snapshot 
  * @param service Present when `type` is `service_updated`.
  * @param hostMetrics Present when `type` is `host_updated`, and on a faster cadence than service updates because a CPU figure averaged over a service poll interval hides exactly the spike worth seeing. 
+ * @param hostActionProgress Present when `type` is `host_action_progress`. In practice this only ever carries a failure: a power action that worked took the stream with it. 
  * @param actionProgress Present when `type` is `action_progress`.
  */
 @Serializable
@@ -64,6 +66,10 @@ data class StreamEnvelope (
     /* Present when `type` is `host_updated`, and on a faster cadence than service updates because a CPU figure averaged over a service poll interval hides exactly the spike worth seeing.  */
     @SerialName(value = "host_metrics")
     val hostMetrics: HostMetrics? = null,
+
+    /* Present when `type` is `host_action_progress`. In practice this only ever carries a failure: a power action that worked took the stream with it.  */
+    @SerialName(value = "host_action_progress")
+    val hostActionProgress: HostActionProgress? = null,
 
     /* Present when `type` is `action_progress`. */
     @SerialName(value = "action_progress")

@@ -15,6 +15,7 @@ import dev.cueseek.core.model.ActionInvocationId
 import dev.cueseek.core.model.AgentAddress
 import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.ApiError
+import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.PairedHost
 import dev.cueseek.core.data.ThemeChoice
@@ -191,6 +192,24 @@ class CueSeekViewModel(private val container: AppContainer) : ViewModel() {
                     openServiceId = null
                 }
 
+                is ApiResult.Failure -> actionError = result.error
+            }
+        }
+    }
+
+    /**
+     * Asks the machine to reboot or shut down.
+     *
+     * No pending state is recorded, unlike a service action. There is nothing to wait for:
+     * a power action that worked ends the stream that would have reported it, so the honest
+     * feedback is the console going stale and then reconnecting. Only a *failure* arrives,
+     * as a `host_action_progress` event, and it means the machine is still running.
+     */
+    fun invokeHostPower(host: PairedHost, action: Action) {
+        actionError = null
+        viewModelScope.launch {
+            when (val result = container.services.invokeHostAction(host, action.id)) {
+                is ApiResult.Success -> Unit
                 is ApiResult.Failure -> actionError = result.error
             }
         }

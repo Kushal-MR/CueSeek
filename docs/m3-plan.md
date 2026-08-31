@@ -49,7 +49,7 @@ without the user maintaining two addresses.
 | M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ verified |
 | M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ✅ verified |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ✅ verified |
-| M3.7 | Host power actions | M3.1, M3.3 | ⬜ |
+| M3.7 | Host power actions | M3.1, M3.3 | ⏳ built |
 | M3.8 | Verification, documentation, ADR closure | all | ⬜ |
 
 Each phase is independently verifiable and separately committed.
@@ -319,15 +319,54 @@ the strip's judgement calls.
 
 ---
 
-### M3.7 — Host power actions
+### M3.7 — Host power actions ⏳ built, awaiting real-host verification
 
-- Enable the polkit power block, **all four actions together** — the rule warns that
-  omitting the `*-multiple-sessions` variants is a classic "works alone, fails in practice".
-- Wire the dormant `host.power` scope, which has existed since M1 and is connected to
-  nothing.
-- `destructive` risk, press-and-hold.
-- Kept separate from M3.1 on purpose: stopping a service and powering off a machine are
-  different orders of consequence and deserve separate review.
+Reboot and shut down the machine from the phone. Mostly a matter of **connecting three
+things that were each built expecting it**: the polkit power block, written and commented
+out since M1; the `host.power` scope, which has existed just as long and guarded nothing;
+and the client's press-and-hold, which until now only `stop` used.
+
+- Polkit block enabled, **all four actions together**. The rule warned that omitting the
+  `*-multiple-sessions` variants is a classic "works alone, fails in practice", and it is
+  right: logind consults them the moment another user is logged in.
+- `destructive` risk for both, so both route to press-and-hold. Recorded as
+  [ADR-0002 Amendment 2](adr/0002-host-privilege-dbus-polkit.md).
+
+**Acknowledge before acting.** The one handler in the agent that must answer before it does
+its work: a reboot handler that reboots and then writes its response never writes it. It
+returns `202` and calls logind 750 ms later. The consequence is that **success is
+unobservable** — a power action that worked takes the stream, the agent and the machine with
+it, so the only outcome a client can ever receive is a failure, which usefully means the
+machine is still up.
+
+**Its own shapes, not the service ones.** `HostActionAccepted` and `HostActionProgress`
+rather than reusing `ActionAccepted`/`ActionProgress`, whose `service_id` is required. A
+machine is not one of its own services, and relaxing that field would have been smaller in
+the specification and much worse on a phone — an M3.6 client would fail to parse a field it
+was promised, and it would fail while some *other* device pressed the button. The same
+argument gave `host_action_progress` its own event type: an unknown type is ignored safely,
+a malformed known one is not.
+
+**Where it lives.** The host menu, not the service ⋮ — which is what M3.6's refusal to model
+the host as a pseudo-service bought. Had the machine been a row in the roster, "restart the
+host" and "restart Jellyfin" would now sit in the same list as the same affordance.
+
+**Scope, listed but enforced.** `GET /v1/host/actions` needs only `read` and returns the
+same list to everyone; invoking needs `host.power`. What the agent *offers* and what a
+device *may do* are different questions, and a client that could not see the list would be
+unable to tell "this agent is too old" from "this device was not granted permission". The
+menu greys the items and says which it is. **Devices paired before M3.7 must pair again.**
+
+**The confirmation names what it will interrupt** — "Right now: 2 streams playing and 1
+transfer running" — from the activity M3.5 already collects, at no extra request. It does
+not block: the operator owns the machine and may have good reasons to shut it down
+mid-transcode. Blocking would make the tool argue with the person it exists to serve.
+
+**Tests:** 21 new. Agent — the offered list and its risk levels, power-off's description
+naming physical access, unsupported platforms offering nothing, unknown ids never reaching
+the backend, scope enforcement, acknowledge-before-acting, the single-flight latch, and the
+failure event. Client — the interrupted-work summary, including that finished transfers do
+not count as work.
 
 ---
 

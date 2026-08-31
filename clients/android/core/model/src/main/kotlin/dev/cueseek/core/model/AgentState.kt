@@ -34,6 +34,16 @@ data class AgentState(
      */
     val hostMetrics: HostMetrics? = null,
     /**
+     * Power actions the agent offers for the machine.
+     *
+     * Empty on a platform that cannot perform them, and **not** filtered by what this
+     * device may do — that is [PairedHost.scopes]' job, and the two answer different
+     * questions. Knowing the agent offers a reboot while knowing this device was not
+     * granted `host.power` is what lets a screen say "not permitted on this device"
+     * rather than showing nothing and leaving the user to guess which it was.
+     */
+    val hostActions: List<Action> = emptyList(),
+    /**
      * Terminal action outcomes seen on the current connection, newest last, bounded.
      *
      * The stream is the only delivery mechanism — there is no endpoint to ask an action
@@ -41,6 +51,13 @@ data class AgentState(
      * A reconnect delivers a fresh snapshot, not missed events.
      */
     val actionOutcomes: List<ActionProgress> = emptyList(),
+    /**
+     * Host power actions that **failed**, newest last, bounded.
+     *
+     * There is no success list and there cannot be: a reboot that worked ends the stream
+     * that would have reported it. Anything in here means the machine is still running.
+     */
+    val hostActionFailures: List<HostActionOutcome> = emptyList(),
     /**
      * Whether a manual refresh is in flight *right now*.
      *

@@ -15,6 +15,8 @@ import dev.cueseek.core.model.Health
 import dev.cueseek.core.model.HealthReason
 import dev.cueseek.core.model.HealthStatus
 import dev.cueseek.core.model.HostId
+import dev.cueseek.core.model.HostActionAcceptance
+import dev.cueseek.core.model.HostActionOutcome
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.MemoryMetrics
 import dev.cueseek.core.model.NowPlaying
@@ -39,6 +41,8 @@ import dev.cueseek.core.api.wire.CpuMetrics as WireCpuMetrics
 import dev.cueseek.core.api.wire.Device as WireDevice
 import dev.cueseek.core.api.wire.Health as WireHealth
 import dev.cueseek.core.api.wire.HealthReason as WireHealthReason
+import dev.cueseek.core.api.wire.HostActionAccepted as WireHostActionAccepted
+import dev.cueseek.core.api.wire.HostActionProgress as WireHostActionProgress
 import dev.cueseek.core.api.wire.HostMetrics as WireHostMetrics
 import dev.cueseek.core.api.wire.MemoryMetrics as WireMemoryMetrics
 import dev.cueseek.core.api.wire.PairResponse as WirePairResponse
@@ -230,6 +234,21 @@ internal fun WireActionAccepted.toDomain() = ActionAcceptance(
     action = action,
     status = ActionStatus.fromWire(status),
     acceptedAt = parseTimestamp(acceptedAt),
+)
+
+internal fun WireHostActionAccepted.toDomain() = HostActionAcceptance(
+    actionId = ActionInvocationId(actionId),
+    action = action,
+    status = ActionStatus.fromWire(status),
+    acceptedAt = parseTimestamp(acceptedAt),
+)
+
+internal fun WireHostActionProgress.toDomain() = HostActionOutcome(
+    actionId = ActionInvocationId(actionId),
+    action = action,
+    status = ActionStatus.fromWire(status),
+    at = parseTimestamp(at),
+    error = error,
 )
 
 internal fun WireActionProgress.toDomain() = ActionProgress(

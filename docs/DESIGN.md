@@ -313,6 +313,28 @@ where every service has one.
 anything unrecognised → dialog with a hold-to-confirm bar, 1200ms, where the fill *is* the
 progress so releasing early visibly abandons it. Effort in proportion to consequence.
 
+Three levels, and it stays three. Powering the machine off is genuinely worse than stopping
+a service — a stop is undone from the same screen, a power-off needs somebody in the room —
+but the vocabulary is public API shared with clients that already exist, and a fourth level
+would force every one of them to handle a value it has no interaction for. **The difference
+is carried in words instead**, which is where it is actually read.
+
+**Host power** (M3.7). Reboot and shut down live in the host menu, never in a service ⋮ —
+the machine is not one of its own services, and putting "restart the host" in the same list
+as "restart Jellyfin" would make the two look like the same kind of act. The menu only
+asks; the confirmation decides, so a machine is never one tap inside a list somebody is
+scrolling.
+
+The confirmation **names what it will interrupt** — "Right now: 2 streams playing and 1
+transfer running" — coloured, because that is the sentence that should give somebody pause.
+It does not block. The operator owns the machine and may have good reasons to shut it down
+mid-transcode; a console that argued with them would be worse than one that stayed quiet,
+and one that knows and says nothing is wasting the only thing it is uniquely placed to say.
+
+Items grey out when the device's token lacks `host.power`, with a line saying so. Showing
+nothing would be indistinguishable from an agent too old to offer them, and those two
+problems have completely different fixes.
+
 **Detail sheet.** Detail only — no actions. With actions in both, one screen offered the
 same verbs three times, and a second entry point to a destructive action is a second thing
 to keep gated correctly forever.
