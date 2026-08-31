@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -93,6 +94,7 @@ private fun Vitals(metrics: HostMetrics) {
                     // fault, and painting it red would train the reader to ignore the one
                     // colour this palette reserves for things that need a decision.
                     tint = null,
+                    detail = metrics.cpu?.let(::loadPhrase),
                     description = "Processor ${usage.roundToInt()} percent",
                 )
             }
@@ -103,6 +105,7 @@ private fun Vitals(metrics: HostMetrics) {
                     value = "${(used * 100).roundToInt()}%",
                     fraction = used,
                     tint = pressureTint(used),
+                    detail = metrics.memory?.availableBytes?.let { "${byteSize(it)} free" },
                     description = "Memory ${(used * 100).roundToInt()} percent used",
                 )
             }
@@ -115,9 +118,14 @@ private fun Vitals(metrics: HostMetrics) {
                 volume.usedFraction?.let { used ->
                     Meter(
                         label = volume.mount,
-                        value = byteSize(volume.freeBytes) + " free",
+                        // A percentage, like its two neighbours, so every value on this row
+                        // describes the bar beneath it. It used to read "175 GB free" over
+                        // a two-thirds-full bar, which made the one column that mattered
+                        // most the only one whose number and rule disagreed.
+                        value = "${(used * 100).roundToInt()}%",
                         fraction = used,
                         tint = pressureTint(used),
+                        detail = "${byteSize(volume.freeBytes)} free",
                         description = "${volume.mount}, ${byteSize(volume.freeBytes)} free of " +
                             "${byteSize(volume.totalBytes)}",
                     )
@@ -130,7 +138,12 @@ private fun Vitals(metrics: HostMetrics) {
 }
 
 /**
- * One labelled rule.
+ * One labelled rule: name and percentage above it, the absolute figure below.
+ *
+ * Three lines rather than two, and that third line is what makes this a grid instead of a
+ * row with a caption. The absolute numbers — free bytes, load average — used to live in a
+ * single full-width line of dot-separated facts underneath, which belonged to none of the
+ * three columns and read as something left over. Each column now carries its own.
  *
  * Label and value share a line above the rule rather than sitting beside it, so three of
  * these fit across a phone without any of them truncating a mount point to "/mn…".
@@ -141,6 +154,7 @@ private fun RowScope.Meter(
     value: String,
     fraction: Float,
     tint: Color?,
+    detail: String?,
     description: String,
 ) {
     val filled by animateFloatAsState(
@@ -166,7 +180,11 @@ private fun RowScope.Meter(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
+                // The gap is padding on the label rather than spacing on the row, because
+                // the label is the element that grows: a long mount point takes the whole
+                // width and would otherwise run its ellipsis straight into the number,
+                // which on a real machine read as "/srv/cuese…88%".
+                modifier = Modifier.weight(1f, fill = false).padding(end = 6.dp),
             )
             Text(
                 value,
@@ -197,49 +215,87 @@ private fun RowScope.Meter(
                 )
             }
         }
+
+        if (detail != null) {
+            Text(
+                detail,
+                style = CueSeekType.Data.Small,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 /**
- * Uptime and the hottest sensor, when either is known.
+ * The two facts that belong to the machine rather than to any one meter: how long it has
+ * been up, and how hot it is.
  *
- * A footnote rather than a meter because neither is a proportion. Temperature has no
- * ceiling this app knows — that is the hardware's own business, which is why the agent
- * carries the threshold rather than the client inventing one.
+ * Uptime left, temperature right, which is the same shape as the provenance line directly
+ * above. That is the point of the arrangement rather than a coincidence — a line that ran
+ * left to right and stopped wherever it ran out of words read as something left over, while
+ * two anchored ends read as a row that was placed.
+ *
+ * Neither is a proportion, so neither gets a rule. Temperature has no ceiling this app
+ * knows: that is the hardware's own business, which is why the agent carries the threshold
+ * and the client never invents one.
  */
 @Composable
 private fun Footnote(metrics: HostMetrics) {
     val hottest = metrics.thermal?.maxByOrNull { it.celsius }
-    val facts = listOfNotNull(
-        metrics.uptimeSeconds?.let { "up ${uptimePhrase(it)}" },
-        metrics.cpu?.load1?.let { load ->
-            metrics.cpu?.cores?.let { "load ${trimZero(load)} of $it" } ?: "load ${trimZero(load)}"
-        },
-        hottest?.let { "${it.celsius.roundToInt()}°C ${chipOf(it.label)}" },
-    )
-    if (facts.isEmpty()) return
+    val uptime = metrics.uptimeSeconds?.let { "up ${uptimePhrase(it)}" }
+    if (uptime == null && hottest == null) return
 
-    // The full sensor name is spoken even though only the chip is drawn, so the shortening
-    // is a layout decision rather than a loss of information.
-    val spoken = facts.dropLast(if (hottest == null) 0 else 1) +
-        listOfNotNull(hottest?.let { "${it.celsius.roundToInt()} degrees, ${it.label}" })
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                // The full sensor name is spoken even though only the chip is drawn, so the
+                // shortening stays a layout decision rather than a loss of information.
+                contentDescription = listOfNotNull(
+                    uptime,
+                    hottest?.let { "${it.celsius.roundToInt()} degrees, ${it.label}" },
+                ).joinToString(", ")
+            },
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            uptime.orEmpty(),
+            style = CueSeekType.Data.Small,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        if (hottest != null) {
+            Text(
+                "${hottest.celsius.roundToInt()}°C ${chipOf(hottest.label)}",
+                style = CueSeekType.Data.Small,
+                // Coloured only when the hardware itself says the reading is high. The
+                // threshold comes from the sensor, so a laptop CPU at 85°C and a drive at
+                // 85°C are judged by their own limits rather than by a number this app
+                // made up.
+                color = if (hottest.isHot) {
+                    CueSeekStatus.colors.degraded
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+            )
+        }
+    }
+}
 
-    Text(
-        facts.joinToString("  ·  "),
-        style = CueSeekType.Data.Small,
-        modifier = Modifier.clearAndSetSemantics {
-            contentDescription = spoken.joinToString(", ")
-        },
-        // Coloured only when the hardware itself says the reading is high. The threshold
-        // comes from the sensor, so a laptop CPU at 85°C and a drive at 85°C are judged by
-        // their own limits rather than by a number this app made up.
-        color = if (hottest?.isHot == true) {
-            CueSeekStatus.colors.degraded
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        maxLines = 2,
-    )
+/**
+ * Load against capacity, for the line under the CPU meter.
+ *
+ * Reads "0.4 of 4" so the number has a denominator on screen: a load of 4 is saturation on
+ * a quad-core and half idle on an eight, and the bare figure means nothing without it.
+ */
+internal fun loadPhrase(cpu: dev.cueseek.core.model.CpuMetrics): String? {
+    val load = cpu.load1 ?: return null
+    val cores = cpu.cores ?: return "load ${trimZero(load)}"
+    return "load ${trimZero(load)} of $cores"
 }
 
 /**

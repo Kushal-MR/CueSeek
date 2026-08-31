@@ -462,16 +462,67 @@ rebuild, and the first time in the direction of a new *event type*.
    on its own, which is the worst kind of defect to meet later. The footnote now shows the
    chip (`coretemp`) and screen readers still get the full label.
 
+### Follow-up round
+
+Four of the five items below were open after the first pass. Three were closed by testing
+the machine as it is, rather than by inventing hardware it does not have.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 15 | **204 when there is nothing to report** | `enabled: false`, restart → `HTTP 204`, body **0 bytes**, journal says "host metrics disabled by configuration" |
+| 16 | 204 end to end | The strip **left the phone** while collection was off and returned when it was restored — absent rendering as nothing, not as zeroes |
+| 17 | **Two watched filesystems** | `storage_mounts: ["/", "/srv/cueseek-vitals"]`, both reported |
+| 18 | **Fullest wins** | At 0% the strip showed `/` (64%); at 88% it switched to the tmpfs; emptying it switched back |
+| 19 | **Pressure at ≥85%** | 87.5% → amber rule |
+| 20 | **Pressure at ≥95%** | 96.9% → red rule |
+| 21 | Long mount labels | `/srv/cueseek-vitals` ellipsises to `/srv/cues…` and keeps its gap from the value |
+
+The 204 was produced deliberately rather than raced. The natural window on a running agent
+is the one second between the priming sample and the first publish, which is not a thing to
+sit and wait for; switching collection off reaches the same state and is the case an
+operator can actually cause.
+
+The thresholds were crossed on a **64 MB tmpfs** added as a second watched filesystem, not
+by filling the root disk. Reaching 85% of 457 GB means writing about 215 GB to the disk the
+media library lives on, which is slow and genuinely risky for no extra coverage — a tmpfs is
+memory, vanishes on unmount, and crosses the identical code path. It also closed the
+multiple-mounts and fullest-wins items, which one filesystem could never have exercised.
+
+### Two more defects from the follow-up
+
+7. **The vitals footnote belonged to nothing.** Uptime, load and temperature sat in one
+   full-width dot-separated line under a three-column grid, aligned to none of it. Each
+   column now carries its own second line — `load 0.1 of 4`, `3.1 GB free`, `175 GB free` —
+   and only the two host-level facts remain, anchored left and right the way the provenance
+   line above them is.
+
+   The storage value became a percentage in the same change. It read "175 GB free" above a
+   two-thirds-full bar, which made the one column most likely to matter the only one whose
+   number and rule disagreed. Free bytes moved to the line beneath.
+
+8. **A long mount label ran into its value**, rendering `/srv/cuese…88%` with no gap. Found
+   the moment a mount point longer than `/` existed.
+
 ### Not claimed
 
-- **204 was never observed live.** It is unit-tested on both sides, but the window on a real
-  agent is the one second between the priming sample and the first publish, and no restart
-  happened to land inside it.
 - **No machine without sensors was tested.** The empty-versus-absent thermal distinction is
-  asserted by tests only; this hardware has four sensors and always answered.
-- **`storage_mounts` was tested with one entry.** A second filesystem, and the
-  "fullest wins" rule that picks between them, were not exercised on hardware.
-- **Nothing above 85% was seen**, so neither pressure colour has been observed on a real
-  reading. Both thresholds are unit-tested.
+  asserted by tests only. This hardware has four working sensors and there is no honest way
+  to remove them — pointing the collector at a fake `/sys` would be a worse unit test, not a
+  real-device one.
+- **Memory pressure was never crossed on real readings.** Deliberately: `pressureTint` is
+  one function shared by memory and storage, so item 19 and item 20 exercise the same code.
+  Filling 3.8 GB of RAM on a box running Jellyfin and qBittorrent risks the OOM killer
+  taking a real service for no additional coverage.
+- **A single sensor reading above its own `high_celsius`** has not been seen, so the hot
+  colour on the temperature is unit-tested only. This machine idles around 45°C against an
+  87°C limit.
 - The `m36-probe` device (scope `read`) is still paired and its token is in `/tmp` on the
   host, which clears at reboot.
+
+### One thing worth deciding later
+
+A filesystem at 97% turns its rule red while the headline still reads **"All good"** and the
+tally still counts two healthy services. Both are correct as specified — the verdict is
+about services, and a full disk is not a service being down — but an operations console
+arguably should say so at the top. Changing it means letting host state feed the fleet
+verdict, which is a real design decision rather than a bug fix. Left for M3.8.
