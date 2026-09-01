@@ -14,7 +14,7 @@ import dev.cueseek.core.data.SettingsRepository
  *
  * Manual construction rather than Hilt (ADR-0013). Three screens and one data layer do not
  * need an annotation processor, and with plain constructors the swap stays cheap — the
- * moment it earns its keep is M4, when the Wear client assembles these same repositories
+ * moment it earns its keep is M5, when the Wear client assembles these same repositories
  * and the wiring exists twice.
  *
  * One [CueSeekApiFactory.AgentHttp] is shared by everything, so every host and, from P3,

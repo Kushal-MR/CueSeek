@@ -143,7 +143,7 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | `agent/internal/host/` | `HostController`; systemd/logind over D-Bus. |
 | `agent/internal/store/` | SQLite: device registry, token hashes, audit log. |
 | `clients/android/` | Android phone client (Compose). |
-| `clients/wear/` | Wear OS client. Placeholder until M4. |
+| `clients/wear/` | Wear OS client. Placeholder until M5. |
 | `deploy/` | systemd unit, polkit rule, install script, packaging. |
 | `docs/adr/` | Architecture Decision Records. Start here. |
 | `docs/DESIGN.md` | The design system: palette, type, shape, motion, and the rules behind them. |
@@ -172,8 +172,12 @@ prose — the file a designer, a contributor or a design tool should be handed f
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
 | **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
 | **M3** | qBittorrent, `web_ui`, activity, host metrics, power actions | ✅ Done — nine phases, each verified on hardware as it landed ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). A second adapter reached the phone with **zero client changes**, and the reboot was confirmed by a changed kernel boot id |
-| **M4** | Wear OS standalone client, tiles and complications | ⬜ |
-| **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
+| **M4** | Productization: licence, neutral defaults, the `systemd` adapter, `cueseekd check`, released artefacts, documentation | 🔨 In progress — [plan](docs/m4-plan.md). Proven by installing on a machine that has never seen CueSeek |
+| **M5** | Wear OS standalone client, tiles and complications | ⬜ |
+| **M6** | A third adapter, used to measure whether the abstraction held | ⬜ |
+
+M4 was previously the Wear milestone; the renumber and its reasoning are
+[ADR-0011 Amendment 2](docs/adr/0011-sequencing-spike-then-slice.md).
 
 
 ## Development

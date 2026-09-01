@@ -5,7 +5,7 @@
 // interfaces, so internal/adapters cannot import the adapters back. Registration
 // therefore lives one level up, in a package that imports both.
 //
-// The practical effect is the measurement ADR-0011 sets for M5 — "adding a third adapter,
+// The practical effect is the measurement ADR-0011 sets for M6 — "adding a third adapter,
 // how many files changed outside its own package?" The intended answer is two: this file,
 // and the config that names the new service. If a future adapter needs more than that,
 // the capability model has a gap worth finding before a fourth arrives.
