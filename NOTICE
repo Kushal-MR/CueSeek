@@ -1,0 +1,27 @@
+CueSeek
+Copyright 2026 Kushal M R
+
+This product includes software developed by the CueSeek project.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+--------------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------------
+
+IBM Plex Sans and IBM Plex Mono
+  Copyright (c) 2017 IBM Corp. with Reserved Font Name "Plex"
+  Licensed under the SIL Open Font License, Version 1.1.
+  Bundled in: clients/android/core/design/src/main/res/font/
+  Full licence text: clients/android/core/design/LICENSE-IBM-Plex.txt
+
+  The OFL is a separate licence from the Apache License above and applies only
+  to the font files. Redistributing CueSeek's Android client redistributes them,
+  so the licence text travels with the repository rather than being referenced.
+
+Gradle wrapper (gradlew, gradlew.bat, gradle/wrapper/gradle-wrapper.jar)
+  Copyright Gradle Inc.
+  Licensed under the Apache License, Version 2.0.
+
+Go and Kotlin dependencies are resolved at build time and are not vendored here.
+Their licences are declared in agent/go.mod and clients/android/gradle/libs.versions.toml.
