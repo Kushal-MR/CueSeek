@@ -1,6 +1,6 @@
 # CueSeek for Wear OS
 
-> **Placeholder.** Lands in M4, after the phone client and the design system.
+> **Placeholder.** Lands in M5, after the phone client and the design system.
 
 ## Position
 

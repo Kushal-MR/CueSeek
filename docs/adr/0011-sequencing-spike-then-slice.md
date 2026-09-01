@@ -92,3 +92,53 @@ other lacks — `transfers` and `now_playing` are both still unimplemented. The 
 hard question ADR-0005 poses is whether *those* fit without reshaping the interface, and
 M3.5 is what answers it. This measurement covers breadth of services, not depth of
 capabilities.
+
+### Amendment 2 — 2026-09-01: productization becomes M4; Wear moves to M5
+
+**What changed.** A milestone is inserted. M4 is now productization — making CueSeek
+installable by someone who has never seen the development host. The Wear OS client moves
+from M4 to **M5**, and step 4's third-adapter measurement from M5 to **M6**.
+
+| Was | Is | Milestone |
+| --- | --- | --- |
+| M4 | **M4** | Productization (new) |
+| M4 | **M5** | Wear OS standalone client, tiles and complications |
+| M5 | **M6** | A third adapter, as the measurement step 4 requires |
+
+**Why the order changes.** This ADR's step 3 says "then widen, capability by capability,
+along a proven path", and step 4 measures the abstraction at a third adapter. Neither step
+says anything about who can run the result, because when this was written the answer was
+obviously "the author". That assumption is no longer wanted, and it is cheapest to correct
+before the client count grows.
+
+Two concrete reasons for this position rather than a later one:
+
+1. **ADR-0007 states that every new capability requires a release on every client that
+   should display it, and calls it real recurring work.** Wear starts that meter. Work that
+   touches defaults, packaging and documentation is strictly cheaper with one client than
+   with two, and none of it becomes easier by waiting.
+2. **The repository currently cannot be used by anyone else at all** — there is no `LICENSE`
+   file, so default copyright applies. Every milestone that widens what CueSeek does is
+   built on top of something nobody may legally run. That is a one-file fix, and it belongs
+   in front of the queue rather than behind a client.
+
+**What did not change.** Everything this record decided. Spike first and throw it away;
+then one thin slice end to end; then widen capability by capability; then measure the
+abstraction at a third adapter by counting the files changed outside its package, with
+Amendment 1's narrower bound on configuration still binding. M4 adds no capability and no
+contract change by design, so it does not consume step 3 or pre-empt step 4 — it is
+orthogonal work that was never sequenced because it was never anticipated.
+
+**Reading older records.** Documents written before this date use M4 to mean the Wear
+milestone: `docs/adr/0013-android-client-architecture.md`, `docs/m2-p6-verification.md` and
+`docs/m3-verification.md`. They are **left as written**. Rule 3 of the ADR format is that an
+accepted decision is never rewritten, and a verification record is dated evidence rather
+than a live plan — the same treatment M2's `P0`–`P6` phase naming received when M3 adopted
+the numeric form. This table is how those references decode. Forward-looking documents and
+code comments were updated, because a comment describing what a future milestone will do is
+wrong rather than historical once the milestone moves.
+
+**Cost.** Wear is the strongest available demonstration that ADR-0005 and ADR-0007 hold —
+one contract, two form factors, no server change — and it is now a milestone further away.
+Accepted because that demonstration is worth no less in three months, and because a
+demonstration nobody can install is worth less than it looks.

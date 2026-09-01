@@ -76,7 +76,7 @@ expensive to reopen:
 | --- | --- | --- |
 | HTTP | OkHttp + Retrofit + kotlinx.serialization | `okhttp-sse` reads the stream; Ktor's multiplatform edge is worth nothing while every client is JVM |
 | Credentials | DataStore sealed with an Android Keystore AES-GCM key | Jetpack Security is unmaintained — [ADR-0006, Amendment 2](../../docs/adr/0006-device-pairing-scoped-tokens.md) |
-| DI | Manual constructor injection via `AppContainer` | Three screens and one data layer. Hilt earns its processor at M4, when Wear assembles the same repositories |
+| DI | Manual constructor injection via `AppContainer` | Three screens and one data layer. Hilt earns its processor at M5, when Wear assembles the same repositories |
 | Screenshot tests | Paparazzi, on `:core:design`'s status catalogue only | Status rendering is correctness-critical and stable; feature screens still being designed produce golden-image noise |
 | Logout | Clears local credentials only | The CLI's default scopes exclude `devices.manage`, so a typical device cannot revoke itself. The app says so rather than failing quietly |
 | Pairing | Typed host address + code | No QR producer exists — [ADR-0006, Amendment 3](../../docs/adr/0006-device-pairing-scoped-tokens.md) |

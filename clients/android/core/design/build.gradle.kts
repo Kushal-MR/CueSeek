@@ -21,7 +21,7 @@ android {
     }
 }
 
-// Tokens and the component catalogue (ADR-0010). Tokens are shared with Wear in M4;
+// Tokens and the component catalogue (ADR-0010). Tokens are shared with Wear in M5;
 // components are not, because the same capability is deliberately rendered differently
 // per form factor (ADR-0007). Paparazzi arrives with the status catalogue in P4 — there
 // is nothing worth pinning a golden image of yet.
