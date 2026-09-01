@@ -201,3 +201,21 @@ an oversight: `RestartUnit`, `Reboot` and `PowerOff` are systemd/logind operatio
 `HostController` interface exists so that an OpenRC, BSD or macOS backend is a swap rather
 than a rewrite, but none is implemented yet...
 
+## Security
+
+CueSeek can restart services, reboot the host and power it off. What it is permitted to do
+is stated in full by one short polkit rule you install by hand and can read in two minutes:
+[`deploy/10-cueseek.rules`](deploy/10-cueseek.rules). The agent itself runs as an
+unprivileged user and holds no capabilities.
+
+[`SECURITY.md`](SECURITY.md) covers the model, the risks that are knowingly accepted, what
+CueSeek deliberately cannot do, and how to report a vulnerability — privately, through
+GitHub's advisory flow rather than a public issue.
+
+## Licence
+
+[Apache License 2.0](LICENSE).
+
+Third-party components are listed in [`NOTICE`](NOTICE). The bundled IBM Plex fonts are
+under the SIL Open Font License 1.1, which is a separate licence from the one above.
+
