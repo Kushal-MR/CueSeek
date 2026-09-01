@@ -7,9 +7,10 @@ CueSeek gives you one consistent way accesss every service running on your home 
 It talks to Jellyfin, qBittorrent and others through their APIs, and adds the host-level
 control they cannot provide themselves.
 
-> **Status: M2 complete, M3 underway.** The agent and the Android client both work, and the
-> whole path — phone → Tailscale → `cueseekd` → polkit → systemd — has been verified end to
-> end on real hardware. Two services are managed today, Jellyfin and qBittorrent.
+> **Status: M3 complete.** The agent and the Android client both work, and the whole path —
+> phone → Tailscale → `cueseekd` → polkit → systemd — has been verified end to end on real
+> hardware. Two services are managed today, Jellyfin and qBittorrent, and the phone can read
+> the machine's own vitals and reboot or shut it down.
 > See [What works today](#what-works-today).
 
 ---
@@ -36,21 +37,32 @@ the machine they run on:
 
 ## What works today
 
-Two milestones are complete and the third is underway. Everything below was verified on real
-hardware against the real agent, not against mocks — the records are in
+Three milestones are complete. Everything below was verified on real hardware against the
+real agent, not against mocks — the records are in
 [`docs/m2-p6-verification.md`](docs/m2-p6-verification.md) and
 [`docs/m3-verification.md`](docs/m3-verification.md).
 
 **The agent — `cueseekd`.** Runs as an unprivileged `cueseek` user on a systemd host.
 Serves the REST contract and an SSE event stream, stores paired devices and hashed tokens
-in SQLite, polls Jellyfin and qBittorrent for health on its own schedule, and starts, stops
-and restarts units through polkit without ever holding root.
+in SQLite, polls Jellyfin and qBittorrent on its own schedule for health *and for what they
+are doing*, reads the machine's own CPU, memory, storage and temperatures from `/proc` and
+`/sys`, and starts, stops and restarts units — or reboots and shuts down the host itself —
+through polkit, without ever holding root.
 
 **The Android client.** Pair by entering the host's address and a single-use code printed
-by `cueseekd pair`. A live dashboard shows every service's health, updated over SSE. Tapping
-a service row opens that service's own web interface; the trailing menu carries its lifecycle
-actions, gated by the risk the agent assigns. Outcomes arrive as stream events rather than
-being assumed from the acknowledgement.
+by `cueseekd pair`. A live dashboard shows every service's health and activity, updated over
+SSE, with the machine's own vitals underneath. Tapping a service row opens its detail; the
+trailing menu carries the web interface and its lifecycle actions, gated by the risk the
+agent assigns. The host menu carries reboot and shut down, which name what they will
+interrupt before you hold the button. Outcomes arrive as stream events rather than being
+assumed from the acknowledgement.
+
+**What it refuses to do** is as deliberate as what it does. It never shows stale data as
+current: if the agent goes quiet the client degrades to `unknown` from a clock, never from
+what the connection claims about itself. A value the agent could not read is absent rather
+than zero, so an unreadable sensor never renders as a cold machine. And the UI never branches
+on which service it is — a test enforces it, which is why qBittorrent reached the phone with
+no client change at all.
 
 Verified end to end over Tailscale, on a phone and a real Linux host:
 
@@ -159,7 +171,7 @@ prose — the file a designer, a contributor or a design tool should be handed f
 | **M0** | Architecture validation spike: polkit + D-Bus, and SSE over a tailnet | ✅ Done — [findings](docs/m0-findings.md). A7 closed: SSE viable, but Doze freezes it silently rather than killing it (ADR-0004 Amendment 2) |
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
 | **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
-| **M3** | qBittorrent, `now_playing`, host metrics, power actions | 🟡 In progress — M3.1 service lifecycle, M3.2 `web_ui`, M3.3 row interaction, M3.3a on-demand refresh and M3.4 the qBittorrent adapter are done and verified on hardware ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). M3.5–M3.8 remain |
+| **M3** | qBittorrent, `web_ui`, activity, host metrics, power actions | ✅ Done — nine phases, each verified on hardware as it landed ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). A second adapter reached the phone with **zero client changes**, and the reboot was confirmed by a changed kernel boot id |
 | **M4** | Wear OS standalone client, tiles and complications | ⬜ |
 | **M5** | A third adapter, used to measure whether the abstraction held | ⬜ |
 

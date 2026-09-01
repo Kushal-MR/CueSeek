@@ -17,11 +17,24 @@ Requires=dbus.socket
 After=dbus.socket network-online.target
 Wants=network-online.target
 
-# If bind.address is a VPN address, the agent handles the startup race itself: it
-# waits up to 90s for the address to appear before giving up, so no ordering is
-# strictly required here. Uncommenting these only makes the boot sequence tidier.
-# After=tailscaled.service
-# Wants=tailscaled.service
+# NO tailscaled ordering, and this is now a measurement rather than an assumption.
+#
+# M2 left "add After=tailscaled.service" as an open item. M3.8 added it, deployed it and
+# rebooted the host to check. It made no difference — the agent still retried, and on that
+# boot retried *more* than on unordered boots:
+#
+#   without ordering   waited=2s attempts=2   /   waited=6s attempts=4
+#   with ordering      waited=10s attempts=6
+#
+# The reason is the one written three paragraphs below, which was correct before anyone
+# tested it: `After=tailscaled.service` orders against tailscaled having *started*, and a
+# started tailscaled has not authenticated yet. The tailnet address arrives seconds later.
+# Ordering therefore guarantees the wrong event.
+#
+# What does solve it is already here: the agent retries bind() for up to 90 seconds, which
+# is why every boot in this project's history has come up regardless. The item is closed as
+# decided against, not done — a directive that looks like it handles the race, and does not,
+# is worse than no directive, because the next reader stops looking.
 #
 # DO NOT add `tailscale0.device`. systemd resolves any *.device unit name back to a
 # device path, so it reads that as a device node at /tailscale0, which never appears.
