@@ -573,7 +573,7 @@ did not move.
 
 ---
 
-## M3.7 — Host power actions ⏳ reboot verified, power-off outstanding
+## M3.7 — Host power actions ✅
 
 Verified on `kushal-HP-paviliong6` and the OnePlus CPH2707 over Tailscale, agent
 `m3.7-35a6998`, with the polkit power block enabled for the first time.
@@ -627,10 +627,9 @@ was briefly stated as fact.
 
 ### Not verified
 
-- **Power off has not been run.** It needs physical access to undo, so it is deliberately
-  the last thing tested and is not claimed. Everything up to and including the confirmation
-  dialog is verified; only the `PowerOff` D-Bus call itself is untested, and it differs from
-  the verified `Reboot` path by one method name.
+- **Power off is operator-reported, not observed here.** Kushal ran it and confirmed it
+  worked; this session did not watch it happen, and the distinction is kept rather than
+  smoothed over. It differs from the verified `Reboot` path by one `logind` method name.
 - **The `-multiple-sessions` variants** were not exercised: nobody was logged in at the
   console. They are granted, and the failure they prevent only appears when somebody is.
 - **`host_action_progress`** has never been seen on the wire, because no power action has
@@ -678,3 +677,57 @@ exist to protect — data goes `unknown` from the clock — is unchanged and sti
 without a manual refresh, but a single clean resume does not prove the fix: the socket may
 not have been frozen that time. The deterministic evidence is the test. Reproducing a real
 frozen socket on demand would mean interfering with the tailnet mid-connection.
+
+---
+
+## M3.8 — Verification, documentation, ADR closure ✅
+
+No new capability. The value is in what the closure step *found*, which was two things
+neither of them planned.
+
+### The tailscaled ordering does not work, and now we know
+
+`After=tailscaled.service` had been an open item since M2, carried forward on the assumption
+that it would remove the bind retries at boot. M3.8 added it, deployed it, and rebooted the
+HP from the phone to check.
+
+| Boot | Ordering | Result |
+| --- | --- | --- |
+| Aug 31 18:43 | none | `waited=2s attempts=2` |
+| Sep 01 12:14 | none | `waited=6s attempts=4` |
+| **Sep 01 12:25** | **`After=tailscaled.service`** | **`waited=10s attempts=6`** |
+
+It did not help, and on that boot it was worse. The explanation was already in the unit file,
+three paragraphs below where the directive went, and had simply never been tested: ordering
+against tailscaled having *started* is not ordering against the tailnet **address** existing.
+tailscaled starts, then authenticates, and the address arrives seconds after that.
+
+The item is closed as **decided against** rather than done, and the unit now carries the
+measurement instead of the assumption. What actually solves the race is the agent's 90-second
+bind retry, which is why every boot in this project's history has come up regardless.
+
+This is the clearest case in M3 of a plan item that was wrong rather than unfinished, and it
+would have shipped as a line of configuration that looked like it handled something.
+
+### An ADR index that had drifted
+
+The index claimed ADR-0006 had four amendments; the file has three. `git log -L` traced it to
+`66142b5` (M3.6): an unanchored `sed` matched two rows whose text happened to be identical,
+so correcting ADR-0004's count silently incremented ADR-0006's too. Every ADR's count is now
+checked against its file and all match.
+
+Small, and exactly the class of rot a closure phase exists to catch. It argues for a CI check
+that the index matches the files — **deliberately not built here**, because adding test
+infrastructure during a wrap-up is how wrap-ups become another feature. Noted for M4.
+
+### End to end, once more
+
+The reboot that produced the table above was invoked from the phone, held through the
+press-and-hold, and watched all the way round: machine down, boot id changed
+`59d5408d…` → `bde8b5db…`, all four services back unaided, phone reconnected on its own.
+
+### The record for M3.7's power-off
+
+**Operator-reported.** Kushal ran the shutdown and confirmed it worked. This session did not
+observe it, and the notes say so rather than implying otherwise — it shares the `logind` path
+with the reboot, which is verified in detail above.

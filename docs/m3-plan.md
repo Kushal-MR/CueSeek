@@ -49,8 +49,9 @@ without the user maintaining two addresses.
 | M3.4 | qBittorrent adapter | M3.1, M3.2 | ✅ verified |
 | M3.5 | Activity capabilities: `transfers`, `now_playing` | M3.4 | ✅ verified |
 | M3.6 | Host metrics: CPU, memory, storage, thermals | M3.2 | ✅ verified |
-| M3.7 | Host power actions | M3.1, M3.3 | ⏳ built |
-| M3.8 | Verification, documentation, ADR closure | all | ⬜ |
+| M3.7 | Host power actions | M3.1, M3.3 | ✅ verified |
+| M3.7a | Stream recovery: replace a connection that has gone silent | M3.3a | ✅ verified |
+| M3.8 | Verification, documentation, ADR closure | all | ✅ |
 
 Each phase is independently verifiable and separately committed.
 
@@ -319,7 +320,7 @@ the strip's judgement calls.
 
 ---
 
-### M3.7 — Host power actions ⏳ built, awaiting real-host verification
+### M3.7 — Host power actions ✅ verified
 
 Reboot and shut down the machine from the phone. Mostly a matter of **connecting three
 things that were each built expecting it**: the polkit power block, written and commented
@@ -370,11 +371,49 @@ not count as work.
 
 ---
 
-### M3.8 — Verification, documentation, ADR closure
+### M3.7a — Stream recovery ✅ verified
 
-Real-device end-to-end over Tailscale, as M2 P6 did. README and roadmap updated. ADR
-amendments closed. The `After=tailscaled.service` deployment item left open by M2 is
-finished here.
+Unplanned, and numbered `7a` for the same reason `3a` was: it came from using the thing, not
+from the plan. Numbered rather than folded into M3.7 because it is not about host power at
+all — the defect predates both M3.6 and M3.7, and `git log -L` puts the reconnect loop's last
+change in M3.3a.
+
+The stream's read timeout is infinite, which is correct — a quiet agent must not be
+disconnected — and means a socket that dies without saying so never errors. The freshness
+watchdog saw the silence and rendered it honestly; nothing acted on it. Pull-to-refresh
+fetched a snapshot over a fresh connection without touching the dead stream, which is why
+refreshing appeared to fix it and it drifted back thirty seconds later.
+
+The A7 lesson had been applied to only half the problem: the client distrusted the connection
+for *rendering* while still trusting it to notice its own death. Silence past the staleness
+tolerance now ends the connection as well as the trust, on the same threshold so the screen
+and the transport cannot disagree about what silence means.
+
+---
+
+### M3.8 — Verification, documentation, ADR closure ✅
+
+The wrap-up. No new capability, and deliberately so: a milestone that ends by shipping one
+more feature has no moment where the record catches up with the code.
+
+**What it closed.**
+
+- **`After=tailscaled.service`**, open since M2 — closed as **decided against**, on
+  evidence. It was added, deployed and tested by rebooting the host. It changed nothing:
+  the agent still retried, and on the ordered boot retried *more* (`waited=10s attempts=6`)
+  than on unordered ones (`2s/2`, `6s/4`). The reason was already written in the unit file
+  and simply had not been tested — ordering against tailscaled having *started* is not
+  ordering against the tailnet address existing, which arrives seconds later after
+  authentication. The retry loop is what solves it, and always was.
+- **README and roadmap**, which still said M3.5–M3.8 remained when three of those were done
+  and verified on hardware.
+- **ADR amendment closure** and the index counts.
+
+**Real-device end-to-end** was not re-run as a single ceremony. Every phase from M3.1 to
+M3.7a was verified on the HP and the OnePlus as it landed, and the record in
+[`m3-verification.md`](m3-verification.md) is that evidence rather than a summary written
+afterwards. What M3.8 adds is the boot-ordering check, which is the one thing no earlier
+phase could have tested.
 
 ## Motion and polish
 
