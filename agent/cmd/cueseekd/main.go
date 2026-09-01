@@ -142,10 +142,14 @@ func runServe(args []string) error {
 	poller := adapters.NewPoller(registry, cfg)
 
 	server, err := api.New(api.Options{
-		Store:        st,
-		Registry:     registry,
-		Cache:        poller.Cache(),
-		Refresher:    poller,
+		Store:     st,
+		Registry:  registry,
+		Cache:     poller.Cache(),
+		Refresher: poller,
+		// The same controller that restarts units also powers the machine down. Passed
+		// as an interface, so an agent on a platform without logind advertises no power
+		// actions rather than offering buttons that fail (ADR-0002 Amendment 2).
+		HostPower:    hostController,
 		AgentVersion: version,
 		HostID:       hostID,
 	})

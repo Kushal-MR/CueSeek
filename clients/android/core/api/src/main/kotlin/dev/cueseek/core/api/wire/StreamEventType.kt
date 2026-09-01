@@ -22,7 +22,7 @@ import kotlinx.serialization.Serializable
 /**
  * 
  *
- * Values: snapshot,service_updated,host_updated,action_progress,heartbeat
+ * Values: snapshot,service_updated,host_updated,action_progress,host_action_progress,heartbeat
  */
 @Serializable
 enum class StreamEventType(val value: kotlin.String) {
@@ -38,6 +38,9 @@ enum class StreamEventType(val value: kotlin.String) {
 
     @SerialName(value = "action_progress")
     action_progress("action_progress"),
+
+    @SerialName(value = "host_action_progress")
+    host_action_progress("host_action_progress"),
 
     @SerialName(value = "heartbeat")
     heartbeat("heartbeat");

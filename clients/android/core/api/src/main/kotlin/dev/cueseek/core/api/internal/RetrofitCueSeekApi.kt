@@ -7,6 +7,8 @@ import dev.cueseek.core.model.ApiError
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.Device
 import dev.cueseek.core.model.DeviceId
+import dev.cueseek.core.model.Action
+import dev.cueseek.core.model.HostActionAcceptance
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.Pairing
 import dev.cueseek.core.model.Platform
@@ -73,6 +75,12 @@ internal class RetrofitCueSeekApi(
             ApiResult.Success(response.body()?.toDomain())
         }
     }
+
+    override suspend fun hostActions(): ApiResult<List<Action>> =
+        call({ service.hostActions() }) { actions -> actions.map { it.toDomain() } }
+
+    override suspend fun invokeHostAction(actionId: String): ApiResult<HostActionAcceptance> =
+        call({ service.invokeHostAction(actionId) }) { it.toDomain() }
 
     override suspend fun services(): ApiResult<List<Service>> =
         call({ service.services() }) { services -> services.map { it.toDomain() } }

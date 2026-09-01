@@ -154,8 +154,17 @@ class AgentLiveStateTest {
         advanceTimeBy(31_000)
 
         val latest = seen.last()
-        assertTrue("the transport still believes it is open", latest.status is StreamStatus.Open)
-        assertTrue("but the data must not be believed", latest.freshness.isStale)
+        assertTrue("the data must not be believed", latest.freshness.isStale)
+        // The transport is no longer left in place either. This assertion used to require
+        // `status is Open` — encoding the A7 observation as though it were desirable — and a
+        // real phone showed the cost: a socket that died without saying so was never
+        // replaced, so the screen sat on "Unverified" until something else forced a
+        // reconnect. Silence past the tolerance now ends the connection as well as the
+        // trust, and this test only pins the honest half.
+        assertFalse(
+            "a connection delivering nothing must not still be treated as live",
+            latest.status is StreamStatus.Open,
+        )
         assertEquals(
             "showing stale green is worse than showing nothing",
             HealthStatus.Unknown,

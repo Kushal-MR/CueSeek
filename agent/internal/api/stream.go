@@ -59,6 +59,10 @@ type streamEvent struct {
 	service     *gen.Service
 	hostMetrics *gen.HostMetrics
 	action      *gen.ActionProgress
+
+	// hostActionResult carries the failure of a power action. There is no success case:
+	// one that worked took this stream with it.
+	hostActionResult *gen.HostActionProgress
 }
 
 // subscriber is one connected client's mailbox.
@@ -316,6 +320,7 @@ func (st *sseStream) send(
 		envelope.Service = p.service
 		envelope.HostMetrics = p.hostMetrics
 		envelope.ActionProgress = p.action
+		envelope.HostActionProgress = p.hostActionResult
 	}
 
 	body, err := json.Marshal(envelope)
@@ -367,5 +372,12 @@ func (s *Server) buildSnapshot() *gen.Snapshot {
 		// a platform that cannot read them. A client is told nothing rather than told
 		// zero, which would describe an idle machine that was never measured.
 		HostMetrics: s.currentHostMetrics(),
+		// Static for the life of the process, so it rides the snapshot rather than
+		// needing an event of its own. A client that never calls the REST endpoint still
+		// knows what this machine can be asked to do.
+		HostActions: ptrTo(s.hostActions()),
 	}
 }
+
+// ptrTo is the small adapter the generator's optional-array shape needs.
+func ptrTo[T any](v T) *T { return &v }

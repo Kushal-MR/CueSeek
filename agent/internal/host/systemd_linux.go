@@ -139,6 +139,61 @@ func (b *systemdBackend) StopUnit(ctx context.Context, unit string) (*Job, error
 	return newJob(id, unit, results), nil
 }
 
+// ---------------------------------------------------------------- power
+
+// logind is where power actions live, and it is a different D-Bus service from systemd's
+// unit manager — same bus, different destination, different polkit action ids.
+const (
+	logindDest        = "org.freedesktop.login1"
+	logindPath        = "/org/freedesktop/login1"
+	logindManager     = "org.freedesktop.login1.Manager"
+	logindReboot      = logindManager + ".Reboot"
+	logindPowerOff    = logindManager + ".PowerOff"
+	logindInteractive = false
+)
+
+func (b *systemdBackend) SupportsPower() bool { return true }
+
+// Reboot asks logind to reboot the machine.
+//
+// The `false` argument is logind's `interactive` flag. It must stay false: true asks
+// polkit to prompt a human for authorisation, and there is no human and no session here.
+// M0 found that an unprivileged daemon hitting an interactive polkit check gets
+// "Interactive authentication required" rather than "access denied", which reads like an
+// internal error and sends whoever is debugging it in the wrong direction entirely.
+//
+// A nil return means logind accepted the call, not that the machine rebooted. There is no
+// way to observe the latter from inside the process it is about to end.
+func (b *systemdBackend) Reboot(ctx context.Context) error {
+	return b.callLogind(ctx, logindReboot)
+}
+
+// PowerOff asks logind to shut the machine down. See [systemdBackend.Reboot].
+func (b *systemdBackend) PowerOff(ctx context.Context) error {
+	return b.callLogind(ctx, logindPowerOff)
+}
+
+// callLogind makes one method call on logind's manager.
+//
+// Uses the raw godbus connection rather than the go-systemd wrapper, which models
+// systemd's unit manager and has no logind surface. The connection is opened per call:
+// power actions happen at most once in the life of a process, so holding a second bus
+// connection open for the whole session to save microseconds on an operation that ends
+// the session would be a strange trade.
+func (b *systemdBackend) callLogind(ctx context.Context, method string) error {
+	conn, err := godbus.SystemBus()
+	if err != nil {
+		return fmt.Errorf("host: connect to the system bus for %s: %w", method, err)
+	}
+
+	object := conn.Object(logindDest, godbus.ObjectPath(logindPath))
+	call := object.CallWithContext(ctx, method, 0, logindInteractive)
+	if call.Err != nil {
+		return classifyError(dbusErrorName(call.Err), call.Err)
+	}
+	return nil
+}
+
 // dbusErrorName extracts the D-Bus error name, e.g.
 // "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired".
 //

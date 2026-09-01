@@ -36,6 +36,7 @@ type testEnv struct {
 	adapter   *stubAdapter
 	registry  *adapters.Registry
 	refresher *recordingRefresher
+	power     *fakePower
 }
 
 // stubAdapter stands in for a real service. It implements Controllable so action tests
@@ -136,12 +137,14 @@ func newTestEnv(t *testing.T) *testEnv {
 	cache.Track("jellyfin", time.Minute)
 
 	refresher := &recordingRefresher{}
+	power := newFakePower()
 
 	srv, err := New(Options{
 		Store:        st,
 		Registry:     registry,
 		Cache:        cache,
 		Refresher:    refresher,
+		HostPower:    power,
 		AgentVersion: "test",
 		HostID:       "test-host",
 	})
@@ -155,6 +158,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	return &testEnv{
 		server: ts, store: st, api: srv,
 		cache: cache, adapter: stub, registry: registry, refresher: refresher,
+		power: power,
 	}
 }
 

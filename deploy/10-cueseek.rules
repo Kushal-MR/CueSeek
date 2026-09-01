@@ -75,28 +75,40 @@ polkit.addRule(function (action, subject) {
 
     /* ---------------------------------------------------------------- power
      *
-     * DELIBERATELY DISABLED. Uncomment when host power actions ship in M3.
+     * ENABLED in M3.7 (ADR-0002 Amendment 2). Disabled until then, because
+     * granting a service permission to reboot a machine it cannot ask to reboot
+     * is a standing risk with no benefit — there was no code path calling logind
+     * and the `host.power` scope guarded nothing.
      *
-     * M0 proved these work — an unprivileged, session-less cueseek genuinely
-     * rebooted the target host. They are commented out anyway because the agent
-     * currently has no code path that calls logind: the `host.power` scope is
-     * wired to nothing, and granting a service permission to reboot a machine it
-     * cannot ask to reboot is a standing risk with no benefit.
+     * M0 proved these work: an unprivileged, session-less cueseek genuinely
+     * rebooted the target host.
      *
-     * The *-multiple-sessions variants are consulted when other users are logged
-     * in. Omitting them is a classic cause of "works alone, fails in practice",
-     * so enable all four together or none.
+     * ALL FOUR OR NONE. The *-multiple-sessions variants are what logind consults
+     * when another user is logged in. A rule granting only the plain forms works
+     * perfectly for whoever tests it alone and fails the first time somebody is
+     * sitting at the console — a failure that arrives late, on someone else's
+     * machine, and looks like a permissions bug rather than a missing line.
      *
-     * var powerActions = [
-     *     "org.freedesktop.login1.reboot",
-     *     "org.freedesktop.login1.reboot-multiple-sessions",
-     *     "org.freedesktop.login1.power-off",
-     *     "org.freedesktop.login1.power-off-multiple-sessions"
-     * ];
-     * if (powerActions.indexOf(action.id) >= 0) {
-     *     return polkit.Result.YES;
-     * }
+     * Note what is absent, and is meant to stay absent: suspend and hibernate. A
+     * suspended host is unreachable over the tailnet and cannot be woken by the
+     * thing that suspended it, which turns a remote console into a way to lock
+     * yourself out of your own machine.
+     *
+     * This is the one grant in this file with no allowlist behind it. A unit grant
+     * is bounded to named units; there is no target narrower than the machine. The
+     * bound is the `host.power` scope, which the agent enforces per device and
+     * never grants by default.
      */
+    var powerActions = [
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions"
+    ];
+    if (powerActions.indexOf(action.id) >= 0) {
+        polkit.log("cueseek: ALLOW " + action.id);
+        return polkit.Result.YES;
+    }
 
     return polkit.Result.NOT_HANDLED;
 });

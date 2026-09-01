@@ -570,3 +570,111 @@ Two words changed with it: the healthy verdict is **"Operational"** rather than 
 and service rows read **"Running"** rather than "Healthy". Display labels only — the
 contract's `healthy` / `degraded` / `unreachable` / `unknown` vocabulary is public API and
 did not move.
+
+---
+
+## M3.7 — Host power actions ⏳ reboot verified, power-off outstanding
+
+Verified on `kushal-HP-paviliong6` and the OnePlus CPH2707 over Tailscale, agent
+`m3.7-35a6998`, with the polkit power block enabled for the first time.
+
+| # | Behaviour | Result |
+| --- | --- | --- |
+| 1 | Endpoints absent before the upgrade | `GET` and `POST /v1/host/actions*` → 404 on the M3.6 agent |
+| 2 | Polkit rule installed | All four actions, diff printed before applying; polkit reloaded cleanly |
+| 3 | Actions listed at `read` scope | Both, `destructive`, with their consequences |
+| 4 | **Invoking without `host.power` → 403** | *"this operation requires the `host.power` scope; this device holds read"* — and the machine was untouched |
+| 5 | Menu before re-pairing | Both items greyed, with "This device was not paired with permission to power the machine" |
+| 6 | **Re-pairing is required and works** | Forget → pair with a code granting `host.power`; the agent logged the new scopes |
+| 7 | Menu after re-pairing | Both items enabled, explanatory line gone |
+| 8 | Confirmation with nothing active | **No "Right now:" line** — 12 torrents present, none active, so none counted as work |
+| 9 | **Confirmation with work in flight** | "Right now: 1 stream playing." in amber, above the hold bar |
+| 10 | Cancel does nothing | Verified against uptime and the journal: no power line, no boot change |
+| 11 | A tap is not a hold | The press-and-hold bar ignored taps throughout; only a sustained hold fired |
+| 12 | **Reboot** | Held → machine went fully unreachable → back in under a minute |
+| 13 | **It was a real reboot** | Kernel `boot_id` changed `a1ea5cb5…` → `f77a0e18…`, boot time 11:43 → 18:02, uptime 6h18m → 0m. A service restart cannot change a boot id |
+| 14 | Services returned unaided | `cueseekd`, `jellyfin`, `qbittorrent` all active after boot, no intervention |
+| 15 | The phone recovered on its own | Went stale, reconnected, and showed "up 6m" — the machine's new uptime, from the client that caused it |
+
+### Acknowledge-before-acting, observed
+
+```
+18:01:43  host power action accepted         action=reboot device=CPH2707
+18:01:44  host power action handed to logind action=reboot
+18:02     system boot
+```
+
+One second between accepting and calling logind, which is the 750 ms send window plus
+rounding. The 202 was written and delivered before the machine was touched — the property
+this endpoint exists to get right, and the one that cannot be tested by unit tests alone
+because the failure mode is a response that never arrives.
+
+The device is **named** in the accept line. Once the machine goes down that journal entry is
+the only surviving record of who asked, which is why it is logged at warn rather than info.
+
+### No defects
+
+Nothing was found that needed fixing. Unusual for this project, and worth stating plainly
+rather than implying the testing was thin: every mechanism M3.7 uses — the risk ladder, the
+press-and-hold, the scope check, the 202-plus-id shape — had already been built and exercised
+by earlier phases. M3.7 connected them. The parts that were genuinely new are the logind call
+and the polkit grant, and both are small enough to be right or obviously wrong.
+
+One process note: an SSH outage midway through was initially read as a reboot in progress. It
+was not — `who -b` showed continuous uptime, and the cause was a connection made by raw
+address rather than through the alias carrying the key. Recorded because the wrong reading
+was briefly stated as fact.
+
+### Not verified
+
+- **Power off has not been run.** It needs physical access to undo, so it is deliberately
+  the last thing tested and is not claimed. Everything up to and including the confirmation
+  dialog is verified; only the `PowerOff` D-Bus call itself is untested, and it differs from
+  the verified `Reboot` path by one method name.
+- **The `-multiple-sessions` variants** were not exercised: nobody was logged in at the
+  console. They are granted, and the failure they prevent only appears when somebody is.
+- **`host_action_progress`** has never been seen on the wire, because no power action has
+  failed. It is unit-tested on both sides. Producing one live would mean deliberately
+  breaking the polkit rule.
+
+---
+
+## M3.7a — A stream that freezes is now replaced ✅
+
+Reported from use, not from testing: the app would sit on "Unverified" and only recover
+after a manual pull, and once needed a Wi-Fi restart and a force-quit.
+
+**Cause.** The SSE client sets `readTimeout(Duration.ZERO)`, which is correct — a quiet
+agent must not be disconnected — but it means a socket that dies without saying so never
+errors, and OkHttp waits on it for the life of the process. The freshness watchdog saw the
+silence and rendered it honestly; nothing acted on it. `reconnectNow` is only received
+during a backoff wait, so pull-to-refresh fetched a fresh snapshot over HTTP without ever
+touching the dead stream — which is exactly why refreshing appeared to fix it and it drifted
+back thirty seconds later.
+
+This is the A7 lesson applied to only half the problem. The client distrusts the connection
+for *rendering* and still trusted it to notice its own death.
+
+**Not introduced by M3.6 or M3.7.** `git log -L` over the reconnect loop shows it last
+changed in `6011228` (M3.3a) and `d689a0f` (M2 P3).
+
+**Fix.** Silence past the staleness tolerance now ends the connection as well as the trust:
+the collector races the stream against a clock, and whichever finishes first wins. The
+threshold is `staleAfter` itself rather than a second number, so the screen and the
+transport can never disagree about what silence means. Heartbeats arrive every 15s, so 30s
+of nothing is a dead connection, not a quiet one.
+
+Also fixed alongside it: the backoff attempt counter never reset, so a stream that had
+dropped a few times over a long session sat at the 15s cap for the rest of it — slowest
+exactly when it had been most reliable. A connection that delivered anything now resets it.
+
+**Evidence.** A test that connects, delivers a snapshot, then goes silent without erroring —
+what a frozen socket looks like from inside the app. It hangs forever on the old code and
+reconnects on the new one. Two existing tests had to change: both asserted that a silent
+connection stays `Open`, which was the bug written down as an expectation. The invariant they
+exist to protect — data goes `unknown` from the clock — is unchanged and still asserted.
+
+**Not claimed.** Resuming from Recents was checked once on the phone and came back live
+without a manual refresh, but a single clean resume does not prove the fix: the socket may
+not have been frozen that time. The deterministic evidence is the test. Reproducing a real
+frozen socket on demand would mean interfering with the tailnet mid-connection.

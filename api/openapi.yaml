@@ -137,6 +137,70 @@ paths:
             from a machine measured and found idle.
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /v1/host/actions:
+    get:
+      operationId: listHostActions
+      tags: [system]
+      summary: Power actions this agent offers for the machine
+      description: |
+        The same `Action` shape services use — `{id, label, risk, description}` — so a
+        client renders these through the risk ladder it already has rather than growing
+        a second one.
+
+        Listed regardless of the caller's scopes. What the agent *offers* is a property
+        of the agent; what this device may *do* is a property of its token, and the
+        client already knows its own scopes from pairing. Hiding the list from an
+        unauthorised device would mean a client could not tell "this agent is too old to
+        power off" from "this device was not granted permission", which are different
+        problems with different fixes.
+      x-required-scope: read
+      responses:
+        "200":
+          description: The available host actions, possibly empty.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Action" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /v1/host/actions/{actionId}:
+    post:
+      operationId: invokeHostAction
+      tags: [system]
+      summary: Reboot or power off the machine
+      description: |
+        Accepts the action and returns immediately. **The response is written before the
+        machine is touched, and that is not ceremony** — a handler that powers off and
+        then writes a reply never writes the reply, because the machine is gone. The
+        agent acknowledges, then acts after a short delay.
+
+        There is therefore no terminal state to wait for on a successful reboot: the
+        stream dies with the host, and the client learns it worked by the agent going
+        away and coming back. A `host_action_progress` event carrying `failed` is the
+        only outcome that can be delivered, and it means the machine is still up.
+
+        Requires the `host.power` scope, which `cueseekd pair` never grants by default.
+        Enforcement is here, in the agent — a client's press-and-hold confirmation is
+        user experience, not a control (ADR-0002 Amendment 2).
+      x-required-scope: host.power
+      parameters:
+        - $ref: "#/components/parameters/ActionId"
+      responses:
+        "202":
+          description: Accepted. The machine will act shortly.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HostActionAccepted" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: A power action is already in flight.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+
   /v1/pair:
     post:
       operationId: pairDevice
@@ -1086,6 +1150,44 @@ components:
         status: { $ref: "#/components/schemas/ActionStatus" }
         accepted_at: { type: string, format: date-time }
 
+    HostActionAccepted:
+      type: object
+      description: |
+        Acknowledgement of a power action. Deliberately not [ActionAccepted], which
+        requires `service_id` — a machine is not one of its own services, and a sentinel
+        value there would be a small lie told on every power action forever.
+      required: [action_id, action, status, accepted_at]
+      properties:
+        action_id:
+          type: string
+          description: Correlates with a `host_action_progress` event, if one arrives.
+        action: { type: string }
+        status: { $ref: "#/components/schemas/ActionStatus" }
+        accepted_at: { type: string, format: date-time }
+
+    HostActionProgress:
+      type: object
+      description: |
+        The outcome of a power action, which in practice means **the failure** of one: a
+        successful reboot takes the stream with it, so the only progress that can be
+        delivered is news that the machine is still here.
+
+        A separate schema and a separate event type rather than a widened
+        [ActionProgress]. Relaxing that one's required `service_id` would have been
+        smaller in the specification and much worse on a phone — a client built before
+        this shipped would fail to parse a field it was told was mandatory, and it would
+        fail while some *other* device pressed the button. An unknown event type is
+        ignored safely; a malformed known one is not.
+      required: [action_id, action, status, at]
+      properties:
+        action_id: { type: string }
+        action: { type: string }
+        status: { $ref: "#/components/schemas/ActionStatus" }
+        at: { type: string, format: date-time }
+        error:
+          type: string
+          description: Present when `status` is `failed`.
+
     ActionProgress:
       type: object
       required: [action_id, service_id, action, status, at]
@@ -1104,7 +1206,7 @@ components:
     # endpoint today, but if A7 changes the transport they carry over unchanged.
     StreamEventType:
       type: string
-      enum: [snapshot, service_updated, host_updated, action_progress, heartbeat]
+      enum: [snapshot, service_updated, host_updated, action_progress, host_action_progress, heartbeat]
 
     StreamEnvelope:
       type: object
@@ -1137,6 +1239,11 @@ components:
             Present when `type` is `host_updated`, and on a faster cadence than service
             updates because a CPU figure averaged over a service poll interval hides
             exactly the spike worth seeing.
+        host_action_progress:
+          allOf: [{ $ref: "#/components/schemas/HostActionProgress" }]
+          description: |
+            Present when `type` is `host_action_progress`. In practice this only ever
+            carries a failure: a power action that worked took the stream with it.
         action_progress:
           allOf: [{ $ref: "#/components/schemas/ActionProgress" }]
           description: Present when `type` is `action_progress`.
@@ -1158,3 +1265,11 @@ components:
             The host's vitals as of the last collection. Absent on a platform where the
             agent cannot read them, and during the first seconds after startup before
             the first collection has run.
+        host_actions:
+          type: array
+          description: |
+            Power actions the agent offers for the machine. Empty on a platform that
+            cannot perform them, so a client renders nothing rather than buttons that
+            would fail. Listed independently of the caller's scopes — see
+            `GET /v1/host/actions`.
+          items: { $ref: "#/components/schemas/Action" }

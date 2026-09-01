@@ -48,6 +48,19 @@ func (unsupportedBackend) StopUnit(_ context.Context, unit string) (*Job, error)
 	return nil, unsupported("stop unit %q", unit)
 }
 
+// SupportsPower is false here, which is what stops the agent advertising power actions on
+// a platform that cannot perform them. A client then renders no buttons at all, rather
+// than buttons that fail the moment somebody holds one down.
+func (unsupportedBackend) SupportsPower() bool { return false }
+
+func (unsupportedBackend) Reboot(_ context.Context) error {
+	return unsupported("reboot the host")
+}
+
+func (unsupportedBackend) PowerOff(_ context.Context) error {
+	return unsupported("power off the host")
+}
+
 func unsupported(action string, args ...any) error {
 	return fmt.Errorf("%w: cannot %s on %s",
 		ErrUnsupportedPlatform, fmt.Sprintf(action, args...), runtime.GOOS)

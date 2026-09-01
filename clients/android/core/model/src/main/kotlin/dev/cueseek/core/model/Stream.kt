@@ -29,6 +29,14 @@ sealed interface StreamEvent {
          * next [HostUpdated] arrives.
          */
         val hostMetrics: HostMetrics? = null,
+        /**
+         * Power actions the agent offers for the machine.
+         *
+         * Static for the life of the agent process, so it rides the snapshot rather than
+         * needing an event of its own. Empty on a platform that cannot perform them, which
+         * a client renders as no buttons rather than buttons that fail.
+         */
+        val hostActions: List<Action> = emptyList(),
     ) : StreamEvent
 
     /**
@@ -50,6 +58,14 @@ sealed interface StreamEvent {
 
     /** The outcome of an invocation, correlated by [ActionProgress.actionId]. */
     data class ActionOutcome(val progress: ActionProgress) : StreamEvent
+
+    /**
+     * A host power action failed, which means the machine is still running.
+     *
+     * There is no success counterpart and there cannot be: a reboot that worked ends the
+     * stream carrying the news. Silence after a power action is the good outcome.
+     */
+    data class HostActionFailed(val outcome: HostActionOutcome) : StreamEvent
 
     /**
      * Carries no payload; its existence is the message.

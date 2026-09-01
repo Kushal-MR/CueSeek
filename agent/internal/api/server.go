@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -92,6 +93,19 @@ type Server struct {
 	// wait for them instead of killing an in-flight restart's bookkeeping.
 	background sync.WaitGroup
 
+	// power performs machine-level actions. Nil when the agent was built without it, or
+	// on a platform that cannot, in which case no power actions are advertised at all.
+	power HostPower
+
+	// powerInFlight is a single-flight latch, not a queue.
+	//
+	// A second reboot arriving while the first is in its send window is not a second
+	// reboot; letting both through would put two goroutines in a race to end the same
+	// machine. Released when the attempt finishes, which in the successful case never
+	// happens because the process is gone by then — correctly, since nothing after that
+	// point needs the latch.
+	powerInFlight atomic.Bool
+
 	// hostMetrics is the most recent collection, or nil before the first one.
 	//
 	// Held here rather than in the adapter cache because it is not an adapter's: the
@@ -137,6 +151,11 @@ type Options struct {
 
 	// Cache is what the poller fills. Required whenever Registry has services in it.
 	Cache *adapters.Cache
+
+	// HostPower performs reboot and power-off. Optional: without one the agent runs
+	// normally and advertises no power actions, which is exactly what a client should
+	// see on a platform that cannot perform them.
+	HostPower HostPower
 
 	// Refresher lets a client, or a completed action, ask for an observation ahead of
 	// the next tick (ADR-0003 Amendment 1). Optional: without one the agent still works,
@@ -194,6 +213,7 @@ func New(opts Options) (*Server, error) {
 		registry:       registry,
 		cache:          cache,
 		refresh:        opts.Refresher,
+		power:          opts.HostPower,
 		actions:        newActionTracker(now),
 		hub:            newHub(),
 		heartbeat:      streamHeartbeat,
@@ -526,3 +546,10 @@ func (s *Server) nudge(serviceID string) {
 		s.refresh.PollNow(serviceID)
 	}
 }
+
+// claimPower takes the single-flight latch, returning false if one is already held.
+func (s *Server) claimPower() bool { return s.powerInFlight.CompareAndSwap(false, true) }
+
+// releasePower drops the latch. A no-op in the case that matters, because a machine that
+// actually powered off is not running this line.
+func (s *Server) releasePower() { s.powerInFlight.Store(false) }
