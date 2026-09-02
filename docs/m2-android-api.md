@@ -18,8 +18,9 @@ Anything not established by the code is marked **NOT YET DEFINED** rather than g
 
 ## 1. Network assumptions
 
-The agent binds to **one specific address**, never `0.0.0.0`. On the reference deployment
-that is a Tailscale address, e.g. `http://100.92.18.125:7777`.
+The agent binds to **one specific address**, never `0.0.0.0`. Typically a Tailscale
+address, e.g. `http://100.64.0.1:7777` — the operator finds theirs with `tailscale ip -4`
+and it will be somewhere in `100.64.0.0/10`.
 
 - **Plain HTTP. No TLS.** The agent terminates none and has no certificate. Transport
   security is delegated entirely to the VPN (ADR-0001).

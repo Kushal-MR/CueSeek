@@ -108,7 +108,11 @@ fun PairingScreen(viewModel: CueSeekViewModel, modifier: Modifier = Modifier) {
                     label = "Address",
                     value = form.host,
                     onValueChange = { v -> viewModel.edit { copy(host = v) } },
-                    placeholder = "100.92.18.125",
+                    // A Tailscale address is the shape most people will type, so the hint
+                    // shows that shape rather than a LAN one. Deliberately not a real
+                    // address: this shipped as the development host's own tailnet IP,
+                    // which told every user something about somebody else's network.
+                    placeholder = "100.64.0.1",
                     enabled = !form.busy,
                     mono = true,
                     keyboard = KeyboardOptions(

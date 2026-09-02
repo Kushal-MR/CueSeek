@@ -31,6 +31,9 @@ readonly HERE
 BINARY=""
 UNINSTALL=0
 PURGE=0
+# Set when an existing, modified polkit rule was preserved rather than replaced.
+# The closing instructions change when that happens, so it must be visible there.
+POLKIT_KEPT=0
 
 say()  { printf '  %s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
@@ -166,8 +169,24 @@ else
     say "$CONFIG_DEST installed from the example — EDIT IT"
 fi
 
-install -m 0644 -o root -g root "$HERE/10-cueseek.rules" "$POLKIT_DEST"
-say "$POLKIT_DEST"
+# The polkit rule is hand-edited — its allowedUnits list must name the units in
+# your config.yaml — so it is protected exactly like config.yaml is.
+#
+# It was not, until M4.3. `install -m 0644 ... "$POLKIT_DEST"` overwrote it on
+# every run, so re-running this script to upgrade the binary silently discarded
+# the operator's allowlist and reverted them to the shipped one. The symptom
+# arrives later and elsewhere: a restart that worked yesterday is refused by
+# polkit today, and nothing connects that to an upgrade.
+if [ -f "$POLKIT_DEST" ] && ! cmp -s "$HERE/10-cueseek.rules" "$POLKIT_DEST"; then
+    install -m 0644 -o root -g root "$HERE/10-cueseek.rules" "${POLKIT_DEST}.new"
+    say "$POLKIT_DEST differs from the shipped rule — left untouched"
+    say "  the version from this release is at ${POLKIT_DEST}.new"
+    say "  diff them if this upgrade changed what CueSeek needs to be granted"
+    POLKIT_KEPT=1
+else
+    install -m 0644 -o root -g root "$HERE/10-cueseek.rules" "$POLKIT_DEST"
+    say "$POLKIT_DEST"
+fi
 
 install -m 0644 -o root -g root "$HERE/cueseekd.service" "$UNIT_DEST"
 say "$UNIT_DEST"
@@ -185,38 +204,62 @@ say "done"
 
 cat <<EOF
 
-Installed. The service is NOT running yet — it has no credentials.
+Installed, and not started yet.
 
-1. Create a Jellyfin API key
-     Jellyfin Dashboard > API Keys > +, then:
+As shipped it manages no services. That is a working install: the agent will
+report this machine's own CPU, memory, storage and temperatures with no further
+configuration, and show an empty list of services until you add some.
 
-     printf '%s' 'YOUR_KEY' | sudo tee ${CONFIG_DIR}/jellyfin.key > /dev/null
-     sudo chown root:${SERVICE_USER} ${CONFIG_DIR}/jellyfin.key
-     sudo chmod 0640 ${CONFIG_DIR}/jellyfin.key
-
-2. Edit the configuration
+1. Point it at your phone
      sudo nano ${CONFIG_DEST}
 
-     At minimum confirm 'unit:' matches this host:
-       systemctl list-units --type=service | grep -i jellyfin
-
-     To reach the agent from your phone, set bind.address to your VPN address:
+     Set bind.address to an address your phone can reach. On Tailscale:
        tailscale ip -4
 
-3. Edit the polkit allowlist to match
-     sudo nano ${POLKIT_DEST}
+     Loopback is the default, which is safe and unreachable from anywhere else.
 
-     The unit names there and in the config must agree. Both are enforced.
-
-4. Start it
+2. Start it
      sudo systemctl enable --now cueseekd.service
      systemctl status cueseekd.service
      journalctl -u cueseekd -f
 
-5. Pair a device
+3. Pair a device
      sudo -u ${SERVICE_USER} ${BIN_DEST} pair -config ${CONFIG_DEST}
 
-If a restart is refused, this reports which layer said no:
-     sudo -u ${SERVICE_USER} ${BIN_DEST} host restart -config ${CONFIG_DEST} jellyfin.service
+     Grants read + service.control. To allow reboot and shutdown from the phone,
+     ask for it by name — it is never granted by default:
+       ... pair -scopes read,service.control,host.power
+
+At this point you have a working dashboard of the machine itself.
+
+4. Add your services, when you want them
+     sudo nano ${CONFIG_DEST}
+
+     Worked examples for every supported type are at the bottom of that file.
+     Uncomment one and edit it. Use the EXACT unit name — it often differs from
+     what the software calls itself:
+       systemctl list-units --type=service | grep -i <name>
+
+5. Then allow those units in the polkit rule
+     sudo nano ${POLKIT_DEST}
+
+     Add each unit to allowedUnits. The names there and in the config must
+     agree; both are enforced, deliberately (ADR-0002). A service you do not
+     list here is still watched — it simply offers no start/stop/restart.
+
+     sudo systemctl restart cueseekd.service
+
+If a restart is refused, this reports which of the three layers said no:
+     sudo -u ${SERVICE_USER} ${BIN_DEST} host restart -config ${CONFIG_DEST} <unit>
 
 EOF
+
+if [ "$POLKIT_KEPT" -eq 1 ]; then
+    cat <<EOF
+NOTE: your existing polkit rule was kept. This release ships a different one at
+      ${POLKIT_DEST}.new — compare them before discarding either:
+
+      sudo diff ${POLKIT_DEST} ${POLKIT_DEST}.new
+
+EOF
+fi

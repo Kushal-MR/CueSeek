@@ -110,6 +110,21 @@ type Service struct {
 	Type string `yaml:"type"`
 	// Unit is the exact systemd unit name. Exact: M0 found the real name differs from
 	// the one the unit's own description implies.
+	//
+	// Optional. A service with no unit is observed but not controlled: its adapter
+	// returns a value that does not implement adapters.Controllable, capability discovery
+	// therefore does not advertise `control`, and no client offers an action. That is the
+	// honest answer for something CueSeek can reach but cannot act on — a service
+	// installed from a container image has an HTTP API and a web interface and no unit to
+	// restart.
+	//
+	// Requiring one here was stricter than the code behind it: both adapters have always
+	// handled its absence, and the only thing the requirement achieved was refusing a
+	// configuration the agent would have served correctly.
+	//
+	// An adapter whose only source of health *is* the unit must require one itself, in
+	// its factory. Whether a service needs a unit is a property of its adapter, exactly as
+	// it already is for base_url.
 	Unit string `yaml:"unit"`
 	// BaseURL is where the adapter reaches the service's own API.
 	BaseURL string `yaml:"base_url"`
@@ -403,7 +418,10 @@ func (s Service) validate(i int) []error {
 	}
 	require("id", s.ID)
 	require("type", s.Type)
-	require("unit", s.Unit)
+
+	// unit is not required. A service with no unit is observed but not controlled; see
+	// the field's own documentation. When one *is* given it must still be a plausible
+	// unit name, because a typo there fails much later and much less clearly.
 
 	// systemd units are always suffixed. Catching "jellyfin" here turns a confusing
 	// D-Bus error at action time into a startup message naming the file to fix.
@@ -457,9 +475,18 @@ func (s Service) validate(i int) []error {
 
 // ManagedUnits returns the allowlist of systemd units, for the host layer to enforce
 // before any D-Bus call is attempted.
+//
+// Services with no unit are omitted rather than contributing an empty entry. The host
+// layer rejects an empty name outright, and it is right to: a blank string in a security
+// allowlist is a bug, not a permissive setting. Filtering belongs here, where "this
+// service is not controlled" is a known fact, rather than being tolerated there, where it
+// would have to be guessed at.
 func (c Config) ManagedUnits() []string {
 	units := make([]string, 0, len(c.Services))
 	for _, s := range c.Services {
+		if strings.TrimSpace(s.Unit) == "" {
+			continue
+		}
 		units = append(units, s.Unit)
 	}
 	return units
