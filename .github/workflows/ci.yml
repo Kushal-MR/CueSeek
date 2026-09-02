@@ -13,6 +13,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ---------------------------------------------------------------------------------
+  # Repository hygiene: the things nothing compiles, and which therefore rot silently.
+  #
+  # Its own job rather than steps inside `agent`, because neither check is Go or Android
+  # and neither should wait on a toolchain to report a missing index row.
+  # ---------------------------------------------------------------------------------
+  hygiene:
+    name: Repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ADRs are this repository's most-read documentation and the least likely thing to
+      # be verified, because nothing compiles them. M3.8 found the consequence: an
+      # unanchored `sed` matched two index rows with identical text, so correcting
+      # ADR-0004's amendment count silently incremented ADR-0006's. It was caught by
+      # reading, which is not a process.
+      - name: Check the ADR index against the records
+        run: ./scripts/check-adr-index.sh
+
+      # deploy/install.sh was committed 100644 from a Windows working tree, so a fresh
+      # clone on Linux could not run the command deploy/README.md tells it to run. The
+      # mode is invisible in a diff and in review, and the failure appears only on
+      # somebody else's machine — which is precisely the class of defect M4 exists to
+      # remove.
+      - name: Every script with a shebang must be executable
+        run: |
+          offenders=""
+          while IFS= read -r file; do
+            case "$file" in *.png|*.ttf|*.webp|*.jar) continue ;; esac
+            head -c2 "$file" 2>/dev/null | grep -q '#!' || continue
+            [ -x "$file" ] || offenders="${offenders}  ${file}"$'\n'
+          done < <(git ls-files)
+          if [ -n "$offenders" ]; then
+            echo "::error::These have a shebang but are not executable:"
+            printf '%s' "$offenders"
+            echo "::error::Fix with: git update-index --chmod=+x <file>"
+            exit 1
+          fi
+          echo "All shebang scripts are executable."
+
   agent:
     name: Agent
     runs-on: ubuntu-latest

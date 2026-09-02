@@ -2,7 +2,7 @@
 
 **An operations console for self-hosted home servers.**
 
-CueSeek gives you one consistent way accesss every service running on your home server.
+CueSeek gives you one consistent way to reach every service running on your home server.
 
 It talks to Jellyfin, qBittorrent and others through their APIs, and adds the host-level
 control they cannot provide themselves.
@@ -69,7 +69,7 @@ Verified end to end over Tailscale, on a phone and a real Linux host:
 | | |
 | --- | --- |
 | **Pair a device** | Real single-use code redeemed over the tailnet |
-| **See health** | Matches `systemctl` — two independent measurements, the Jellyfin's API and systemd watching the process |
+| **See health** | Matches `systemctl` — checked against two independent measurements, Jellyfin's own API and systemd watching the process |
 | **Restart a service** | Through polkit; `ActiveEnterTimestamp` moved, and the outcome arrived over the stream *after* systemd recorded it |
 | **Recover** | From a VPN outage, a Wi-Fi↔cellular switch, a locked phone, a starved stream and a host reboot |
 
@@ -98,8 +98,9 @@ Phone / Wear ──Tailscale──▶ cueseekd  (user: cueseek, no sudo)
 Properties:
 
 **The agent never runs as root.** It holds no special privileges of its own. A shipped
-polkit rule grants the `cueseek` user exactly `RestartUnit` on an allowlist of units plus
-`Reboot`/`PowerOff` via logind — 
+polkit rule grants the `cueseek` user exactly `start`, `stop` and `restart` on an allowlist
+of named units, plus `Reboot`/`PowerOff` via logind — and nothing else. That rule is the
+complete statement of the ceiling, and it is short enough to read before trusting it.
 See [ADR-0002](docs/adr/0002-host-privilege-dbus-polkit.md).
 
 **The spec is the source of truth.** `api/openapi.yaml` is hand-authored. The Go server
@@ -139,7 +140,7 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | `agent/internal/config/` | Configuration loading and validation, incl. the managed-unit allowlist. |
 | `agent/internal/api/` | HTTP + SSE transport, auth middleware, scope enforcement. |
 | `agent/internal/adapters/` | Capability interfaces, adapter registry, per-service adapters. |
-| `agent/internal/health/` | Derives overall status from unit state, reachability, metrics. |
+| `agent/internal/health/` | Aggregates per-service health into one overall status, with reasons. |
 | `agent/internal/host/` | `HostController`; systemd/logind over D-Bus. |
 | `agent/internal/store/` | SQLite: device registry, token hashes, audit log. |
 | `clients/android/` | Android phone client (Compose). |
@@ -203,7 +204,9 @@ cd agent && go build ./...
 **Platform support.** The agent targets systemd-based Linux. This is a real limitation, not
 an oversight: `RestartUnit`, `Reboot` and `PowerOff` are systemd/logind operations. The
 `HostController` interface exists so that an OpenRC, BSD or macOS backend is a swap rather
-than a rewrite, but none is implemented yet...
+than a rewrite, but **none is implemented, and none is planned.** On any other platform the
+host layer returns `ErrUnsupportedPlatform` and the agent advertises no power actions rather
+than offering buttons that could only fail.
 
 ## Security
 

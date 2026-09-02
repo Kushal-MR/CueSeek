@@ -49,7 +49,7 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | [0005](0005-capability-based-adapters.md) | Capability-based adapters | Accepted |
 | [0006](0006-device-pairing-scoped-tokens.md) | Device pairing with scoped tokens | Accepted · amended ×3 (latest 2026-08-09) |
 | [0007](0007-client-capability-registry.md) | Client-side capability registry | Accepted |
-| [0008](0008-multi-host-and-computed-health.md) | Multi-host model and agent-computed health | Accepted |
+| [0008](0008-multi-host-and-computed-health.md) | Multi-host model and agent-computed health | Accepted · amended ×1 (latest 2026-09-01) |
 | [0009](0009-monorepo-contract-drift-gate.md) | Monorepo with a contract-drift gate | Accepted |
 | [0010](0010-design-system-m3-expressive.md) | M3 Expressive with an owned token layer | Accepted |
 | [0011](0011-sequencing-spike-then-slice.md) | De-risking spike, then thin slice | Accepted · amended ×2 (latest 2026-09-01) |
