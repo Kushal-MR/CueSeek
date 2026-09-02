@@ -250,11 +250,15 @@ At this point you have a working dashboard of the machine itself.
      sudo systemctl restart cueseekd.service
 
 6. Check your work, at any point
-     sudo -u ${SERVICE_USER} ${BIN_DEST} check -config ${CONFIG_DEST}
+     sudo ${BIN_DEST} check -config ${CONFIG_DEST}
 
      Resolves every configured unit against systemd, compares the config and
      the polkit allowlist in both directions, and probes each service. It
      reports problems before you go looking for them, and changes nothing.
+
+     As root, not as ${SERVICE_USER}: /etc/polkit-1/rules.d is root-only on
+     most distributions, so any other user can read the config but not the
+     rule, and the allowlist comparison is the point.
 
 If a restart is still refused, this reports which of the three layers said no:
      sudo -u ${SERVICE_USER} ${BIN_DEST} host restart -config ${CONFIG_DEST} <unit>

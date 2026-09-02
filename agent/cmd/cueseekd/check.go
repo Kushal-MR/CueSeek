@@ -222,15 +222,7 @@ func checkPolkit(report *diag.Report, cfg config.Config, path string) {
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		if len(configured) == 0 {
-			report.Warn(subject, fmt.Sprintf("%s is not readable: %v", path, err),
-				"nothing needs it yet — no configured service names a unit — "+
-					"but service control will need it")
-			return
-		}
-		report.Fail(subject, fmt.Sprintf("%s is not readable: %v", path, err),
-			"without it polkit refuses every start, stop and restart. "+
-				"Reinstall it from deploy/10-cueseek.rules")
+		reportUnreadableRule(report, subject, path, err, len(configured))
 		return
 	}
 
@@ -248,27 +240,64 @@ func checkPolkit(report *diag.Report, cfg config.Config, path string) {
 	checkPolkitPower(report, raw, path)
 }
 
+// reportUnreadableRule separates "the rule is not there" from "I am not allowed to look".
+//
+// Found on the first real host this ran on, and it is the mistake this command exists to
+// avoid making. `/etc/polkit-1/rules.d` is 0750 root:polkitd on Debian and Ubuntu, and the
+// `cueseek` user is in no group but its own — so the invocation the installer printed,
+// `sudo -u cueseek cueseekd check`, could not read a rule that was perfectly correct. It
+// reported a failure and told the operator to reinstall a file with nothing wrong with it.
+//
+// A diagnostic that manufactures a problem is worse than one that stays quiet, because the
+// operator now has two problems and no way to tell which is real.
+func reportUnreadableRule(report *diag.Report, subject, path string, err error, units int) {
+	switch {
+	case errors.Is(err, os.ErrPermission):
+		// Not a failure, and specifically not a claim about the file's contents: nothing
+		// has been observed, so nothing can be concluded.
+		report.Warn(subject,
+			fmt.Sprintf("%s could not be read: permission denied", path),
+			"the rule directory is root-only on most distributions, so the allowlist "+
+				"could not be compared. Run the whole check as root: `sudo cueseekd check`")
+
+	case errors.Is(err, os.ErrNotExist) && units == 0:
+		report.Warn(subject, fmt.Sprintf("%s does not exist", path),
+			"nothing needs it yet — no configured service names a unit — "+
+				"but service control will need it")
+
+	case errors.Is(err, os.ErrNotExist):
+		report.Fail(subject, fmt.Sprintf("%s does not exist", path),
+			"without it polkit refuses every start, stop and restart. "+
+				"Install it from deploy/10-cueseek.rules")
+
+	default:
+		report.Warn(subject, fmt.Sprintf("%s could not be read: %v", path, err),
+			"the allowlist could not be compared; check the file by hand")
+	}
+}
+
 func reportUnitAllowlist(report *diag.Report, path string, configured, granted []string) {
 	const subject = "polkit allowlist"
 	cmp := diag.CompareUnits(configured, granted)
 
-	if len(cmp.MissingFromRule) > 0 {
+	if missing := cmp.MissingFromRule; len(missing) > 0 {
 		report.Fail(subject,
-			fmt.Sprintf("%s is configured but not granted by the rule",
-				diag.Quote(cmp.MissingFromRule)),
+			fmt.Sprintf("%s %s configured but not granted by the rule",
+				diag.Quote(missing), isAre(len(missing))),
 			fmt.Sprintf("add %s to allowedUnits in %s, then `sudo systemctl restart polkit`. "+
-				"Until then polkit refuses every start, stop and restart of it",
-				diag.Quote(cmp.MissingFromRule), path))
+				"Until then polkit refuses every start, stop and restart of %s",
+				diag.Quote(missing), path, itThem(len(missing))))
 	}
 
-	if len(cmp.MissingFromConfig) > 0 {
+	if extra := cmp.MissingFromConfig; len(extra) > 0 {
 		// Nothing is broken. But this file's whole job is to state the ceiling, and a
 		// ceiling higher than the room needs is worth mentioning once.
 		report.Warn(subject,
-			fmt.Sprintf("%s is granted by the rule but not configured",
-				diag.Quote(cmp.MissingFromConfig)),
+			fmt.Sprintf("%s %s granted by the rule but not configured",
+				diag.Quote(extra), isAre(len(extra))),
 			fmt.Sprintf("harmless, but the rule grants more than this agent will ever "+
-				"ask for. Remove it from allowedUnits in %s if it is left over", path))
+				"ask for. Remove %s from allowedUnits in %s if left over",
+				itThem(len(extra)), path))
 	}
 
 	if cmp.Agrees() {
@@ -458,11 +487,13 @@ func checkServices(
 
 		// The adapters already write these well, and they are the same words the phone
 		// shows. Restating them here in different language would give the operator two
-		// descriptions of one problem.
-		fix := "see the reason above"
+		// descriptions of one problem — and the reason usually already contains the fix,
+		// so a generic "check the service itself" beside it actively misdirects.
+		fix := "this is what the phone will show"
 		if len(health.Reasons) > 0 {
 			detail += " — " + health.Reasons[0].Message
-			fix = "check the service itself; the agent is reporting what it observed"
+			fix = "this is what the phone will show; act on the reason above if that is " +
+				"not what you expect"
 		}
 		report.Warn(subject, detail, fix)
 	}
@@ -528,11 +559,19 @@ func printFindingAt(f diag.Finding, width int) {
 		diag.SeverityFail: "FAIL",
 	}[f.Severity]
 
-	fmt.Printf("  %s  %-*s  %s\n", label, width, f.Subject, f.Detail)
+	indent := strings.Repeat(" ", 10+width)
+
+	// A subject past the column gets its own line rather than shunting the detail out of
+	// alignment. `unit definitely-not-here.service` did exactly that on the first real
+	// host, and the arrow beneath it then pointed at empty space.
+	if len(f.Subject) > width {
+		fmt.Printf("  %s  %s\n%s%s\n", label, f.Subject, indent, f.Detail)
+	} else {
+		fmt.Printf("  %s  %-*s  %s\n", label, width, f.Subject, f.Detail)
+	}
+
 	if f.Fix != "" {
-		// Indented to the detail column so the arrow sits under what it is about:
-		// 2 spaces + 4 label + 2 + width + 2.
-		fmt.Printf("%s-> %s\n", strings.Repeat(" ", 10+width), f.Fix)
+		fmt.Printf("%s-> %s\n", indent, f.Fix)
 	}
 }
 
@@ -541,4 +580,21 @@ func plural(n int, one, many string) string {
 		return fmt.Sprintf("%d %s", n, one)
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// isAre and itThem agree the verb and pronoun with a list whose length is not known until
+// runtime. The first real run produced `"a.service" and "b.service" is configured`, which
+// is the kind of thing that makes an operator trust the rest of the output slightly less.
+func isAre(n int) string {
+	if n == 1 {
+		return "is"
+	}
+	return "are"
+}
+
+func itThem(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }

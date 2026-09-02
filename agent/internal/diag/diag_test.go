@@ -143,3 +143,18 @@ func TestQuote(t *testing.T) {
 		})
 	}
 }
+
+// TestQuoteRendersAListButNotTheVerb.
+//
+// Quote cannot know whether the sentence around it needs "is" or "are" — that agreement is
+// the caller's job, and the first real run on hardware got it wrong:
+// `"a.service" and "b.service" is configured`. Small, and the kind of thing that makes an
+// operator trust the rest of the output slightly less.
+func TestQuoteRendersAListButNotTheVerb(t *testing.T) {
+	if got := Quote([]string{"a", "b"}); !strings.Contains(got, " and ") {
+		t.Errorf("a two-item list should read as a list: %q", got)
+	}
+	if got := Quote([]string{"a"}); strings.Contains(got, " and ") {
+		t.Errorf("a one-item list should not read as a list: %q", got)
+	}
+}
