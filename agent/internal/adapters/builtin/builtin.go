@@ -21,14 +21,21 @@ import (
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters"
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/jellyfin"
 	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/qbittorrent"
+	"github.com/Kushal-MR/CueSeek/agent/internal/adapters/systemd"
 )
 
 // factories is the complete set of adapter types this build understands.
 //
 // One line per adapter. This is the file a new adapter touches.
+//
+// Two tiers, and the difference is what the adapter observes rather than how it is wired.
+// jellyfin and qbittorrent ask the service about itself and can therefore report what it
+// is doing; systemd asks the init system about the process and can only report whether it
+// is running. Both arrive here identically, which is the point.
 var factories = map[string]adapters.Factory{
 	jellyfin.Type:    jellyfin.New,
 	qbittorrent.Type: qbittorrent.New,
+	systemd.Type:     systemd.New,
 }
 
 // Types lists the adapter types available in this build.

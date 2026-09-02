@@ -9,8 +9,9 @@ control they cannot provide themselves.
 
 > **Status: M3 complete.** The agent and the Android client both work, and the whole path —
 > phone → Tailscale → `cueseekd` → polkit → systemd — has been verified end to end on real
-> hardware. Two services are managed today, Jellyfin and qBittorrent, and the phone can read
-> the machine's own vitals and reboot or shut it down.
+> hardware. Jellyfin and qBittorrent are supported in full; any other systemd unit is
+> supported for health and control. The phone can read the machine's own vitals and reboot
+> or shut it down.
 > See [What works today](#what-works-today).
 
 ---
@@ -45,9 +46,10 @@ real agent, not against mocks — the records are in
 **The agent — `cueseekd`.** Runs as an unprivileged `cueseek` user on a systemd host.
 Serves the REST contract and an SSE event stream, stores paired devices and hashed tokens
 in SQLite, polls Jellyfin and qBittorrent on its own schedule for health *and for what they
-are doing*, reads the machine's own CPU, memory, storage and temperatures from `/proc` and
-`/sys`, and starts, stops and restarts units — or reboots and shuts down the host itself —
-through polkit, without ever holding root.
+are doing*, watches any other systemd unit for whether it is running, reads the machine's
+own CPU, memory, storage and temperatures from `/proc` and `/sys`, and starts, stops and
+restarts units — or reboots and shuts down the host itself — through polkit, without ever
+holding root.
 
 **The Android client.** Pair by entering the host's address and a single-use code printed
 by `cueseekd pair`. A live dashboard shows every service's health and activity, updated over
@@ -91,9 +93,25 @@ Phone / Wear ──Tailscale──▶ cueseekd  (user: cueseek, no sudo)
                               ├─ host/     HostController ──D-Bus──▶ systemd / logind
                               │                                    ▲ polkit rule
                               └─ adapters/ registry, one goroutine per adapter
-                                    ├─ jellyfin    ──HTTP──▶ Jellyfin
-                                    └─ qbittorrent ──HTTP──▶ qBittorrent
+                                    ├─ jellyfin    ──HTTP───▶ Jellyfin
+                                    ├─ qbittorrent ──HTTP───▶ qBittorrent
+                                    └─ systemd     ──D-Bus──▶ any unit
 ```
+
+### Two tiers of service support
+
+| Tier | Types | What health means |
+| --- | --- | --- |
+| **Full** | `jellyfin`, `qbittorrent` | The service answered its own API — plus what it is doing: playback sessions, transfers |
+| **Basic** | `systemd` — any unit | The process is running |
+
+The basic tier says the process is up, **not** that the service is answering: a wedged
+service that has not exited reads as healthy. That limit is real and is stated rather than
+hidden. Both tiers get lifecycle control and a link to the service's own interface.
+
+Moving up a tier is one line of configuration — `type: systemd` becomes `type: plex` when
+that adapter exists — and needs no app update, because an adapter reaches the phone through
+capabilities the client already renders.
 
 Properties:
 
@@ -139,7 +157,7 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | `agent/internal/domain/` | Shared vocabulary: scopes, devices, audit entries. Depends on nothing. |
 | `agent/internal/config/` | Configuration loading and validation, incl. the managed-unit allowlist. |
 | `agent/internal/api/` | HTTP + SSE transport, auth middleware, scope enforcement. |
-| `agent/internal/adapters/` | Capability interfaces, adapter registry, per-service adapters. |
+| `agent/internal/adapters/` | Capability interfaces, adapter registry, per-service adapters, and the generic `systemd` one. |
 | `agent/internal/health/` | Aggregates per-service health into one overall status, with reasons. |
 | `agent/internal/host/` | `HostController`; systemd/logind over D-Bus. |
 | `agent/internal/store/` | SQLite: device registry, token hashes, audit log. |
