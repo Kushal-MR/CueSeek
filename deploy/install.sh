@@ -249,7 +249,14 @@ At this point you have a working dashboard of the machine itself.
 
      sudo systemctl restart cueseekd.service
 
-If a restart is refused, this reports which of the three layers said no:
+6. Check your work, at any point
+     sudo -u ${SERVICE_USER} ${BIN_DEST} check -config ${CONFIG_DEST}
+
+     Resolves every configured unit against systemd, compares the config and
+     the polkit allowlist in both directions, and probes each service. It
+     reports problems before you go looking for them, and changes nothing.
+
+If a restart is still refused, this reports which of the three layers said no:
      sudo -u ${SERVICE_USER} ${BIN_DEST} host restart -config ${CONFIG_DEST} <unit>
 
 EOF

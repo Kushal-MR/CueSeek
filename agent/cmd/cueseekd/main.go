@@ -10,6 +10,7 @@
 // Usage:
 //
 //	cueseekd [-config PATH]         run the agent
+//	cueseekd check [flags]          diagnose this install before anything is tapped
 //	cueseekd pair [flags]           mint a pairing code for a new device
 //	cueseekd host status <unit>     inspect a managed unit
 //	cueseekd host restart <unit>    restart a managed unit
@@ -51,6 +52,13 @@ func main() {
 	// Subcommand dispatch before flag parsing: subcommands have their own flags.
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "check":
+			// The failure message is deliberately terse: runCheck has already printed a
+			// full report, and repeating it here would bury the arrows under a summary.
+			if err := runCheck(os.Args[2:]); err != nil {
+				os.Exit(1)
+			}
+			return
 		case "pair":
 			if err := runPair(os.Args[2:]); err != nil {
 				fmt.Fprintf(os.Stderr, "cueseekd pair: %v\n", err)

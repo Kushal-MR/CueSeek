@@ -146,6 +146,31 @@ guarantees the VPN is up by then. Ordering on the real unit
 (`sys-subsystem-net-devices-tailscale0.device`) is also insufficient: it signals that the
 interface exists, not that the address has been assigned.
 
+## Checking an install before anything goes wrong
+
+```bash
+sudo -u cueseek /usr/local/bin/cueseekd check -config /etc/cueseek/config.yaml
+```
+
+Resolves every configured unit against systemd, reads the installed polkit rule and
+compares the two allowlists **in both directions**, confirms the bind address exists on an
+interface, tests that the state directory is writable, and asks each adapter for its
+health. It changes nothing, and exits non-zero only when something the configuration asks
+for cannot happen — a deliberately stopped service is a warning, not a failure.
+
+The allowlist comparison is the reason it exists. The two copies are deliberately not
+generated from each other, and until now nothing checked that they agree; when they do not,
+the agent starts perfectly, the dashboard looks perfectly normal, and the first restart
+fails with an authorisation error that reads like a broken install.
+
+It also catches the partial power grant that ADR-0002 Amendment 2 warns about: a rule
+granting `reboot` and `power-off` without their `-multiple-sessions` variants works
+perfectly for whoever tests it alone and fails the first time somebody is at the console.
+
+**It reads the rule textually rather than evaluating it.** If it cannot find the allowlist
+it says so instead of guessing, because reporting a unit as granted when it is not would be
+worse than saying nothing.
+
 ## Diagnosing a refused restart
 
 Three different problems look identical through the API. This tells them apart:
