@@ -199,11 +199,42 @@ M4 was previously the Wear milestone; the renumber and its reasoning are
 [ADR-0011 Amendment 2](docs/adr/0011-sequencing-spike-then-slice.md).
 
 
+## Installing
+
+You need a Linux host with systemd and polkit 0.106 or later, and Tailscale, WireGuard or a
+LAN between it and your phone. No clone, and no Go toolchain.
+
+```bash
+# from the releases page
+sha256sum -c SHA256SUMS
+tar xzf cueseek-agent_*_linux_amd64.tar.gz
+cd cueseek-agent_*_linux_amd64
+sudo ./install.sh
+```
+
+The tarball is self-contained — agent, systemd unit, polkit rule, annotated example
+configuration and installer. It manages no services as shipped, which is a working install:
+the machine's own vitals need no configuration and no privilege. Add your services when you
+want them.
+
+Then, at any point:
+
+```bash
+sudo cueseekd check
+```
+
+which reports whether the configuration, the polkit allowlist and the units actually agree,
+and changes nothing.
+
+**`linux/amd64` only.** Developed and tested on Linux Mint 22.3 with systemd 255 and polkit
+124, over Tailscale. Other distributions should work and are untested. There is no `arm64`
+build — it cannot be tested here. NAS appliances are not supported.
+
 ## Development
 
 **Requirements**
 
-- Go 1.24+ — the agent
+- Go 1.25+ — the agent
 - JDK 21+ — the clients. The screenshot-test plugin declares a JVM 21 floor, so 17 cannot
   resolve it. The modules still *target* JVM 17 bytecode
 - Android Studio recent enough for AGP 9.3.1, if you want the IDE. The command line does
@@ -217,6 +248,13 @@ git clone https://github.com/Kushal-MR/CueSeek.git
 
 ```bash
 cd agent && go build ./...
+```
+
+To produce the release tarball the same way CI does — static, reproducible, with the
+version stamped from `git describe`:
+
+```bash
+./scripts/release-agent.sh
 ```
 
 **Platform support.** The agent targets systemd-based Linux. This is a real limitation, not

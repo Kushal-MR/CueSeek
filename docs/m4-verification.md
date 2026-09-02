@@ -166,6 +166,56 @@ word-with-flags-after-it.
 
 ---
 
+## M4.6 — the release tarball, extracted and run on the host
+
+Built by `scripts/release-agent.sh`, copied over, verified, extracted and executed.
+
+| Check | Result |
+| --- | --- |
+| `sha256sum -c SHA256SUMS` on the download | OK |
+| Extracted modes | `cueseekd` and `install.sh` 0755, the rest 0644 |
+| Payload | all 8 files: binary, installer, unit, rule, example config, checksum, LICENSE, NOTICE |
+| `./cueseekd -version` | `cueseekd v0.0.0-test3 (linux/amd64, go1.26.5)` |
+| `./cueseekd help` | the subcommand list, from the tarball |
+| `./install.sh` without root | refused |
+| `sha256sum -c cueseekd.sha256`, intact | OK |
+| …after appending one byte | correctly rejected |
+
+**The version is stamped.** `main.go` has carried the `-X main.version` hook since M1 and
+nothing had ever used it, so every binary ever built said `0.0.0-dev` — including the one
+on this host, which is how a `check` subcommand that did not exist yet came to be handed to
+a daemon (M4.5b). A build that cannot say which build it is cannot answer the first
+question anybody asks about a bug.
+
+**Static, checked rather than assumed.** `file` reports `statically linked` and `ldd` says
+`not a dynamic executable`. `CGO_ENABLED=0` is set explicitly in the script because a Linux
+CI runner has a C toolchain and would otherwise link against its own glibc — producing a
+binary that works on the runner, works on the maintainer's Ubuntu, and fails on somebody's
+Alpine. `modernc.org/sqlite` being pure Go is what makes this available at all.
+
+**Reproducible, measured.** Two builds of the same version produced byte-identical
+tarballs: `f532f2ce70d1…`.
+
+### The defect it found
+
+The first tarball shipped **`cueseekd` as `-rw-r--r--`**. `go build -o` produced it on the
+development machine, where `/tmp` is an NTFS mount with `noacl,posix=0` — the executable bit
+is *inferred* from a shebang rather than stored, so `install.sh` had it and a Linux ELF did
+not, and `chmod 0755` was a silent no-op.
+
+On a Linux runner the mode would have been right **by luck**. The broken tarball would only
+ever have been produced by a release cut outside CI, and would only have been noticed by
+whoever downloaded it. It is the same class of defect as `deploy/install.sh` being committed
+non-executable in M4.2: a mode that nothing states and nothing checks.
+
+Fixed by stating the modes in the script — two `tar` passes with explicit `--mode` — so the
+archive is a property of the script rather than of the machine that ran it. That also
+removes the last host-dependent input to the byte-for-byte reproducibility above. The final
+gate inspects the **archive** with `tar -tvzf` rather than the working tree, because the
+working tree is exactly what cannot be trusted to carry a mode here.
+
+---
+
 ## Not yet verified, and why
 
 Stated rather than left to be assumed from an absence.

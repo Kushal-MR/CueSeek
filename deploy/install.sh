@@ -129,6 +129,29 @@ if command -v file >/dev/null 2>&1; then
     file -b "$BINARY" | grep -q 'ELF.*executable' \
         || die "$BINARY is not a Linux executable — build with GOOS=linux"
 fi
+
+# Released tarballs carry a checksum of the binary beside it. Verified when present,
+# skipped with a word when not, because building from source is a supported path and has
+# nothing to check against.
+#
+# What this catches is a truncated download or a half-finished extraction. It is NOT a
+# signature and proves nothing about origin: anyone who could replace the binary could
+# replace this file too. The checksum that carries weight is the one published beside the
+# tarball on the release page, out of reach of whoever tampers with its contents.
+BINARY_SUMS="$(dirname -- "$BINARY")/cueseekd.sha256"
+if [ -f "$BINARY_SUMS" ]; then
+    if command -v sha256sum >/dev/null 2>&1; then
+        ( cd -- "$(dirname -- "$BINARY")" && sha256sum -c --status cueseekd.sha256 ) \
+            || die "$BINARY does not match cueseekd.sha256.
+     The download is incomplete or the file has been altered. Fetch it again."
+        say "checksum verified"
+    else
+        say "sha256sum not available; skipping checksum verification"
+    fi
+else
+    say "no cueseekd.sha256 beside the binary; skipping checksum verification"
+fi
+
 say "binary $BINARY"
 
 for artifact in cueseekd.service 10-cueseek.rules config.example.yaml; do

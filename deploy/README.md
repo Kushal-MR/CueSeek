@@ -13,10 +13,29 @@ deploy/
 
 ## Installing
 
+From a release, which is the supported path and needs no clone and no Go toolchain:
+
 ```bash
-GOOS=linux GOARCH=amd64 go build -o cueseekd ./cmd/cueseekd   # from agent/
-sudo ./install.sh --binary /path/to/cueseekd
+# from https://github.com/Kushal-MR/CueSeek/releases
+sha256sum -c SHA256SUMS
+tar xzf cueseek-agent_*_linux_amd64.tar.gz
+cd cueseek-agent_*_linux_amd64
+sudo ./install.sh
 ```
+
+The tarball is self-contained — the agent, the unit, the polkit rule, the annotated example
+configuration and the installer, side by side. `install.sh` finds the binary next to itself
+and verifies it against the `cueseekd.sha256` shipped beside it.
+
+From source, for development:
+
+```bash
+./scripts/release-agent.sh          # builds dist/, the same way CI does
+sudo ./dist/cueseek-agent_*/install.sh
+```
+
+`linux/amd64` only. There is no `arm64` build: it cannot be tested here, and this project
+does not ship an architecture it has not run.
 
 The installer refuses rather than half-installing: it checks for systemd, for polkit
 ≥ 0.106, and that the binary is a Linux ELF. It prints the ordered next steps instead of
@@ -197,4 +216,29 @@ sudo -u cueseek /usr/local/bin/cueseekd host restart -config /etc/cueseek/config
 
 ## Packaging
 
-A `.deb` is not built yet. `install.sh` is the supported path.
+A tar.gz built by [`scripts/release-agent.sh`](../scripts/release-agent.sh) and published
+by [`.github/workflows/release.yml`](../.github/workflows/release.yml) on a `v*` tag.
+`install.sh` is the supported install path; no `.deb` or `.rpm` is built, because two
+packaging formats for one installer is maintenance with no reader.
+
+Three properties are worth knowing about the artefact:
+
+**Static.** `CGO_ENABLED=0`, which the pure-Go `modernc.org/sqlite` exists to make
+possible. One binary runs on any x86-64 Linux with systemd, rather than against whichever
+glibc built it.
+
+**Reproducible.** `-trimpath`, an mtime taken from the commit rather than the clock, fixed
+ownership, sorted entries, and `gzip -n`. Building the same tag twice gives byte-identical
+output — verified, not assumed.
+
+**Modes are stated, not inherited.** The archive's permissions come from the script rather
+than from the filesystem it was built on. The first version did inherit them and shipped a
+non-executable binary, because this project is developed on Windows where the executable
+bit is inferred from a shebang and a Linux ELF has none.
+
+Every release also carries a **build provenance attestation**, so an operator can confirm
+the tarball came from this repository's workflow rather than from the release page alone:
+
+```bash
+gh attestation verify cueseek-agent_*_linux_amd64.tar.gz --repo Kushal-MR/CueSeek
+```

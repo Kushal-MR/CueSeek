@@ -1,0 +1,167 @@
+name: Release
+
+# Cutting a release is pushing a tag. Nothing else publishes anything.
+#
+#   git tag -a v0.1.0 -m "..." && git push origin v0.1.0
+#
+# workflow_dispatch builds the same artefacts and attaches them to the workflow run instead
+# of publishing them, so the pipeline can be exercised without spending a version number on
+# finding out that it is broken.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Agent
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the release and uploading to it.
+      contents: write
+      # Build provenance. SECURITY.md's case rests on the operator being able to check what
+      # CueSeek is, and an unsigned binary that can power off a machine is a lot to ask
+      # somebody to take on trust. An attestation ties this artefact to this workflow, this
+      # commit and this runner, and `gh attestation verify` checks it without trusting the
+      # release page.
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags and history, because the build stamps a version derived from them and a
+          # shallow clone would silently produce `0.0.0-dev` — which is exactly the failure
+          # mode M4.5b was about: a binary that cannot say which build it is.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+
+      # ---------------------------------------------------------------------------
+      # Nothing is published that has not passed the same gates as a pull request.
+      #
+      # CI already runs these on every PR, so on a tag pushed from a green main they will
+      # pass again. That is the point: the cost is two minutes, and the thing it prevents
+      # is a tag cut from a commit that was never actually green — a mistake that is
+      # invisible until somebody installs it.
+      # ---------------------------------------------------------------------------
+      - name: Test
+        working-directory: agent
+        run: go test -race ./...
+
+      - name: Vet
+        working-directory: agent
+        run: go vet ./...
+
+      - name: Check the ADR index against the records
+        run: ./scripts/check-adr-index.sh
+
+      # ---------------------------------------------------------------------------
+      # The build. Every flag lives in the script, not here, so that a release built by
+      # hand and one built by CI are the same bytes produced the same way.
+      # ---------------------------------------------------------------------------
+      - name: Determine the version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="$(git describe --tags --always --dirty)"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Building ${version}"
+
+      - name: Build the release tarball
+        run: ./scripts/release-agent.sh -v "${{ steps.version.outputs.version }}"
+
+      - name: Show what was built
+        run: |
+          ls -l dist/
+          cat dist/SHA256SUMS
+          tar -tvzf dist/*.tar.gz
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz
+
+      # A dry run keeps its artefacts on the workflow run and publishes nothing.
+      - name: Upload artefacts (dry run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cueseek-agent-${{ steps.version.outputs.version }}
+          path: dist/
+
+      # ---------------------------------------------------------------------------
+      # Publish. `gh` rather than a third-party action: it is preinstalled on the runner,
+      # and the fewer things with write access to releases the better on a project whose
+      # security story is that you can read everything it does.
+      #
+      # A tag containing a hyphen (v0.2.0-rc1) is marked prerelease, so that "latest" never
+      # points at something that was not meant to be.
+      # ---------------------------------------------------------------------------
+      - name: Publish the release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+
+          cat > notes.md <<'NOTES'
+          ## Install
+
+          ```bash
+          tar xzf cueseek-agent_*_linux_amd64.tar.gz
+          cd cueseek-agent_*_linux_amd64
+          sudo ./install.sh
+          ```
+
+          The tarball is self-contained: the agent, the systemd unit, the polkit rule, the
+          annotated example configuration, and the installer. No clone needed.
+
+          Verify the download before extracting it:
+
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+
+          And confirm it came from this workflow rather than from the release page alone:
+
+          ```bash
+          gh attestation verify cueseek-agent_*_linux_amd64.tar.gz --repo ${{ github.repository }}
+          ```
+
+          After installing, `sudo cueseekd check` reports whether the configuration, the
+          polkit allowlist and the units actually agree.
+
+          ## Supported
+
+          **Linux with systemd and polkit 0.106 or later, on `linux/amd64`.** Developed and
+          tested on Linux Mint 22.3 with systemd 255 and polkit 124, over Tailscale.
+
+          Other distributions should work and are untested. There is no `arm64` build: it
+          cannot be tested here, and this project does not ship architectures it has not
+          run. NAS appliances are not supported — `install.sh` refuses rather than
+          half-installing.
+
+          Jellyfin and qBittorrent are supported in full. Any other systemd unit is
+          supported for health and lifecycle control through `type: systemd`.
+
+          The agent is not built to be exposed to the internet. See
+          [SECURITY.md](https://github.com/${{ github.repository }}/blob/main/SECURITY.md).
+          NOTES
+
+          gh release create "$VERSION" \
+            dist/*.tar.gz dist/SHA256SUMS \
+            --title "$VERSION" \
+            --notes-file notes.md \
+            --generate-notes \
+            $prerelease
