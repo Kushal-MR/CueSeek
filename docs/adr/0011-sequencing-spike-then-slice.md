@@ -142,3 +142,46 @@ wrong rather than historical once the milestone moves.
 one contract, two form factors, no server change — and it is now a milestone further away.
 Accepted because that demonstration is worth no less in three months, and because a
 demonstration nobody can install is worth less than it looks.
+
+### Amendment 3 — 2026-09-01: the measurement at the third adapter, and what it missed
+
+Step 4 asks for a count when a third adapter is added. M4.4 added one — `systemd`, which
+observes a unit rather than a service's own API — so the count is taken here.
+
+**The result.** New package `agent/internal/adapters/systemd/`, and outside it:
+
+| File | Change |
+| --- | --- |
+| `adapters/builtin/builtin.go` | one line in the factory map |
+| `domain/health.go` | five reason codes |
+
+**Two files, which is what step 4 named as the passing mark**, and better than Amendment 1's
+count in the place that mattered. Specifically:
+
+- **`config.Service` did not grow.** That is the bound Amendment 1 set — "a third
+  credential shape must become a per-adapter options map, not a fourth pair of fields" —
+  and it held, though it was not really tested: this adapter needs no credentials at all.
+  The bound stands, untried, for whichever adapter next needs one.
+- **No contract change.** The generator produced no diff. `health`, `control` and `web_ui`
+  already existed, and reason codes are strings by design rather than an enum.
+- **No client change.** A `systemd` service reaches the phone through capabilities Jellyfin
+  and qBittorrent already used, with no Android release and no screen edited — the same
+  property M3.4 observed, now with an adapter of a structurally different kind.
+- `domain/health.go` grew as Amendment 1 predicted it would: with the *kinds of thing that
+  can be wrong*, not with the number of services. A fourth unit-backed adapter adds none of
+  these five, because a unit can be missing, stopped, failed, transitioning or unreadable
+  regardless of what it runs.
+
+**What this measurement does not settle, stated plainly.** Amendment 1 closed by naming the
+genuinely hard question: whether a capability *one adapter has and the others lack* fits
+without reshaping the interface. This does not answer it either, and in a way it is a
+weaker test than Amendment 1's — `systemd` implements a strict *subset* of what the
+existing adapters do. An adapter can always fit by doing less.
+
+**So step 4 is not discharged.** The measurement that matters is an adapter that observes
+something new — Plex's sessions, Immich's jobs, a queue that is neither `now_playing` nor
+`transfers` — and it stays scheduled for **M6**. This amendment records a real but partial
+result rather than allowing a favourable count on an easy case to close the question.
+
+**What did not change.** The decision, and every step in it. Spike, thin slice, widen,
+measure at a third adapter — with the measurement now taken once and explicitly held open.

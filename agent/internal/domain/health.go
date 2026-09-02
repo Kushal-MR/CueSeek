@@ -73,6 +73,40 @@ const (
 	// reached the service perfectly well; the service is the one that cannot reach
 	// anything. Conflating the two would send the operator to look at the wrong network.
 	ReasonPeerConnectivity = "peer_connectivity"
+
+	// Unit-state reasons, emitted by any adapter whose observation is a systemd unit
+	// rather than a service's own API.
+	//
+	// Five codes rather than one, because they are what a client may branch on and what a
+	// human is told to do next — and the next step differs completely. A unit that does
+	// not exist is a typo in a config file; a failed one is a crash with a journal entry
+	// behind it; a stopped one is very often somebody's deliberate decision, including one
+	// made from this app a moment ago.
+	//
+	// This is the growth ADR-0011 Amendment 1 predicted and accepted: the reason
+	// vocabulary grows with the *kinds of thing that can be wrong*, not with the number of
+	// services. A second unit-backed adapter adds none of these.
+
+	// ReasonUnitNotLoaded means systemd has no usable unit by that name — it does not
+	// exist, or it is masked. The fix is in the configuration, not on the machine.
+	ReasonUnitNotLoaded = "unit_not_loaded"
+
+	// ReasonUnitInactive means the unit is loaded and stopped. Deliberately not worded as
+	// a fault anywhere it is rendered: stopping a service is a supported action.
+	ReasonUnitInactive = "unit_inactive"
+
+	// ReasonUnitFailed means systemd reports the unit as failed. Distinct from inactive
+	// because one of them has a journal entry explaining it and the other does not.
+	ReasonUnitFailed = "unit_failed"
+
+	// ReasonUnitTransitioning means the unit is starting, stopping or reloading — a state
+	// that resolves on its own within a poll or two and needs no action.
+	ReasonUnitTransitioning = "unit_transitioning"
+
+	// ReasonUnitStateUnknown means the state could not be established: the read failed, or
+	// it succeeded and returned something this version does not recognise. Both produce
+	// StatusUnknown, and the message distinguishes them for the human.
+	ReasonUnitStateUnknown = "unit_state_unknown"
 )
 
 // Health is one observation of a service's state.

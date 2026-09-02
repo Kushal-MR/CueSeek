@@ -236,6 +236,35 @@ services: []
 #     poll_interval: 30s
 #     timeout: 5s
 #
+#   # --------------------------------------- anything else with a systemd unit
+#   #
+#   # `type: systemd` works for any unit on the machine — Plex, Sonarr, Immich,
+#   # Syncthing, Vaultwarden, Samba, Postgres, a compose stack behind a unit.
+#   #
+#   # It reports whether the PROCESS is running, from systemd, and offers
+#   # start/stop/restart and a link to the service's own interface. It does not
+#   # contact the service, so it cannot tell you what the service is doing, and
+#   # it cannot tell a wedged service from a healthy one — if the process has not
+#   # exited, systemd says active and so does CueSeek.
+#   #
+#   # Set no base_url, api_key or credentials here. Nothing would read them, so
+#   # startup rejects them rather than letting you configure a key that is
+#   # silently ignored. If CueSeek has a type for your service, use that instead.
+#   - id: plex
+#     name: Plex
+#     type: systemd
+#     unit: plexmediaserver.service
+#
+#     # Optional, and the reason this tier is worth having: tapping the row still
+#     # takes you to the service's own interface, which is where you would go to
+#     # do anything CueSeek does not model.
+#     web_ui:
+#       scheme: http
+#       port: 32400
+#       path: /web
+#
+#     poll_interval: 30s
+#
 #   # ------------------------------------------- watched, but not controlled
 #   #
 #   # A service with no `unit`. It reports health and offers its web interface,
