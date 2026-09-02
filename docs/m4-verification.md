@@ -124,6 +124,48 @@ not exist. It now says what the line actually is: what the phone will show.
 
 ---
 
+## M4.5b — the defect the operator found, which was not in `check` at all
+
+Reported as `sudo /usr/local/bin/cueseekd check` printing normal daemon startup logs and
+then `bind: address already in use`, hanging until interrupted. `timeout 10s` reproduced it
+with `exit=124`.
+
+**The symptom pointed at `check`; the cause was the dispatch, and it predates M4.5.**
+
+`/usr/local/bin/cueseekd` on the host is `m3.7-35a6998` — a build from before `check`
+existed. `main` switched on `os.Args[1]`, matched nothing, and fell through to `runServe`.
+`flag.Parse` **stops at the first non-flag argument and reports no error**, so:
+
+- `check` was silently discarded;
+- **every flag after it was discarded too**, including `-config`;
+- the agent loaded the *default* `/etc/cueseek/config.yaml` — the real one;
+- and tried to bind `100.92.18.125:7777`, which the running agent already held.
+
+Every line the operator saw was the daemon starting correctly against their real
+configuration. Reproduced locally on the current build: `cueseekd notacommand -config
+/tmp/repro.yaml` ignored the flag and started against the default path.
+
+**The near miss is the part worth recording.** The bind failure is what made this visible.
+On a host where the port happened to be free — a fresh install, a different bind address, an
+agent that was stopped — a mistyped subcommand would have **started a second agent against
+the real configuration and the real SQLite database**, and reported nothing wrong.
+
+Fixed in M4.5b: a first argument not beginning with `-` is a subcommand, and an unknown one
+is an error with usage and exit 2. `runServe` also refuses leftover positional arguments,
+so the serve path cannot be entered with arguments it did not understand however it was
+reached.
+
+Verified on the host: the old binary given `check` still emits `runServe`'s own config
+error, proving which path it took; the new binary given the same word runs the check, and
+given `chekc` prints usage and exits without starting anything.
+
+`cmd/cueseekd` had no tests before this — which is why the dispatch was never exercised, and
+why the decision was only observable by starting a daemon. `classify` exists to make it
+observable, and the regression cases are the typo, the subcommand-from-the-future, and the
+word-with-flags-after-it.
+
+---
+
 ## Not yet verified, and why
 
 Stated rather than left to be assumed from an absence.

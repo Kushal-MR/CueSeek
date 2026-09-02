@@ -152,6 +152,12 @@ interface exists, not that the address has been assigned.
 sudo /usr/local/bin/cueseekd check -config /etc/cueseek/config.yaml
 ```
 
+**`check` needs a binary that has it** — M4.5 or later. Before M4.5b an unrecognised
+subcommand was silently ignored and the agent started instead, so running `check` against
+an older binary loads `/etc/cueseek/config.yaml`, ignores every flag after the word, and
+tries to bind an address the running agent already holds. Confirm what is installed with
+`cueseekd -version` before concluding anything from the output.
+
 **As root, not as `cueseek`.** `/etc/polkit-1/rules.d` is `0750 root:polkitd` on Debian and
 Ubuntu, and the `cueseek` user belongs to no group but its own — so it can read the config
 and not the rule, and the allowlist comparison is the whole point. Run as any other user

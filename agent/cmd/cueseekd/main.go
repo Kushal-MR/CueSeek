@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -48,35 +49,120 @@ import (
 //	go build -ldflags "-X main.version=$(git describe --tags --always --dirty)"
 var version = "0.0.0-dev"
 
+// subcommands is the complete set of words that mean something other than "run the agent".
+//
+// A map rather than a switch so that classify and the usage text cannot disagree about
+// which words exist — the usage is generated from this, and a subcommand added without a
+// description will not compile.
+var subcommands = map[string]string{
+	"check": "diagnose this install; changes nothing",
+	"pair":  "mint a pairing code for a new device",
+	"host":  "inspect or restart one managed unit",
+	"help":  "print this",
+}
+
+// errUnknownSubcommand is returned for a first argument that was meant to be a subcommand
+// and is not one.
+type errUnknownSubcommand struct{ arg string }
+
+func (e errUnknownSubcommand) Error() string {
+	return fmt.Sprintf("unknown subcommand %q", e.arg)
+}
+
+// classify decides what a command line means, without acting on it.
+//
+// Separated from main so it can be tested. main calls os.Exit and runServe blocks until a
+// signal, so the decision was previously only observable by starting a daemon — which is
+// exactly the thing that went wrong.
+//
+// The rule: a first argument that does not begin with `-` is a subcommand. If it is not a
+// known one, that is an error rather than something to ignore.
+//
+// It was ignored, and the consequence was found on a real host. `flag.Parse` stops at the
+// first non-flag argument and reports no error, so `cueseekd check` on a binary predating
+// that subcommand fell through to the serve path, and every flag after it — including
+// `-config` — was silently dropped. The agent then started against the DEFAULT config, on
+// a machine already running one, and failed on `bind: address already in use`.
+//
+// The near miss is the part worth keeping in mind: on a host where the port happened to be
+// free, a mistyped subcommand would have started a second agent against the real
+// configuration and the real database rather than failing.
+func classify(args []string) (subcommand string, rest []string, err error) {
+	if len(args) == 0 {
+		return "", nil, nil // serve
+	}
+	first := args[0]
+
+	// Anything starting with `-` belongs to the serve flag set: `-config`, `-version`,
+	// `-log-level`, and flag's own `-h`.
+	if strings.HasPrefix(first, "-") {
+		return "", args, nil
+	}
+	if _, known := subcommands[first]; known {
+		return first, args[1:], nil
+	}
+	return "", nil, errUnknownSubcommand{arg: first}
+}
+
 func main() {
-	// Subcommand dispatch before flag parsing: subcommands have their own flags.
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "check":
-			// The failure message is deliberately terse: runCheck has already printed a
-			// full report, and repeating it here would bury the arrows under a summary.
-			if err := runCheck(os.Args[2:]); err != nil {
-				os.Exit(1)
-			}
-			return
-		case "pair":
-			if err := runPair(os.Args[2:]); err != nil {
-				fmt.Fprintf(os.Stderr, "cueseekd pair: %v\n", err)
-				os.Exit(1)
-			}
-			return
-		case "host":
-			if err := runHost(os.Args[2:]); err != nil {
-				fmt.Fprintf(os.Stderr, "cueseekd host: %v\n", err)
-				os.Exit(1)
-			}
-			return
+	subcommand, rest, err := classify(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cueseekd: %v\n\n", err)
+		printUsage(os.Stderr)
+		os.Exit(2)
+	}
+
+	switch subcommand {
+	case "help":
+		printUsage(os.Stdout)
+
+	case "check":
+		// The failure message is deliberately terse: runCheck has already printed a
+		// full report, and repeating it here would bury the arrows under a summary.
+		if err := runCheck(rest); err != nil {
+			os.Exit(1)
+		}
+
+	case "pair":
+		if err := runPair(rest); err != nil {
+			fmt.Fprintf(os.Stderr, "cueseekd pair: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "host":
+		if err := runHost(rest); err != nil {
+			fmt.Fprintf(os.Stderr, "cueseekd host: %v\n", err)
+			os.Exit(1)
+		}
+
+	default:
+		if err := runServe(rest); err != nil {
+			fmt.Fprintf(os.Stderr, "cueseekd: %v\n", err)
+			os.Exit(1)
 		}
 	}
-	if err := runServe(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "cueseekd: %v\n", err)
-		os.Exit(1)
+}
+
+// printUsage lists what this binary can do.
+//
+// Written to whichever stream suits the caller: stdout for `help`, which somebody asked
+// for, and stderr for a mistake, so that piping the output of a script does not swallow
+// the explanation.
+func printUsage(w *os.File) {
+	fmt.Fprintf(w, "cueseekd %s — the CueSeek host agent\n\n", version)
+	fmt.Fprintf(w, "  cueseekd [-config PATH] [-log-level LEVEL]   run the agent\n")
+	fmt.Fprintf(w, "  cueseekd -version                            print the version\n\n")
+
+	// Sorted, so the list does not reorder between runs of the same binary.
+	names := make([]string, 0, len(subcommands))
+	for name := range subcommands {
+		names = append(names, name)
 	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Fprintf(w, "  cueseekd %-8s                            %s\n", name, subcommands[name])
+	}
+	fmt.Fprintf(w, "\nEach subcommand takes -h for its own flags.\n")
 }
 
 // ---------------------------------------------------------------- serve
@@ -88,6 +174,19 @@ func runServe(args []string) error {
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	// Defence in depth behind classify, and the direct cause of the failure that produced
+	// this check. flag.Parse stops at the first non-flag argument and reports no error, so
+	// without this a stray word both starts the daemon and silently discards every flag
+	// after it — `cueseekd oops -config /tmp/x.yaml` ran against /etc/cueseek/config.yaml.
+	//
+	// Refusing here as well as in classify is cheap, and it means the serve path cannot be
+	// entered with arguments it did not understand no matter how it was reached.
+	if fs.NArg() > 0 {
+		return fmt.Errorf(
+			"unexpected argument %q; the agent takes flags only (try `cueseekd help`)",
+			fs.Arg(0))
 	}
 
 	if *showVersion {
