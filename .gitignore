@@ -92,3 +92,8 @@ desktop.ini
 # verifying a phase against the real host. The reusable parts belong in deploy/;
 # what lands here is per-session and names local paths.
 .deploy/
+
+# ---------- Release output ----------
+# Where scripts/release-agent.sh assembles the tarball. Build output, reproducible
+# from any tag, and an 18 MB binary that would be committed by accident exactly once.
+dist/
