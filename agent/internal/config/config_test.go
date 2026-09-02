@@ -119,10 +119,14 @@ func TestInvalidConfigs(t *testing.T) {
 		"relative db path":   {"storage:\n  path: cueseek.db\n", "absolute"},
 		"empty db path":      {"storage:\n  path: \"\"\n", "must not be empty"},
 		"service without id": {"services:\n  - type: jellyfin\n    unit: a.service\n", "id must not be empty"},
-		"service without unit": {
-			"services:\n  - id: jellyfin\n    type: jellyfin\n", "unit must not be empty"},
+		// "service without unit" is deliberately absent: a unit is optional, and such a
+		// service is observed but not controlled. See TestUnitIsOptional.
 		"unit missing suffix": {
 			"services:\n  - id: j\n    type: jellyfin\n    unit: jellyfin\n", "type suffix"},
+		// Whitespace is a typo, not a deliberate absence. Omitting `unit` entirely is how
+		// you say "not controlled"; this says "controlled, by a unit named nothing".
+		"unit is only whitespace": {
+			"services:\n  - id: j\n    type: jellyfin\n    unit: \"   \"\n", "type suffix"},
 		"poll interval too low": {
 			"services:\n  - id: j\n    type: jellyfin\n    unit: j.service\n    poll_interval: 100ms\n",
 			"too aggressive"},
@@ -187,6 +191,76 @@ services:
 	units := cfg.ManagedUnits()
 	if len(units) != 2 || units[0] != "jellyfin.service" || units[1] != "qbittorrent.service" {
 		t.Errorf("ManagedUnits() = %v", units)
+	}
+}
+
+// TestUnitIsOptional: a service CueSeek can reach but cannot act on is a real
+// configuration, not a mistake. Something installed from a container image has an HTTP API
+// and a web interface and no unit to restart, and refusing it outright would refuse a
+// configuration the adapters would have served correctly.
+func TestUnitIsOptional(t *testing.T) {
+	cfg, err := Parse([]byte(`
+services:
+  - id: jellyfin
+    type: jellyfin
+    base_url: http://127.0.0.1:8096
+`))
+	if err != nil {
+		t.Fatalf("a service without a unit was refused: %v", err)
+	}
+	if len(cfg.Services) != 1 {
+		t.Fatalf("parsed %d services, want 1", len(cfg.Services))
+	}
+	if cfg.Services[0].Unit != "" {
+		t.Errorf("Unit = %q, want empty", cfg.Services[0].Unit)
+	}
+}
+
+// TestManagedUnitsOmitsServicesWithoutAUnit guards the seam between the two changes above.
+//
+// host.NewWithBackend refuses an empty unit name outright, and is right to — a blank
+// string in a security allowlist is a bug, not a permissive setting. So the moment `unit`
+// became optional, an unfiltered ManagedUnits would have failed the agent at startup with
+// "managed unit name must not be empty" for a configuration that is perfectly valid. The
+// filtering belongs here, where the absence is a known fact.
+func TestManagedUnitsOmitsServicesWithoutAUnit(t *testing.T) {
+	cfg, err := Parse([]byte(`
+services:
+  - id: controlled
+    type: jellyfin
+    unit: jellyfin.service
+  - id: observed-only
+    type: jellyfin
+    base_url: http://127.0.0.1:8096
+`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	units := cfg.ManagedUnits()
+	if len(units) != 1 || units[0] != "jellyfin.service" {
+		t.Fatalf("ManagedUnits() = %v, want exactly [jellyfin.service]", units)
+	}
+}
+
+// TestManagedUnitsFiltersBlankUnits covers the case validation should already have
+// stopped.
+//
+// A whitespace-only unit is refused by Parse — it reads as a typo rather than as a
+// deliberate absence, and saying so at startup is more useful than silently treating it as
+// "not controlled". This constructs the Config directly to reach ManagedUnits anyway,
+// because the filter is a second line of defence and a second line of defence that is only
+// exercised through the first is not tested at all.
+func TestManagedUnitsFiltersBlankUnits(t *testing.T) {
+	cfg := Config{Services: []Service{
+		{ID: "real", Unit: "jellyfin.service"},
+		{ID: "blank", Unit: ""},
+		{ID: "whitespace", Unit: "   "},
+	}}
+
+	units := cfg.ManagedUnits()
+	if len(units) != 1 || units[0] != "jellyfin.service" {
+		t.Fatalf("ManagedUnits() = %#v, want exactly [jellyfin.service]", units)
 	}
 }
 
@@ -386,22 +460,52 @@ func TestShippedExampleConfigIsValid(t *testing.T) {
 		t.Errorf("storage.path = %q, want the unit's StateDirectory", cfg.Storage.Path)
 	}
 
-	if len(cfg.Services) != 1 {
-		t.Fatalf("example defines %d services, want 1 (qbittorrent stays commented "+
-			"until its adapter exists)", len(cfg.Services))
-	}
-	svc := cfg.Services[0]
-	if svc.Type != "jellyfin" || svc.Unit != "jellyfin.service" {
-		t.Errorf("example service = %+v", svc)
+	// The shipped example manages NOTHING, and that is the property under test.
+	//
+	// install.sh copies this file to /etc/cueseek/config.yaml on a fresh host. When it
+	// shipped with Jellyfin active and an api_key_file that does not exist yet, the first
+	// `systemctl start cueseekd` failed — on every machine, but informatively only on one
+	// that runs Jellyfin. For anyone else the first thing CueSeek ever did was refuse to
+	// start, citing somebody else's media server.
+	//
+	// An empty roster is a working install: the host's own vitals need no configuration
+	// and no privilege, so there is something real to see immediately.
+	if len(cfg.Services) != 0 {
+		t.Fatalf("the shipped example activates %d service(s); it must activate none, "+
+			"so that a fresh install starts on a machine that runs neither of them",
+			len(cfg.Services))
 	}
 
-	// No secret may be committed. The example names a path; it never carries a key.
-	if svc.APIKey != "" {
-		t.Errorf("the example config contains an inline api_key: %q", svc.APIKey)
+	// Absent is not the same as unhelpful. The examples must still be present, commented,
+	// or a new operator has nothing to copy.
+	text := string(raw)
+	for _, want := range []string{
+		"type: jellyfin",
+		"type: qbittorrent",
+		"api_key_file:",
+		"web_ui:",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the example config no longer shows %q anywhere, "+
+				"so there is nothing for a new operator to uncomment", want)
+		}
 	}
-	if svc.APIKeyFile == "" {
-		t.Error("the example does not point at an api_key_file, so a fresh install " +
-			"has no documented way to supply credentials")
+
+	// No secret may ever be committed here. Parse() would have surfaced an inline key on
+	// an active service; this catches one left in a commented example, which Parse never
+	// sees and review reliably misses.
+	for _, forbidden := range []string{"api_key: ", "password: "} {
+		for _, line := range strings.Split(text, "\n") {
+			trimmed := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "#"))
+			if !strings.HasPrefix(trimmed, forbidden) {
+				continue
+			}
+			value := strings.TrimSpace(strings.TrimPrefix(trimmed, forbidden))
+			// Placeholders are the point of an example; real-looking values are not.
+			if value != "YOUR_KEY_HERE" && value != "YOUR_PASSWORD" {
+				t.Errorf("the example config may contain a real secret: %q", line)
+			}
+		}
 	}
 }
 

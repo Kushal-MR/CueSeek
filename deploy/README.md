@@ -19,13 +19,23 @@ sudo ./install.sh --binary /path/to/cueseekd
 ```
 
 The installer refuses rather than half-installing: it checks for systemd, for polkit
-≥ 0.106, and that the binary is a Linux ELF. It never overwrites an existing
-`/etc/cueseek/config.yaml`, never touches the database, and does not start the service —
-a fresh install has no API key, so starting it could only fail. It prints the ordered
-next steps instead.
+≥ 0.106, and that the binary is a Linux ELF. It prints the ordered next steps instead of
+starting the service, because the operator still has to choose a bind address.
+
+**It never overwrites what you have edited.** `/etc/cueseek/config.yaml` is left alone if
+it exists, the database is never touched, and a `10-cueseek.rules` that differs from the
+shipped one is preserved with the new version written beside it as `.rules.new`. That last
+protection arrived in M4.3; before it, re-running the installer to upgrade the binary
+silently reverted the allowlist to the shipped one, and the symptom — a restart that
+worked yesterday being refused today — pointed nowhere near the cause.
 
 Re-run it to upgrade the binary. `--uninstall` removes the unit, rule and binary while
 keeping your configuration and paired devices; `--uninstall --purge` removes those too.
+
+**A fresh install manages no services.** The shipped `config.example.yaml` activates
+nothing, so the agent starts, reports the machine's own vitals — which need no
+configuration and no privilege — and shows an empty service list. Worked examples for
+every supported type sit commented at the bottom of that file.
 
 ## The polkit rule is the security boundary
 
@@ -77,6 +87,18 @@ enforced. The agent refuses an unlisted unit before D-Bus is touched; polkit ref
 again behind that. **Do not generate one from the other** — that would collapse two
 independent checks into one and remove the defence in depth ADR-0002 asks for. If they
 disagree, the narrower wins, which is the safe direction.
+
+### A service may have no unit at all
+
+`unit` is optional. A service configured without one is **watched but not controlled**: it
+reports health and offers its web interface, and advertises no lifecycle actions, because
+there is nothing to act on. It needs no entry in the polkit rule for the same reason —
+there is nothing to authorise.
+
+This is the honest shape for something running from a container image rather than a
+package. It is not container support: nothing here starts, stops or inspects a container.
+What it avoids is refusing a configuration the agent would have served correctly, which is
+what requiring a unit did until M4.3 — both adapters had always handled its absence.
 
 ## Service hardening
 

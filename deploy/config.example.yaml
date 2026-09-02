@@ -7,6 +7,17 @@
 #
 # Unknown keys are rejected at startup. A typo like `adress:` fails loudly rather
 # than being ignored and silently leaving you on a default.
+#
+# ---------------------------------------------------------------------------
+# AS SHIPPED, THIS FILE MANAGES NO SERVICES, AND THAT IS DELIBERATE.
+#
+# The agent starts, reports this machine's own vitals, and shows an empty list
+# of services. That is a working install, not a broken one — everything under
+# "host" below needs no configuration and no privilege at all.
+#
+# Add your own services under `services:`. Worked examples for every supported
+# type are at the bottom of this file; uncomment the one you want and edit it.
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------- bind
 bind:
@@ -21,10 +32,13 @@ bind:
   #
   #   address: "100.64.0.5:7777"    # <- yours will differ
   #
-  # Never a public address. CueSeek terminates no TLS of its own and will be able
-  # to power off this machine; ADR-0001 delegates transport security entirely to
-  # the VPN. If you bind to a tailnet address, add `After=tailscaled.service` to
-  # the systemd unit — the interface does not exist at early boot.
+  # Never a public address. CueSeek terminates no TLS of its own and can power
+  # off this machine; ADR-0001 delegates transport security entirely to the VPN.
+  #
+  # No unit ordering is needed for a VPN address. On a cold boot the interface
+  # exists before it has an address, so the agent retries bind() for up to 90
+  # seconds and logs while it waits. `After=tailscaled.service` was tested and
+  # made this measurably worse — see the comment in cueseekd.service.
   address: "127.0.0.1:7777"
 
   # Permits binding to 0.0.0.0 or [::]. Startup refuses a wildcard bind without
@@ -48,7 +62,8 @@ storage:
 # The machine itself, as opposed to anything running on it. This whole block is
 # optional and every value below is its default — delete it and nothing changes.
 #
-# No privilege is involved. These come from /proc and /sys, which are readable by
+# This is the part that works on every machine regardless of what you run. No
+# privilege is involved: these come from /proc and /sys, which are readable by
 # any user, so unlike service restarts there is no polkit rule behind them.
 host:
   metrics:
@@ -81,123 +96,158 @@ host:
 # `id` names this instance. Two Jellyfin servers on one host are two entries of
 # type `jellyfin` with different ids — not a special case anywhere in the code.
 #
-# `unit` is the systemd unit the agent may restart. It is ALSO listed in
-# /etc/polkit-1/rules.d/10-cueseek.rules, and both must agree. The duplication is
-# deliberate defence in depth (ADR-0002): the agent refuses an unlisted unit
+# Empty as shipped. Uncomment an example below, or write your own.
+#
+# ## Before you add anything: the unit name
+#
+# `unit` is the systemd unit CueSeek may start, stop and restart. Use the EXACT
+# name — check it rather than assuming, because it often differs from what the
+# software calls itself:
+#
+#   systemctl list-units --type=service | grep -i <name>
+#
+# Whatever you put in `unit` must ALSO appear in the allowedUnits list in
+# /etc/polkit-1/rules.d/10-cueseek.rules, and both are enforced. The duplication
+# is deliberate defence in depth (ADR-0002): the agent refuses an unlisted unit
 # before D-Bus is touched, and polkit refuses it again behind that.
 #
-# Use the exact unit name. Check it rather than assuming:
-#   systemctl list-units --type=service | grep -i jellyfin
-services:
-  - id: jellyfin
-    name: Jellyfin
-    type: jellyfin
-    unit: jellyfin.service
+# `unit` is OPTIONAL. A service without one is watched but not controlled — it
+# shows health and its web interface, and offers no start/stop/restart, because
+# there is nothing to act on. That is the right shape for something running from
+# a container image rather than a package.
+#
+# ## Two levels of support
+#
+#   jellyfin, qbittorrent   Full. Health from the service's own API, plus what
+#                           it is currently doing — playback sessions, transfers.
+#
+#   (any systemd unit)      Basic. Health from the unit: is the process running.
+#                           Lifecycle control and a link to its web interface.
+#                           Note the difference: this says the process is up, not
+#                           that the service is answering.
+#
+services: []
 
-    # Where the adapter reaches Jellyfin's own API. Loopback: the agent runs on
-    # the same host as the service it manages.
-    base_url: http://127.0.0.1:8096
-
-    # The agent authenticates to Jellyfin with an API key.
-    # Create one: Jellyfin Dashboard > API Keys > +
-    #
-    # Two ways to supply it. Prefer the file — a config that names a secret can
-    # be pasted into a support request, one that contains it cannot.
-    #
-    #   printf '%s' 'YOUR_KEY_HERE' | sudo tee /etc/cueseek/jellyfin.key
-    #   sudo chown root:cueseek /etc/cueseek/jellyfin.key
-    #   sudo chmod 0640 /etc/cueseek/jellyfin.key
-    #
-    # The file's contents are trimmed, so a trailing newline is harmless.
-    api_key_file: /etc/cueseek/jellyfin.key
-    #
-    # Or inline, if you would rather have one file to manage. Set one or the
-    # other, never both — startup rejects that:
-    # api_key: YOUR_KEY_HERE
-
-    # Where Jellyfin's own web interface lives, for the "open this service" tap.
-    #
-    # Note what is absent: a host. The agent does not know which address a given
-    # client can reach it on — a phone on the tailnet and a laptop on the LAN use
-    # different ones — so it supplies only the parts that do not vary. The client
-    # composes scheme://{the address it paired with}:{port}{path}.
-    #
-    # That is why one configuration works everywhere, and why a wrong or
-    # compromised agent cannot send your phone to an origin you never configured.
-    #
-    # Omit this whole block for a service with no web interface; it then simply
-    # does not advertise the capability, and tapping its row opens the detail
-    # sheet instead.
-    web_ui:
-      # http or https. Almost always http: this is a service on your own private
-      # network, and ADR-0001 puts transport security in the VPN.
-      scheme: http
-      # The port Jellyfin's interface listens on — usually the same as base_url's,
-      # but stated separately because it does not have to be.
-      port: 8096
-      # Optional. Defaults to "/".
-      # path: /web/index.html
-
-    # How often the agent refreshes this service's state. The agent polls on its
-    # own schedule and serves cached results; a client request never triggers an
-    # upstream call, so a wedged Jellyfin cannot hang your dashboard (ADR-0003).
-    poll_interval: 30s
-
-    # Budget for a single request to base_url. Must be shorter than
-    # poll_interval, or slow polls pile up on each other.
-    timeout: 5s
-
-  # ---------------------------------------------------------------- qBittorrent
-  #
-  # Uncomment to manage qBittorrent. The unit is `qbittorrent.service` on most
-  # distributions — NOT `qbittorrent-nox.service`, whatever the process is called.
-  # Check before assuming:
-  #
-  #   systemctl list-units --type=service | grep -i qbit
-  #
-  # Whatever you put in `unit:` must also be in the polkit rule's allowedUnits
-  # list. Both are enforced, and they are deliberately not generated from each
-  # other (ADR-0002).
-  #
-  # - id: qbittorrent
-  #   name: qBittorrent
-  #   type: qbittorrent
-  #   unit: qbittorrent.service
-  #
-  #   # Where the adapter reaches qBittorrent's Web API. Loopback: the agent runs
-  #   # on the same host. 8080 is the default Web UI port.
-  #   base_url: http://127.0.0.1:8080
-  #
-  #   # Credentials are OPTIONAL, and most installs need none.
-  #   #
-  #   # qBittorrent has "Bypass authentication for clients on localhost" under
-  #   # Options > Web UI, and it is on by default. The agent is on localhost, so
-  #   # leave these commented out unless you turned that off.
-  #   #
-  #   # If you did turn it off, set both. A username with no password is rejected
-  #   # at startup rather than failing later as a login error:
-  #   #
-  #   #   printf '%s' 'YOUR_PASSWORD' | sudo tee /etc/cueseek/qbittorrent.pass
-  #   #   sudo chown root:cueseek /etc/cueseek/qbittorrent.pass
-  #   #   sudo chmod 0640 /etc/cueseek/qbittorrent.pass
-  #   #
-  #   # username: admin
-  #   # password_file: /etc/cueseek/qbittorrent.pass
-  #   #
-  #   # Or inline, if you would rather manage one file. Set one or the other,
-  #   # never both — startup rejects that:
-  #   # password: YOUR_PASSWORD
-  #
-  #   # Where YOUR PHONE reaches the Web UI. The agent sends only these parts and
-  #   # never a host: the client composes scheme://<the address it paired with>:port/path,
-  #   # so one setting works over Tailscale and on the LAN.
-  #   #
-  #   # This is what makes tapping the qBittorrent row useful — managing torrents
-  #   # happens in qBittorrent's own interface, not in CueSeek.
-  #   web_ui:
-  #     scheme: http
-  #     port: 8080
-  #     path: /
-  #
-  #   poll_interval: 30s
-  #   timeout: 5s
+# ---------------------------------------------------------------------------
+# WORKED EXAMPLES — delete `services: []` above and uncomment what you need.
+# ---------------------------------------------------------------------------
+#
+# services:
+#
+#   # -------------------------------------------------------------- Jellyfin
+#   - id: jellyfin
+#     name: Jellyfin
+#     type: jellyfin
+#     unit: jellyfin.service
+#
+#     # Where the adapter reaches Jellyfin's own API. Loopback: the agent runs
+#     # on the same host as the service it manages.
+#     base_url: http://127.0.0.1:8096
+#
+#     # The agent authenticates to Jellyfin with an API key.
+#     # Create one: Jellyfin Dashboard > API Keys > +
+#     #
+#     # Two ways to supply it. Prefer the file — a config that names a secret can
+#     # be pasted into a support request, one that contains it cannot.
+#     #
+#     #   printf '%s' 'YOUR_KEY_HERE' | sudo tee /etc/cueseek/jellyfin.key
+#     #   sudo chown root:cueseek /etc/cueseek/jellyfin.key
+#     #   sudo chmod 0640 /etc/cueseek/jellyfin.key
+#     #
+#     # The file's contents are trimmed, so a trailing newline is harmless.
+#     api_key_file: /etc/cueseek/jellyfin.key
+#     #
+#     # Or inline, if you would rather have one file to manage. Set one or the
+#     # other, never both — startup rejects that:
+#     # api_key: YOUR_KEY_HERE
+#
+#     # Where Jellyfin's own web interface lives, for the "open this service" tap.
+#     #
+#     # Note what is absent: a host. The agent does not know which address a given
+#     # client can reach it on — a phone on the tailnet and a laptop on the LAN use
+#     # different ones — so it supplies only the parts that do not vary. The client
+#     # composes scheme://{the address it paired with}:{port}{path}.
+#     #
+#     # That is why one configuration works everywhere, and why a wrong or
+#     # compromised agent cannot send your phone to an origin you never configured.
+#     #
+#     # Omit this whole block for a service with no web interface; it then simply
+#     # does not advertise the capability, and tapping its row opens the detail
+#     # sheet instead.
+#     web_ui:
+#       # http or https. Almost always http: this is a service on your own private
+#       # network, and ADR-0001 puts transport security in the VPN.
+#       scheme: http
+#       # The port Jellyfin's interface listens on — usually the same as base_url's,
+#       # but stated separately because it does not have to be.
+#       port: 8096
+#       # Optional. Defaults to "/".
+#       # path: /web/index.html
+#
+#     # How often the agent refreshes this service's state. The agent polls on its
+#     # own schedule and serves cached results; a client request never triggers an
+#     # upstream call, so a wedged Jellyfin cannot hang your dashboard (ADR-0003).
+#     poll_interval: 30s
+#
+#     # Budget for a single request to base_url. Must be shorter than
+#     # poll_interval, or slow polls pile up on each other.
+#     timeout: 5s
+#
+#   # ----------------------------------------------------------- qBittorrent
+#   #
+#   # The unit is `qbittorrent.service` on most distributions — NOT
+#   # `qbittorrent-nox.service`, whatever the process calls itself. Check first.
+#   - id: qbittorrent
+#     name: qBittorrent
+#     type: qbittorrent
+#     unit: qbittorrent.service
+#
+#     # Where the adapter reaches qBittorrent's Web API. Loopback: the agent runs
+#     # on the same host. 8080 is the default Web UI port.
+#     base_url: http://127.0.0.1:8080
+#
+#     # Credentials are OPTIONAL, and most installs need none.
+#     #
+#     # qBittorrent has "Bypass authentication for clients on localhost" under
+#     # Options > Web UI, and it is on by default. The agent is on localhost, so
+#     # leave these commented out unless you turned that off.
+#     #
+#     # If you did turn it off, set both. A username with no password is rejected
+#     # at startup rather than failing later as a login error:
+#     #
+#     #   printf '%s' 'YOUR_PASSWORD' | sudo tee /etc/cueseek/qbittorrent.pass
+#     #   sudo chown root:cueseek /etc/cueseek/qbittorrent.pass
+#     #   sudo chmod 0640 /etc/cueseek/qbittorrent.pass
+#     #
+#     # username: admin
+#     # password_file: /etc/cueseek/qbittorrent.pass
+#     #
+#     # Or inline, if you would rather manage one file. Set one or the other,
+#     # never both — startup rejects that:
+#     # password: YOUR_PASSWORD
+#
+#     # This is what makes tapping the qBittorrent row useful — managing torrents
+#     # happens in qBittorrent's own interface, not in CueSeek.
+#     web_ui:
+#       scheme: http
+#       port: 8080
+#       path: /
+#
+#     poll_interval: 30s
+#     timeout: 5s
+#
+#   # ------------------------------------------- watched, but not controlled
+#   #
+#   # A service with no `unit`. It reports health and offers its web interface,
+#   # and offers no start/stop/restart, because there is no unit to act on. This
+#   # is the shape for something running from a container image.
+#   #
+#   # It needs no entry in the polkit rule: there is nothing to authorise.
+#   - id: jellyfin-container
+#     name: Jellyfin
+#     type: jellyfin
+#     base_url: http://127.0.0.1:8096
+#     api_key_file: /etc/cueseek/jellyfin.key
+#     web_ui:
+#       scheme: http
+#       port: 8096
