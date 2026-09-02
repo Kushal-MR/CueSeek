@@ -149,8 +149,13 @@ interface exists, not that the address has been assigned.
 ## Checking an install before anything goes wrong
 
 ```bash
-sudo -u cueseek /usr/local/bin/cueseekd check -config /etc/cueseek/config.yaml
+sudo /usr/local/bin/cueseekd check -config /etc/cueseek/config.yaml
 ```
+
+**As root, not as `cueseek`.** `/etc/polkit-1/rules.d` is `0750 root:polkitd` on Debian and
+Ubuntu, and the `cueseek` user belongs to no group but its own — so it can read the config
+and not the rule, and the allowlist comparison is the whole point. Run as any other user
+the check says so and carries on, rather than reporting a rule it cannot see as broken.
 
 Resolves every configured unit against systemd, reads the installed polkit rule and
 compares the two allowlists **in both directions**, confirms the bind address exists on an
