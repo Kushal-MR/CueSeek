@@ -30,6 +30,55 @@ costs, are in [ADR-0013](../../docs/adr/0013-android-client-architecture.md).
 Requires JDK 17+ and the Android SDK with platform 37. Gradle 9.7, AGP 9.3.1. CI runs the
 same command over every module on each push.
 
+### Two applications, on purpose
+
+| Build | Application id | Signed by |
+| --- | --- | --- |
+| `debug` | `dev.cueseek.android.debug` | the local debug key |
+| `release` | `dev.cueseek.android` | the release keystore, from the environment |
+
+The suffix is what lets a development build and the published one sit on the same phone.
+Without it they share an application id, Android refuses to install one over the other on
+the signature mismatch, and uninstalling to get past that clears the credential store —
+so testing a change would cost a re-pairing every time.
+
+They keep separate storage, which follows from being separate applications: the debug build
+pairs on its own and cannot see the release build's token.
+
+### Version
+
+`versionCode` and `versionName` come from `CUESEEK_VERSION`, which the release workflow sets
+to the tag. A local build is `0.0.0-dev`; `v0.1.0` becomes `versionCode 100`, `versionName
+0.1.0`. They were pinned at `1` and `"1.0"` until M4.7, so every build claimed to be the
+same one — the same defect the agent carried until M4.6, where it cost a debugging session
+(M4.5b).
+
+### Signing
+
+Four environment variables, none of them in the repository:
+
+```bash
+CUESEEK_KEYSTORE=/path/to/cueseek.jks \
+CUESEEK_KEYSTORE_PASSWORD=... \
+CUESEEK_KEY_ALIAS=... \
+CUESEEK_KEY_PASSWORD=... \
+./gradlew :app:assembleRelease
+```
+
+**All four or none.** With any missing, the signing configuration is not created at all and
+the build produces `app-release-unsigned.apk` rather than failing — which is what keeps
+`./gradlew build` working for CI on every pull request and for anyone without the key.
+
+Three of the four are repository secrets. **The alias is not**, and was one briefly: a key
+alias is a name rather than a credential, it protects nothing, and holding it as a secret
+made Actions mask the string `cueseek` in every log the workflow produced — the first
+signed build reported `package: name='dev.***.android'`. Redaction that hides nothing worth
+hiding costs an hour the day something actually goes wrong.
+
+The keystore is the one credential in this project that cannot be rotated. Losing it means
+no future build can upgrade an existing install, for anybody. It belongs in a password
+manager, not in a backup of this repository.
+
 ## Constraints
 
 **`core:api` generates types, not calls.** Kotlin wire types come from
