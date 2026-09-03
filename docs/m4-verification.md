@@ -216,19 +216,130 @@ working tree is exactly what cannot be trusted to carry a mode here.
 
 ---
 
+## v0.1.0 — the release path, walked end to end
+
+The first CueSeek release, installed on the development host from the published artefacts
+rather than from a staged binary. This is the first time that machine has run anything but
+a hand-copied build.
+
+| Step | Result |
+| --- | --- |
+| Tag `v0.1.0` pushed; workflow published the release | ✅ |
+| `sha256sum -c SHA256SUMS` on the host | OK |
+| `sudo ./install.sh` from the extracted tarball | installed |
+| `cueseekd -version` | `v0.1.0 (linux/amd64, go1.25.0)` — no longer `m3.7-35a6998` |
+| `/etc/cueseek/config.yaml` after install | preserved untouched |
+| Service | `active (running)`, enabled, listening on `100.92.18.125:7777` |
+
+**The bind retry appears once more in the journal**, unprompted:
+`bind address is not present yet, waiting for it … became available waited=10s attempts=6`.
+Third independent observation of ADR-0002's retry loop doing the job `After=tailscaled.service`
+was tested and rejected for in M3.8.
+
+### The attestation, verified
+
+`gh` on the host is 2.45.0 and has no `attestation` command, so this was done from the
+development machine with 2.98.0:
+
+```
+repo     : github.com/Kushal-MR/CueSeek
+workflow : .github/workflows/release.yml
+commit   : cfbf7c3331dfa239ff73eb064ac0d32eaa2a225b
+ref      : refs/tags/v0.1.0
+runner   : github-hosted
+```
+
+Stronger than the checksum, and differently shaped: the checksum says the download is
+intact, the attestation says the artefact was built by that workflow from that commit.
+Neither is a substitute for the other.
+
+**Worth recording as a limitation of the documented flow**: `deploy/README.md` and the
+release notes both suggest `gh attestation verify`, and Ubuntu 24.04 ships a `gh` too old
+to have it. A reader following the instructions on a stock distribution will find the
+command missing rather than the verification failing.
+
+### `cueseekd check` against the installed rule — M4.5's first open item, closed
+
+Run as root, so it could read `/etc/polkit-1/rules.d/10-cueseek.rules` for the first time:
+
+```
+  ok    configuration       /etc/cueseek/config.yaml parsed; 2 services
+  ok    bind address        100.92.18.125:7777 is assigned to tailscale0
+  ok    state directory     /var/lib/cueseek is writable by root — this does not
+                            prove the cueseek user can
+  ok    polkit allowlist    agrees with the configuration on 2 units
+  ok    power actions       all four logind actions granted
+  ok    unit jellyfin.service      active (running)
+  ok    unit qbittorrent.service   active (running)
+  ok    jellyfin            healthy
+  ok    qbittorrent         healthy — it reports "connected"
+
+9 ok, 0 warnings, 0 failures
+```
+
+Every check that could only be exercised with root has now been exercised with root. The
+allowlist genuinely agrees; it is no longer an assumption. Note the state-directory line
+saying plainly what a root run does *not* prove — the caveat written for exactly this
+invocation, doing its job.
+
+### The phone, against a v0.1.0 agent
+
+Captured over ADB, read-only. **Nothing on the phone was rebuilt or re-paired.**
+
+- Verdict **Operational**, tally rule full, `✓ 2`
+- **`● live`** — the stream is connected and the beat is arriving
+- Vitals: CPU 1% of 4 cores · MEM 16%, 3.4 GB free · `/` 64%, 174 GB free · up 54m ·
+  0 queued · 48°C coretemp
+- Jellyfin **Running**, qBittorrent **Running**
+
+Two things confirm this is live rather than a cached frame: between two captures a few
+seconds apart the observed ages moved **10s → 3s** and the temperature **48°C → 50°C**.
+
+Accessibility semantics survived intact — `"Jellyfin, Running"` as one merged node beside a
+separate `"Actions for Jellyfin"`, which is M3.3's two-target row still announcing itself
+correctly, and `"/, 174 GB free of 491 GB"` reading the vitals strip as a sentence.
+
+**Two properties fall out of this, and they are the interesting ones.**
+
+*Pairing survived a binary replacement.* No re-pair, no 401, no prompt. `install.sh`
+replaces the binary, the unit and an unmodified rule, and never touches
+`/var/lib/cueseek/cueseek.db` where the device row and token hash live. That is a designed
+property rather than a lucky one, and it is now observed.
+
+*The client is four milestones behind the agent and does not care.* The installed app is
+the debug build from 2026-08-31 — before M4.3, M4.4, M4.5 and M4.6 existed. It is talking
+to a v0.1.0 agent with no rebuild, no contract change and no visible difference. That is
+ADR-0004 and ADR-0009's whole claim, observed rather than asserted, on the milestone where
+the agent changed most.
+
+---
+
 ## Not yet verified, and why
 
 Stated rather than left to be assumed from an absence.
 
-- **The allowlist comparison against the *installed* rule.** Verified against a copy of the
-  shipped rule placed where it could be read. The installed one needs root, and this work
-  was done over a key-only SSH session with no interactive sudo.
-- **Lifecycle control through polkit for a `systemd`-type service.** The polkit rule grants
-  the `cueseek` user, and the test agent ran as the operator account. Property reads are not
-  polkit-gated (an M0 finding), which is why health worked; a real start/stop/restart needs
-  the packaged install. `RestartUnit` through this exact path is already verified for
-  Jellyfin and qBittorrent in M3.1, and `systemd` shares `adapters.InvokeLifecycle` with
-  both rather than reimplementing it.
-- **Anything on the phone.** No client change was made in M4.3–M4.5, and M3.4 established
-  that an adapter reaches the phone through capabilities the client already renders.
+- **Lifecycle control through polkit for a `systemd`-type service.** The one item M4.5 left
+  open that is still open. Health works because property reads are not polkit-gated (an M0
+  finding); a real start/stop/restart of a `type: systemd` entry needs one configured on a
+  machine whose polkit rule names its unit, and the development host runs neither of its
+  two services that way. `RestartUnit` through this exact path is verified for Jellyfin and
+  qBittorrent in M3.1, and the `systemd` adapter shares `adapters.InvokeLifecycle` with both
+  rather than reimplementing it — so what is untested is the configuration, not the code
+  path. It should be closed deliberately, with a service somebody is willing to restart.
+- **`gh attestation verify` on a stock distribution.** The command is documented in
+  `deploy/README.md` and the release notes, and Ubuntu 24.04 ships `gh` 2.45.0, which does
+  not have it. Verified from a machine with 2.98.0 instead. A reader following the
+  instructions on a stock install finds the command missing rather than the check failing,
+  which is a documentation problem rather than a supply-chain one.
 - **A fresh machine.** That is M4.10, and it is the only thing that can prove the milestone.
+  Everything above was observed on a host that has run CueSeek since M1 — which is exactly
+  why it cannot stand in for a stranger's.
+
+### Closed since
+
+- ~~The allowlist comparison against the *installed* rule.~~ Closed by the v0.1.0 install:
+  `sudo cueseekd check` read the real rule and reported `9 ok, 0 warnings, 0 failures`.
+- ~~Anything on the phone.~~ Closed by the ADB capture above — and it turned out to be worth
+  doing rather than assuming, because it observed two properties nothing else could: that
+  pairing survives a binary replacement, and that a client four milestones behind the agent
+  is unaffected by it.
