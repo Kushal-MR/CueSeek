@@ -28,11 +28,27 @@ not be named.
 | Version | Supported |
 | --- | --- |
 | `main` | Yes — fixes land here first |
-| Tagged releases | None yet |
+| `v0.1.x` | Yes |
+| Anything older | There is nothing older |
 
-**CueSeek has not had a release.** `v0.1.0` is the first, and lands at the end of M4
-(see [`docs/m4-plan.md`](docs/m4-plan.md)). Until then the only supported thing is `main`,
-and anyone running CueSeek is running a development build knowingly.
+`v0.1.0` is the first release. Before it, every installation was a hand-built binary, and
+every one of them reported its version as `0.0.0-dev` — so if you are running something that
+says that, it predates the releases and cannot be identified any further than that.
+
+```bash
+cueseekd -version
+```
+
+**Releases carry a build provenance attestation**, which ties the artefact to this
+repository, this workflow and one commit. It is a different claim from the checksum: the
+checksum says the download is intact, the attestation says where it came from.
+
+```bash
+gh attestation verify cueseek-agent_*_linux_amd64.tar.gz --repo Kushal-MR/CueSeek
+```
+
+Needs GitHub CLI 2.49 or later; Ubuntu 24.04 ships 2.45, which has no `attestation` command
+at all. "Unknown command" means your `gh` is too old, not that the artefact failed.
 
 ## The security model, in brief
 
@@ -178,7 +194,24 @@ systemctl show cueseekd -p User -p CapabilityBoundingSet -p NoNewPrivileges
 
 # Which units it is configured to manage
 grep -A2 'unit:' /etc/cueseek/config.yaml
-
-# Which devices are paired, and with which scopes
-sudo -u cueseek cueseekd pair --help
 ```
+
+**And the one command that checks most of it at once:**
+
+```bash
+sudo cueseekd check
+```
+
+It reports whether the two allowlists agree — the configuration's and the polkit rule's —
+in both directions, so a unit granted but never configured is named as well as one
+configured but never granted. That comparison is the whole reason ADR-0002 keeps two
+independent copies, and until `check` existed nothing had ever confirmed they matched.
+
+It also reports whether all four logind power actions are granted or none, which is the trap
+[ADR-0002 Amendment 2](docs/adr/0002-host-privilege-dbus-polkit.md) was written about: a rule
+granting `reboot` and `power-off` without their `-multiple-sessions` variants works perfectly
+for whoever tests it alone and fails the first time somebody is logged in at the console.
+
+`check` changes nothing, and **must be run as root** — `/etc/polkit-1/rules.d` is
+`0750 root:polkitd` on Debian and Ubuntu, and the `cueseek` user belongs to no group but its
+own, so any other user can read the configuration and not the rule.

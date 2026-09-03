@@ -89,6 +89,7 @@ the one you rely on. Android 8.0 or later.
 | [Requirements](docs/requirements.md) | What CueSeek runs on, what was actually tested, and what is not supported |
 | [Install](docs/install.md) | The full walkthrough, upgrading, uninstalling, and what to do when something is wrong |
 | [Pairing](docs/pairing.md) | Scopes, revoking a device, and why there is no QR code |
+| [Troubleshooting](docs/troubleshooting.md) | Every failure that has actually happened, and what it means |
 | [Configuration](deploy/config.example.yaml) | The annotated reference — every option, with the reasoning |
 | [Security model](SECURITY.md) | What CueSeek can and cannot do to a machine, the risks knowingly accepted, and how to verify both |
 | [Deployment](deploy/README.md) | The polkit rule, the hardened unit, and the packaging |
