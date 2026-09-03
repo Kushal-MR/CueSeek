@@ -7,14 +7,20 @@ CueSeek gives you one consistent way to reach every service running on your home
 It talks to Jellyfin, qBittorrent and others through their APIs, and adds the host-level
 control they cannot provide themselves.
 
-> **Status: M3 complete.** The agent and the Android client both work, and the whole path —
-> phone → Tailscale → `cueseekd` → polkit → systemd — has been verified end to end on real
-> hardware. Jellyfin and qBittorrent are supported in full; any other systemd unit is
-> supported for health and control. The phone can read the machine's own vitals and reboot
-> or shut it down.
-> See [What works today](#what-works-today).
+> **Status: `v0.1.0` released.** The agent is installable from a signed, self-contained
+> release; the whole path — phone → Tailscale → `cueseekd` → polkit → systemd — has been
+> verified end to end on real hardware. Jellyfin and qBittorrent are supported in full; any
+> other systemd unit is supported for health and lifecycle control. The phone can read the
+> machine's own vitals and reboot or shut it down.
+>
+> M4 is making it installable by somebody who has never seen the author's machine
+> ([plan](docs/m4-plan.md) · [what has been verified](docs/m4-verification.md)).
 
 ---
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="The CueSeek dashboard: a host named kushal-HP-paviliong6 reporting Operational, a live indicator, CPU, memory, storage and temperature, and Jellyfin and qBittorrent both running." width="380">
+</p>
 
 ## What CueSeek is
 
@@ -35,6 +41,59 @@ the machine they run on:
   storage*, not photo browsing.
 
 ---
+
+## Installing
+
+You need a Linux host with systemd and polkit 0.106 or later, and Tailscale, WireGuard or a
+LAN between it and your phone. No clone, and no Go toolchain.
+
+```bash
+# from the releases page
+sha256sum -c SHA256SUMS
+tar xzf cueseek-agent_*_linux_amd64.tar.gz
+cd cueseek-agent_*_linux_amd64
+sudo ./install.sh
+```
+
+The tarball is self-contained — agent, systemd unit, polkit rule, annotated example
+configuration and installer. It manages no services as shipped, which is a working install:
+the machine's own vitals need no configuration and no privilege. Add your services when you
+want them.
+
+Then, at any point:
+
+```bash
+sudo cueseekd check
+```
+
+which reports whether the configuration, the polkit allowlist and the units actually agree,
+and changes nothing.
+
+**`linux/amd64` only.** Developed and tested on Linux Mint 22.3 with systemd 255 and polkit
+124, over Tailscale. Other distributions should work and are untested. There is no `arm64`
+build — it cannot be tested here. NAS appliances are not supported.
+
+### The phone
+
+`cueseek_*.apk` is on the same release page. Sideload it, then pair with the code from
+`sudo -u cueseek cueseekd pair`. You type the host address and the code; there is no QR.
+
+It installs as `dev.cueseek.android`; a build made from source installs as
+`dev.cueseek.android.debug`, and the two coexist — so a development build never displaces
+the one you rely on. Android 8.0 or later.
+
+## Documentation
+
+| | |
+| --- | --- |
+| [Requirements](docs/requirements.md) | What CueSeek runs on, what was actually tested, and what is not supported |
+| [Install](docs/install.md) | The full walkthrough, upgrading, uninstalling, and what to do when something is wrong |
+| [Pairing](docs/pairing.md) | Scopes, revoking a device, and why there is no QR code |
+| [Configuration](deploy/config.example.yaml) | The annotated reference — every option, with the reasoning |
+| [Security model](SECURITY.md) | What CueSeek can and cannot do to a machine, the risks knowingly accepted, and how to verify both |
+| [Deployment](deploy/README.md) | The polkit rule, the hardened unit, and the packaging |
+| [Architecture decisions](docs/adr/) | Every significant decision, its cost, and what was rejected. **Start here if you are reading the code.** |
+| [Design system](docs/DESIGN.md) | Palette, type, shape, motion and the rules behind them |
 
 ## What works today
 
@@ -198,46 +257,6 @@ prose — the file a designer, a contributor or a design tool should be handed f
 M4 was previously the Wear milestone; the renumber and its reasoning are
 [ADR-0011 Amendment 2](docs/adr/0011-sequencing-spike-then-slice.md).
 
-
-## Installing
-
-You need a Linux host with systemd and polkit 0.106 or later, and Tailscale, WireGuard or a
-LAN between it and your phone. No clone, and no Go toolchain.
-
-```bash
-# from the releases page
-sha256sum -c SHA256SUMS
-tar xzf cueseek-agent_*_linux_amd64.tar.gz
-cd cueseek-agent_*_linux_amd64
-sudo ./install.sh
-```
-
-The tarball is self-contained — agent, systemd unit, polkit rule, annotated example
-configuration and installer. It manages no services as shipped, which is a working install:
-the machine's own vitals need no configuration and no privilege. Add your services when you
-want them.
-
-Then, at any point:
-
-```bash
-sudo cueseekd check
-```
-
-which reports whether the configuration, the polkit allowlist and the units actually agree,
-and changes nothing.
-
-**`linux/amd64` only.** Developed and tested on Linux Mint 22.3 with systemd 255 and polkit
-124, over Tailscale. Other distributions should work and are untested. There is no `arm64`
-build — it cannot be tested here. NAS appliances are not supported.
-
-### The phone
-
-`cueseek_*.apk` is on the same release page. Sideload it, then pair with the code from
-`sudo -u cueseek cueseekd pair`.
-
-It installs as `dev.cueseek.android`; a build made from source installs as
-`dev.cueseek.android.debug`, and the two coexist — so a development build never displaces
-the one you rely on. Android 8.0 or later.
 
 ## Development
 
