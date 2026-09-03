@@ -230,6 +230,15 @@ and changes nothing.
 124, over Tailscale. Other distributions should work and are untested. There is no `arm64`
 build — it cannot be tested here. NAS appliances are not supported.
 
+### The phone
+
+`cueseek_*.apk` is on the same release page. Sideload it, then pair with the code from
+`sudo -u cueseek cueseekd pair`.
+
+It installs as `dev.cueseek.android`; a build made from source installs as
+`dev.cueseek.android.debug`, and the two coexist — so a development build never displaces
+the one you rely on. Android 8.0 or later.
+
 ## Development
 
 **Requirements**

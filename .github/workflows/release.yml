@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  release:
+  agent:
     name: Agent
     runs-on: ubuntu-latest
     permissions:
@@ -139,8 +139,26 @@ jobs:
           gh attestation verify cueseek-agent_*_linux_amd64.tar.gz --repo ${{ github.repository }}
           ```
 
+          That needs GitHub CLI **2.49 or later**. Ubuntu 24.04 ships 2.45, which has no
+          `attestation` command — run it from a machine with a newer `gh` rather than
+          concluding the artefact is unverifiable.
+
           After installing, `sudo cueseekd check` reports whether the configuration, the
           polkit allowlist and the units actually agree.
+
+          ## The Android client
+
+          `cueseek_*.apk` is attached when a signing key is configured. Sideload it, then
+          pair with the code from `sudo -u cueseek cueseekd pair`.
+
+          It installs as `dev.cueseek.android`. A build made from source installs as
+          `dev.cueseek.android.debug` and the two coexist, so a development build never
+          displaces the one you rely on.
+
+          **Signed with a key that is not Google Play's.** If you have previously installed
+          a build of CueSeek made from source under the release application id, Android will
+          refuse to install this over it and you will have to uninstall first — which clears
+          the stored token and means pairing again, once.
 
           ## Supported
 
@@ -165,3 +183,133 @@ jobs:
             --notes-file notes.md \
             --generate-notes \
             $prerelease
+
+  # -----------------------------------------------------------------------------------
+  # The Android client.
+  #
+  # A separate job, after the agent, because it needs the release to exist before it can
+  # attach to it — and because a missing Android signing key must not stop the agent from
+  # being published. The two halves ship independently by design (ADR-0004): a client four
+  # milestones behind a v0.1.0 agent was observed working, so an APK that lags a release is
+  # a normal state rather than a broken one.
+  # -----------------------------------------------------------------------------------
+  android:
+    name: Android client
+    runs-on: ubuntu-latest
+    needs: agent
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Publishing an unsigned APK would be worse than publishing none: it cannot be
+      # installed, and its presence on a release page implies otherwise. So the job reports
+      # what it is about to do and stops here if it cannot sign.
+      - name: Is a signing key configured?
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No ANDROID_KEYSTORE_BASE64 secret, so no APK will be published. The agent release is unaffected."
+          fi
+
+      # A pre-release shares its versionCode with the final release of the same number
+      # (see app/build.gradle.kts), so Android would refuse to upgrade one to the other.
+      # Publishing the agent for a release candidate is useful; publishing an APK that
+      # strands whoever installs it is not.
+      - name: Should an APK be published for this tag?
+        id: gate
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            case "$VERSION" in
+              *-*) echo "publish=false" >> "$GITHUB_OUTPUT"
+                   echo "::notice::$VERSION is a pre-release; APK skipped (versionCode would collide with the final release)." ;;
+              *)   echo "publish=true"  >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore the keystore
+        if: steps.signing.outputs.available == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "${RUNNER_TEMP}/cueseek.jks"
+          # Never echoed, and outside the workspace so no later step can archive it by
+          # accident. The runner is ephemeral; the shred below is belt and braces.
+          echo "::add-mask::$(sha256sum "${RUNNER_TEMP}/cueseek.jks" | cut -d' ' -f1)"
+
+      - name: Build the release APK
+        if: steps.signing.outputs.available == 'true'
+        working-directory: clients/android
+        env:
+          CUESEEK_VERSION: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          CUESEEK_KEYSTORE: ${{ runner.temp }}/cueseek.jks
+          CUESEEK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CUESEEK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CUESEEK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease
+
+      # An unsigned output here means the signing configuration was not picked up — which
+      # would otherwise be discovered by whoever downloaded it and could not install it.
+      - name: Verify the APK is signed, and name what it is
+        if: steps.signing.outputs.available == 'true'
+        working-directory: clients/android
+        run: |
+          apk="app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$apk" ]; then
+            echo "::error::No signed APK at $apk. An unsigned build produces app-release-unsigned.apk."
+            ls -l app/build/outputs/apk/release/ || true
+            exit 1
+          fi
+
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$build_tools/apksigner" verify --verbose "$apk"
+          "$build_tools/aapt2" dump badging "$apk" | grep -E "^package"
+
+          mkdir -p "${GITHUB_WORKSPACE}/apk"
+          version="$("$build_tools/aapt2" dump badging "$apk" \
+            | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+          cp "$apk" "${GITHUB_WORKSPACE}/apk/cueseek_${version}.apk"
+          ( cd "${GITHUB_WORKSPACE}/apk" && sha256sum ./*.apk > SHA256SUMS-apk )
+          ls -l "${GITHUB_WORKSPACE}/apk"
+
+      - name: Shred the keystore
+        if: always() && steps.signing.outputs.available == 'true'
+        run: shred -u "${RUNNER_TEMP}/cueseek.jks" 2>/dev/null || rm -f "${RUNNER_TEMP}/cueseek.jks"
+
+      - uses: actions/attest-build-provenance@v2
+        if: steps.signing.outputs.available == 'true' && steps.gate.outputs.publish == 'true'
+        with:
+          subject-path: apk/*.apk
+
+      - name: Upload the APK (dry run)
+        if: steps.signing.outputs.available == 'true' && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cueseek-apk
+          path: apk/
+
+      - name: Attach the APK to the release
+        if: steps.signing.outputs.available == 'true' && steps.gate.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" apk/*.apk apk/SHA256SUMS-apk --clobber

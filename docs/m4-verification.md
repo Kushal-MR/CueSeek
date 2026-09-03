@@ -314,6 +314,43 @@ the agent changed most.
 
 ---
 
+## M4.7 — the Android release path
+
+Built locally, since the workflow cannot be exercised until a keystore exists.
+
+| Build | Result |
+| --- | --- |
+| `assembleDebug` | `dev.cueseek.android.debug`, `versionCode 1`, `versionName 0.0.0-dev-debug` |
+| `assembleRelease`, no keystore | `app-release-**unsigned**.apk` — builds rather than fails |
+| `assembleRelease`, `CUESEEK_VERSION=v0.1.0` | `dev.cueseek.android`, `versionCode 100`, `versionName 0.1.0` |
+| `assembleRelease` with all four signing variables | `app-release.apk`, `apksigner verify` → **Verifies**, v2 scheme |
+| `./gradlew build` with no keystore | passes — the case CI runs on every pull request |
+| `:core:design:verifyPaparazziDebug` | passes |
+
+The signing path was proved with a **throwaway keystore generated for the purpose and
+destroyed immediately afterwards** — `CN=CueSeek Signing Path Test, OU=Disposable`. Shipping
+a signing configuration that had never signed anything would have moved the discovery of a
+mistake to whoever first tried to cut a release.
+
+**The unsigned case is the one worth having a test for.** `./gradlew build` runs
+`assembleRelease`, so a signing block that referenced a missing keystore file would fail
+every pull request from anyone without the key — which is everyone except the maintainer.
+The configuration is therefore created only when all four variables are present, and its
+absence produces an unsigned APK rather than an error.
+
+### What this does not fix, and cannot
+
+The currently-installed app on the development phone is `dev.cueseek.android` **debug-signed**
+— it predates the suffix. The published APK carries the same application id with a different
+signature, so Android will refuse to install one over the other.
+
+**Moving to the released build therefore costs one uninstall and one re-pairing, once.** The
+suffix does not avoid that; it ensures it is the last time, because from here a development
+build and the published one are different applications. Said plainly rather than discovered
+by whoever tries it.
+
+---
+
 ## Not yet verified, and why
 
 Stated rather than left to be assumed from an absence.
@@ -326,11 +363,12 @@ Stated rather than left to be assumed from an absence.
   qBittorrent in M3.1, and the `systemd` adapter shares `adapters.InvokeLifecycle` with both
   rather than reimplementing it — so what is untested is the configuration, not the code
   path. It should be closed deliberately, with a service somebody is willing to restart.
-- **`gh attestation verify` on a stock distribution.** The command is documented in
-  `deploy/README.md` and the release notes, and Ubuntu 24.04 ships `gh` 2.45.0, which does
-  not have it. Verified from a machine with 2.98.0 instead. A reader following the
-  instructions on a stock install finds the command missing rather than the check failing,
-  which is a documentation problem rather than a supply-chain one.
+- **The Android release workflow.** The build was verified locally at every step; the job
+  that runs it has never run, because it does nothing without a keystore and none exists
+  yet. It fails safe by construction — no secret means no APK, announced with a notice, and
+  the agent release is unaffected — but that path is reasoned about rather than observed.
+- **The published APK on a phone.** Nothing has installed a release-signed CueSeek. The
+  first attempt will also be the first uninstall-and-re-pair, described above.
 - **A fresh machine.** That is M4.10, and it is the only thing that can prove the milestone.
   Everything above was observed on a host that has run CueSeek since M1 — which is exactly
   why it cannot stand in for a stranger's.
@@ -343,3 +381,6 @@ Stated rather than left to be assumed from an absence.
   doing rather than assuming, because it observed two properties nothing else could: that
   pairing survives a binary replacement, and that a client four milestones behind the agent
   is unaffected by it.
+- ~~`gh attestation verify` on a stock distribution.~~ Not fixed, but no longer a trap: the
+  release notes now state that the command needs `gh` 2.49 or later and that Ubuntu 24.04
+  ships 2.45, so a reader meets the limitation in the instructions rather than in a shell.
