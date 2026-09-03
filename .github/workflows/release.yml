@@ -264,8 +264,13 @@ jobs:
           CUESEEK_VERSION: ${{ github.event_name == 'push' && github.ref_name || '' }}
           CUESEEK_KEYSTORE: ${{ runner.temp }}/cueseek.jks
           CUESEEK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          CUESEEK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           CUESEEK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Not a secret, and it was one briefly. A key alias is a name, not a
+          # credential — it protects nothing, and holding it as a secret made Actions
+          # mask the string "cueseek" in every log line the workflow produced. The first
+          # signed build reported `package: name='dev.***.android'`, which is the kind of
+          # redaction that costs an hour the day something actually goes wrong.
+          CUESEEK_KEY_ALIAS: cueseek
         run: ./gradlew :app:assembleRelease
 
       # An unsigned output here means the signing configuration was not picked up — which

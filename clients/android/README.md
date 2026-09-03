@@ -69,6 +69,12 @@ CUESEEK_KEY_PASSWORD=... \
 the build produces `app-release-unsigned.apk` rather than failing — which is what keeps
 `./gradlew build` working for CI on every pull request and for anyone without the key.
 
+Three of the four are repository secrets. **The alias is not**, and was one briefly: a key
+alias is a name rather than a credential, it protects nothing, and holding it as a secret
+made Actions mask the string `cueseek` in every log the workflow produced — the first
+signed build reported `package: name='dev.***.android'`. Redaction that hides nothing worth
+hiding costs an hour the day something actually goes wrong.
+
 The keystore is the one credential in this project that cannot be rotated. Losing it means
 no future build can upgrade an existing install, for anybody. It belongs in a password
 manager, not in a backup of this repository.

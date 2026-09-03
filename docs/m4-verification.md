@@ -353,6 +353,30 @@ One incidental confirmation: the new build's pairing screen shows the placeholde
 `100.64.0.1`. That is M4.3's change — the development host's real tailnet address removed
 from the shipped UI — appearing in a built application for the first time.
 
+### And in CI, before merging
+
+The four signing secrets were set and the workflow dispatched **from the M4.7 branch**, so
+the job that had never run got to run before the branch was merged rather than after. Both
+jobs succeeded; `apksigner verify` reported `Verifies` on a runner-built APK. The
+dispatch produced `versionCode 1` / `0.0.0-dev`, which is correct — `CUESEEK_VERSION` is
+set only for a tag.
+
+**It also found something.** The signed build reported:
+
+```
+package: name='dev.***.android'
+```
+
+The key alias had been stored as a repository secret, so Actions was masking the literal
+string `cueseek` in every line of every log the workflow produced. A key alias is a name,
+not a credential: it protects nothing, and redacting it makes every future CI log harder to
+read for no gain. The secret was deleted and the alias is now written plainly in the
+workflow.
+
+Worth noting as a general shape rather than a one-off: **making a non-secret a secret is not
+free.** It buys nothing and it silently degrades the diagnosability of everything the
+workflow prints — a cost that only shows up later, while something else is going wrong.
+
 **The unsigned case is the one worth having a test for.** `./gradlew build` runs
 `assembleRelease`, so a signing block that referenced a missing keystore file would fail
 every pull request from anyone without the key — which is everyone except the maintainer.
@@ -384,11 +408,8 @@ Stated rather than left to be assumed from an absence.
   qBittorrent in M3.1, and the `systemd` adapter shares `adapters.InvokeLifecycle` with both
   rather than reimplementing it — so what is untested is the configuration, not the code
   path. It should be closed deliberately, with a service somebody is willing to restart.
-- **The Android release *workflow*.** The build it runs was verified locally at every step,
-  including with the real key, but the job itself has never run — it does nothing until the
-  four repository secrets exist. It fails safe by construction (no secret means a notice and
-  no APK, and the agent release is unaffected), and that path is reasoned about rather than
-  observed.
+- **A published APK.** The workflow signs one; no tag has yet carried one to a release page,
+  because M4.7 is not merged.
 - **A release-signed APK installed on a phone.** Built and signature-verified, not
   installed. Installing it means uninstalling the app that has been paired since M2, and
   that is a decision to take deliberately rather than in passing. The signature, the
