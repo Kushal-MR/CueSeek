@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CueSeek — a dashboard for the server you already run</title>
+<meta name="description" content="A self-hosted Android dashboard for one Linux machine: service health, host vitals, restarts and reboots, over your own VPN. No cloud, no telemetry, no account.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<style>
+/* ---------------------------------------------------------------------------
+   Palette from docs/DESIGN.md. Light and dark are not inversions of each other:
+   light puts brighter content on a tinted ground, dark raises the container
+   above a deeper page, because a shadow does nothing on a dark ground.
+
+   Typeface is a system stack rather than IBM Plex, which the app uses. The four
+   Plex faces in this repository are 670 KB of unsubsetted TTF, and there is no
+   build step here to subset them — shipping that to render one page would be
+   the opposite of the restraint this page is trying to demonstrate. The rule
+   Plex was chosen for is kept: mono is confined to data.
+   --------------------------------------------------------------------------- */
+:root {
+  --bg:#F1F4EE; --surface:#FCFDFA; --surface-2:#EBEEE8;
+  --fg:#191D18; --fg-dim:#434840;
+  --primary:#4C6650; --on-primary:#FFFFFF;
+  --outline:#737870; --outline-var:#C3C8BE;
+  --healthy:#3F5E46; --degraded:#7A5215; --unreachable:#8C3A31; --unknown:#5E6560;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#0E1210; --surface:#161B15; --surface-2:#232821;
+    --fg:#E2E7DE; --fg-dim:#B4BCB1;
+    --primary:#B1CDB2; --on-primary:#1D3722;
+    --outline:#8C948A; --outline-var:#333A32;
+    --healthy:#A8C4A6; --degraded:#E5BE84; --unreachable:#E0A79E; --unknown:#9AA298;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size:16px; line-height:1.6; letter-spacing:0.01em;
+}
+code, pre, .data {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "Liberation Mono", monospace;
+}
+main { max-width:52rem; margin:0 auto; padding:0 1.25rem 5rem; }
+section { padding-top:3.25rem; }
+h1,h2,h3 { line-height:1.25; margin:0 0 .75rem; }
+h1 { font-size:2rem; letter-spacing:-0.02em; font-weight:600; }
+h2 { font-size:1.3rem; letter-spacing:-0.01em; font-weight:600; }
+h3 { font-size:1rem; font-weight:600; margin-top:1.75rem; }
+p { margin:0 0 1rem; }
+a { color:var(--primary); text-underline-offset:.15em; }
+a:hover { text-decoration-thickness:2px; }
+strong { font-weight:600; }
+hr { border:0; border-top:1px solid var(--outline-var); margin:0; }
+
+/* header ------------------------------------------------------------------ */
+header { padding:4rem 0 0; }
+.eyebrow {
+  font-size:.75rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--fg-dim); margin:0 0 .6rem;
+}
+.lede { font-size:1.12rem; color:var(--fg-dim); max-width:40rem; }
+.cta { display:flex; flex-wrap:wrap; gap:.6rem; margin:1.6rem 0 .5rem; }
+.btn {
+  display:inline-block; padding:.6rem 1.1rem; border-radius:1.4rem;
+  background:var(--primary); color:var(--on-primary);
+  text-decoration:none; font-weight:600; font-size:.95rem;
+}
+.btn.ghost { background:transparent; color:var(--fg); border:1px solid var(--outline); }
+.caveat { font-size:.85rem; color:var(--fg-dim); margin-top:.4rem; }
+
+/* shots ------------------------------------------------------------------- */
+.shots {
+  display:flex; flex-wrap:wrap; gap:1.5rem; justify-content:center;
+  margin:2.5rem 0 0;
+}
+figure { margin:0; max-width:19rem; }
+figure img {
+  width:100%; height:auto; display:block; border-radius:.9rem;
+  border:1px solid var(--outline-var);
+}
+figcaption { font-size:.82rem; color:var(--fg-dim); margin-top:.6rem; }
+
+/* blocks ------------------------------------------------------------------ */
+pre {
+  background:var(--surface); border:1px solid var(--outline-var);
+  border-radius:.6rem; padding:1rem; overflow-x:auto;
+  font-size:.83rem; line-height:1.55; margin:0 0 1rem;
+}
+code { font-size:.9em; }
+p code, li code, td code {
+  background:var(--surface-2); padding:.1em .35em; border-radius:.25rem;
+}
+table { border-collapse:collapse; width:100%; font-size:.93rem; margin:0 0 1rem; }
+th, td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--outline-var); vertical-align:top; }
+th { font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--fg-dim); }
+ul { margin:0 0 1rem; padding-left:1.15rem; }
+li { margin-bottom:.4rem; }
+
+.two { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem 2.5rem; }
+@media (max-width:34rem) { .two { grid-template-columns:1fr; } }
+.card {
+  background:var(--surface); border:1px solid var(--outline-var);
+  border-radius:.75rem; padding:1.1rem 1.2rem;
+}
+.card h3 { margin-top:0; }
+.card p:last-child { margin-bottom:0; }
+
+.dot { display:inline-block; width:.55em; height:.55em; border-radius:50%; margin-right:.45em; vertical-align:.05em; }
+.d-healthy { background:var(--healthy); }
+.d-degraded { background:var(--degraded); }
+.d-unreachable { background:var(--unreachable); }
+.d-unknown { background:var(--unknown); }
+
+footer {
+  border-top:1px solid var(--outline-var); margin-top:4rem; padding:2rem 0 0;
+  font-size:.88rem; color:var(--fg-dim);
+}
+footer a { color:var(--fg-dim); }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <p class="eyebrow">Self-hosted · Android · Linux</p>
+  <h1>A dashboard for the server you already run.</h1>
+  <p class="lede">
+    CueSeek watches one Linux machine and the services on it — health, CPU, memory, storage,
+    temperatures — and lets you restart a service or reboot the host from your phone, over
+    your own VPN. No cloud, no account, no telemetry.
+  </p>
+
+  <div class="cta">
+    <a class="btn" href="https://github.com/Kushal-MR/CueSeek/releases/latest">Download v0.1.0</a>
+    <a class="btn ghost" href="https://github.com/Kushal-MR/CueSeek">Source on GitHub</a>
+  </div>
+  <p class="caveat">
+    Apache-2.0. Linux with systemd and polkit ≥ 0.106, x86-64. Android 8.0+, sideloaded.
+  </p>
+
+  <div class="shots">
+    <figure>
+      <img src="images/dashboard.png" width="1272" height="1460"
+           alt="The CueSeek dashboard on a phone: a host named kushal-HP-paviliong6 reporting Operational with a live indicator, CPU, memory, storage and temperature readings, and Jellyfin and qBittorrent both listed as running.">
+      <figcaption>The whole machine in one screen. A real host, not a mockup.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<section id="what">
+  <h2>What it is</h2>
+  <p>
+    A <strong>host agent that also aggregates service APIs</strong> — in that order. Restarting
+    a service, rebooting the machine and reading CPU, disk and thermals are host-level
+    operations that no service API can perform, so the agent is mandatory rather than an
+    optimisation.
+  </p>
+  <p>
+    It runs as its own unprivileged user with an empty capability bounding set, no shell and no
+    home directory. It never uses <code>sudo</code>, never shells out, and never calls
+    <code>systemctl</code>. What it may do to your machine is one short polkit rule you can read
+    in two minutes.
+  </p>
+
+  <h3>What it is not</h3>
+  <ul>
+    <li><strong>Not a monitoring system.</strong> No time series, no history, no alerting. CueSeek tells you when you look; it does not tell you when you are not looking.</li>
+    <li><strong>Not a Jellyfin or qBittorrent client.</strong> Browsing libraries and managing torrents belong to those apps. CueSeek looks after the service and gets you to them in one tap.</li>
+    <li><strong>Not internet-facing.</strong> It terminates no TLS and has no certificate. Reachability is your VPN's job, and it refuses at startup to bind a wildcard address without an explicit opt-out.</li>
+    <li><strong>Not multi-host.</strong> The data layer has carried a host id since M2; the interface shows one machine.</li>
+    <li><strong>Not on Google Play, and there is no iOS client or web interface.</strong></li>
+  </ul>
+</section>
+
+<section id="architecture">
+  <h2>How it fits together</h2>
+<pre>Phone / Wear ──Tailscale──▶ cueseekd  (user: cueseek, no sudo)
+                              │
+                              ├─ api/      REST + SSE · token auth · scopes
+                              ├─ health/   computed overall status
+                              ├─ store/    SQLite: devices, token hashes, audit log
+                              ├─ host/     HostController ──D-Bus──▶ systemd / logind
+                              │                                    ▲ polkit rule
+                              └─ adapters/ registry, one goroutine per adapter
+                                    ├─ jellyfin    ──HTTP───▶ Jellyfin
+                                    ├─ qbittorrent ──HTTP───▶ qBittorrent
+                                    └─ systemd     ──D-Bus──▶ any unit</pre>
+
+  <div class="two">
+    <div class="card">
+      <h3>Two tiers of support</h3>
+      <p>
+        <code>jellyfin</code> and <code>qbittorrent</code> ask the service's own API, so you also
+        get what it is doing — playback sessions, transfers.
+      </p>
+      <p>
+        <code>systemd</code> works for any unit on the machine and reports that the
+        <em>process</em> is running. It does not report that the service is
+        <em>answering</em>: a wedged service that has not exited reads as healthy. That limit is
+        stated rather than hidden.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Absent is not zero</h3>
+      <p>
+        A value CueSeek could not read is left out, never zeroed. A virtual machine exposes no
+        temperature sensors, and the first sample after a restart cannot compute CPU
+        utilisation — the kernel reports cumulative counters, and one sample is not a
+        measurement.
+      </p>
+      <p>Rendering zero would claim an idle, cold machine that never answered.</p>
+    </div>
+  </div>
+
+  <h3>Status means one of four things</h3>
+  <p>
+    <span class="dot d-healthy"></span><strong>healthy</strong> — it answered ·
+    <span class="dot d-degraded"></span><strong>degraded</strong> — it answered, with a problem ·
+    <span class="dot d-unreachable"></span><strong>unreachable</strong> — it did not answer ·
+    <span class="dot d-unknown"></span><strong>unknown</strong> — nothing has been observed yet
+  </p>
+  <p>
+    An expired API key is <em>degraded</em>, not <em>unreachable</em>. The fix is a new key, not
+    a look at the network, and conflating the two sends you to the wrong place.
+  </p>
+</section>
+
+<section id="requirements">
+  <h2>What it runs on</h2>
+  <p>Deliberately narrow, and better learned here than after the installer refuses.</p>
+  <table>
+    <tr><th>Host</th><td>Linux with <strong>systemd</strong> and <strong>polkit ≥ 0.106</strong>, on <strong>x86-64</strong></td></tr>
+    <tr><th>Phone</th><td>Android <strong>8.0 (API 26)</strong> or later, sideloaded</td></tr>
+    <tr><th>Network</th><td>an address the phone can already reach — Tailscale, WireGuard, or the same LAN</td></tr>
+    <tr><th>Services</th><td>Jellyfin and qBittorrent at the full tier; anything with a systemd unit at the basic tier</td></tr>
+  </table>
+
+  <h3>What was actually tested</h3>
+  <p>Not a claim about what works everywhere — a record of what this was run against.</p>
+  <table>
+    <tr><th>Distribution</th><td class="data">Linux Mint 22.3 (Ubuntu 24.04 base), kernel 7.0.0-28-generic</td></tr>
+    <tr><th>systemd / polkit</th><td class="data">255 / 124</td></tr>
+    <tr><th>Services</th><td class="data">Jellyfin 10.11.11 · qbittorrent-nox 4.6.3</td></tr>
+    <tr><th>VPN</th><td class="data">Tailscale 1.102.2</td></tr>
+    <tr><th>Phone</th><td class="data">Android 16 (API 36), OnePlus CPH2707</td></tr>
+  </table>
+  <p>
+    Other distributions, other versions and other phones <em>should</em> work. None has been
+    tried. <strong>Not supported:</strong> NAS appliances, arm64 including Raspberry Pi,
+    non-systemd Linux, containers as a managed thing, and exposure to the internet — the
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/requirements.md">full list says why for each</a>.
+  </p>
+</section>
+
+<section id="install">
+  <h2>Installing it</h2>
+  <p>Fifteen minutes, most of it deciding which services you want.</p>
+<pre>tar xzf cueseek-agent_*_linux_amd64.tar.gz
+cd cueseek-agent_*_linux_amd64
+sudo ./install.sh
+
+sudo nano /etc/cueseek/config.yaml      # set bind.address to your VPN address
+sudo systemctl enable --now cueseekd.service
+sudo -u cueseek cueseekd pair           # type the code into the app</pre>
+  <p>
+    <strong>As shipped it manages no services, and that is a working install</strong> — the agent
+    reports the machine's own vitals with no configuration and no privilege at all, and shows an
+    empty service list until you add some.
+  </p>
+  <p>
+    One command checks the rest: <code>sudo cueseekd check</code> resolves every configured unit
+    against systemd, compares the configuration's allowlist against the polkit rule's <em>in both
+    directions</em>, confirms the bind address exists on an interface, and asks each adapter for
+    its health. It changes nothing.
+  </p>
+  <p>
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/install.md">Full install guide</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/configure.md">Configuration</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/pairing.md">Pairing</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/troubleshooting.md">Troubleshooting</a>
+  </p>
+</section>
+
+<section id="security">
+  <h2>What it can do to your machine</h2>
+  <p>
+    CueSeek can restart services, reboot the host and power it off. That is a higher bar than
+    most homelab tooling, so the answer is not "trust me" — it is that
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/deploy/10-cueseek.rules">one file</a>
+    states the whole of it. The agent holds no privilege of its own and never elevates; the
+    polkit rule grants <code>start</code>, <code>stop</code> and <code>restart</code> on an
+    <strong>allowlist of named units</strong>, plus reboot and power-off via logind. Everything
+    else returns <code>NOT_HANDLED</code>, so the rule only ever adds permission.
+  </p>
+  <p>
+    That allowlist is enforced <strong>twice</strong> — in the agent's configuration and in the
+    polkit rule, deliberately not generated from each other. If the two disagree the narrower
+    wins, which is the safe direction.
+  </p>
+  <p>
+    Network reachability is not authorisation. Every device pairs separately and carries its own
+    token with independent scopes — <code>read</code>, <code>service.control</code>,
+    <code>devices.manage</code>, <code>host.power</code> — enforced in the agent, never in the
+    client. Tokens are stored only as hashes. A device can be structurally incapable of powering
+    off the machine regardless of what its interface offers.
+  </p>
+  <p>
+    There is no telemetry, no analytics, no update check and no cloud component of any kind.
+    CueSeek cannot run an arbitrary command: there is no shell and no command execution anywhere
+    in the agent, so service names never become part of a command string.
+  </p>
+  <p>
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/SECURITY.md">The security policy</a>
+    lists the risks knowingly accepted, what is out of scope, and the commands to verify all of
+    it yourself.
+  </p>
+</section>
+
+<section id="problems">
+  <h2>Error types</h2>
+  <p>
+    Every failure from the API is an
+    <a href="https://www.rfc-editor.org/rfc/rfc9457.html">RFC 9457</a> problem document whose
+    <code>type</code> is one of the URIs below.
+  </p>
+  <p>
+    <strong>These are stable identifiers, not pages to fetch.</strong> RFC 9457 treats
+    <code>type</code> as an identifier first; dereferencing is encouraged, not required. Clients
+    match on the string — that is what the Android client does — so the vocabulary is documented
+    here rather than served, and the URIs stay byte-identical across versions instead of
+    changing to follow wherever this page happens to be hosted.
+  </p>
+  <table>
+    <tr><th>Type</th><th>Status</th><th>Meaning</th></tr>
+    <tr><td class="data">unauthorized</td><td class="data">401</td><td>No bearer token was presented, or the one presented was not accepted</td></tr>
+    <tr><td class="data">insufficient-scope</td><td class="data">403</td><td>The token is valid but does not carry the scope this action needs</td></tr>
+    <tr><td class="data">invalid-pairing-code</td><td class="data">403</td><td>Unknown, expired or already-redeemed — deliberately indistinguishable</td></tr>
+    <tr><td class="data">rate-limited</td><td class="data">429</td><td>Too many pairing attempts</td></tr>
+    <tr><td class="data">not-found</td><td class="data">404</td><td>No such service, device or job</td></tr>
+    <tr><td class="data">action-in-progress</td><td class="data">409</td><td>The same action is already running on that unit</td></tr>
+    <tr><td class="data">action-unavailable</td><td class="data">409</td><td>The <em>agent</em> cannot perform it — an unlisted unit, a missing polkit grant, an unsupported platform. Not 403: your token was fine</td></tr>
+    <tr><td class="data">bad-request</td><td class="data">400</td><td>The request did not parse, or a field was invalid</td></tr>
+    <tr><td class="data">not-implemented</td><td class="data">503</td><td>Declared in the contract but not implemented on this platform</td></tr>
+    <tr><td class="data">internal</td><td class="data">500</td><td>Something the agent could not attribute</td></tr>
+  </table>
+  <p class="caveat">
+    Each is prefixed with <code>https://cueseek.dev/problems/</code> in the
+    <code>type</code> field. <code>not-implemented</code> answers <strong>503, not 501</strong>,
+    on purpose: the contract declares 501 for no operation, and adding one would bake a
+    temporary implementation state into a permanent contract that every client must handle
+    forever.
+  </p>
+</section>
+
+<section id="why">
+  <h2>Why the decisions are written down</h2>
+  <p>
+    Code shows what was decided. It never shows what was rejected, or what price was knowingly
+    paid. CueSeek keeps fourteen Architecture Decision Records, and every one of them states its
+    own cost — a decision with no listed downside has not been thought about hard enough.
+  </p>
+  <p>
+    They are also the honest answer to "is this over-engineered?". If you read one thing in this
+    repository, read those.
+  </p>
+  <p>
+    <a href="https://github.com/Kushal-MR/CueSeek/tree/main/docs/adr">Architecture decisions</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/DESIGN.md">Design system</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/docs/m4-verification.md">What has been verified on hardware</a>
+  </p>
+</section>
+
+<footer>
+  <p>
+    CueSeek is Apache-2.0, built and maintained by one person, and tested on the one machine
+    described above.
+  </p>
+  <p>
+    <a href="https://github.com/Kushal-MR/CueSeek">GitHub</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/releases/latest">Releases</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/SECURITY.md">Security</a> ·
+    <a href="https://github.com/Kushal-MR/CueSeek/blob/main/LICENSE">Licence</a>
+  </p>
+  <p>No cookies, no analytics, no third-party requests. This page loads nothing but itself.</p>
+</footer>
+
+</main>
+</body>
+</html>
