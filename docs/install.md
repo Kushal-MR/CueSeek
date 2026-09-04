@@ -198,6 +198,9 @@ recovery route if you ever lose every token.
 
 ## When something is wrong
 
+[**Troubleshooting**](troubleshooting.md) lists every failure that has actually happened on
+a real machine, and what each one means.
+
 `cueseekd check` first. Then:
 
 ```bash
