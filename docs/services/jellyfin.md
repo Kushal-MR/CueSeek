@@ -107,7 +107,7 @@ guess in a field the contract defines as the service's own words.
 | --- | --- | --- |
 | **healthy** | `/System/Info` answered | — |
 | **healthy**, with a note about a pending restart | Jellyfin applied changes needing a restart | restart it when convenient. Not amber: worth telling you, not worth an alarm |
-| **degraded** — "rejected the API key (HTTP 401)" | the key is wrong, revoked, or from another server | reissue under Dashboard → API Keys |
+| **degraded** — "rejected the API key (HTTP 401)" or 403 | the key is wrong, revoked, or from another server | reissue under Dashboard → API Keys |
 | **degraded** — "not with Jellyfin system information" | `base_url` points at something that is not Jellyfin | check the port |
 | **degraded** — "returned HTTP 5xx" | Jellyfin is up and broken | its own logs |
 | **degraded** — "reports that it is shutting down" | mid-shutdown | wait |
