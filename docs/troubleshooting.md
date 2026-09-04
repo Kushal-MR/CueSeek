@@ -211,7 +211,9 @@ running**, from systemd — not that the service is answering. A wedged service 
 exited reads as healthy.
 
 Use `type: jellyfin` or `type: qbittorrent` where they apply; those ask the service itself.
-There is no generic HTTP probe yet.
+There is no generic HTTP probe yet. See [Jellyfin](services/jellyfin.md) and
+[qBittorrent](services/qbittorrent.md) for what each tier reports, and
+[configuration](configure.md) for moving a service from one to the other.
 
 ### "Update CueSeek to view this"
 
