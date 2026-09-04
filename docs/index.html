@@ -77,7 +77,7 @@ header { padding:4rem 0 0; }
 /* shots ------------------------------------------------------------------- */
 .shots {
   display:flex; flex-wrap:wrap; gap:1.5rem; justify-content:center;
-  margin:2.5rem 0 0;
+  align-items:flex-start; margin:2.5rem 0 0;
 }
 figure { margin:0; max-width:19rem; }
 figure img {
@@ -149,6 +149,14 @@ footer a { color:var(--fg-dim); }
       <img src="images/dashboard.png" width="1272" height="1460"
            alt="The CueSeek dashboard on a phone: a host named kushal-HP-paviliong6 reporting Operational with a live indicator, CPU, memory, storage and temperature readings, and Jellyfin and qBittorrent both listed as running.">
       <figcaption>The whole machine in one screen. A real host, not a mockup.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/service-detail.png" width="1272" height="1660"
+           alt="The Jellyfin detail sheet: Health reading Healthy, observed 3 seconds ago; Controls offering Restart and Stop; Web interface served over http on port 8096; and Now Playing showing one session, one transcoding, the film Dune from 2021 being watched by kushal in Chrome, 47 seconds into 2 hours 35 minutes, transcoding.">
+      <figcaption>
+        The full tier: Jellyfin answers for itself, so the sheet shows what is playing and who
+        is watching — not just that the process is up.
+      </figcaption>
     </figure>
   </div>
 </header>
