@@ -101,7 +101,9 @@ sudo nano /etc/cueseek/config.yaml
 ```
 
 Worked examples for every supported type sit commented at the bottom of that file.
-Uncomment one and edit it.
+Uncomment one and edit it. [Configuration](configure.md) is the map of what those options
+mean; [Jellyfin](services/jellyfin.md) and [qBittorrent](services/qbittorrent.md) have their
+own walkthroughs, and everything else on the machine is `type: systemd`.
 
 **Use the exact unit name.** It often differs from what the software calls itself — on the
 development host, qBittorrent's unit is `qbittorrent.service` even though the unit
