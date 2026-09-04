@@ -7,6 +7,9 @@ CueSeek gives you one consistent way to reach every service running on your home
 It talks to Jellyfin, qBittorrent and others through their APIs, and adds the host-level
 control they cannot provide themselves.
 
+**[kushal-mr.github.io/CueSeek](https://kushal-mr.github.io/CueSeek/)** — what it is, what it
+is not, and how to install it, on one page.
+
 > **Status: `v0.1.0` released.** The agent is installable from a signed, self-contained
 > release; the whole path — phone → Tailscale → `cueseekd` → polkit → systemd — has been
 > verified end to end on real hardware. Jellyfin and qBittorrent are supported in full; any
@@ -86,6 +89,7 @@ the one you rely on. Android 8.0 or later.
 
 | | |
 | --- | --- |
+| [Website](https://kushal-mr.github.io/CueSeek/) | The one-page overview, for somebody deciding whether to bother |
 | [Requirements](docs/requirements.md) | What CueSeek runs on, what was actually tested, and what is not supported |
 | [Install](docs/install.md) | The full walkthrough, upgrading, uninstalling, and what to do when something is wrong |
 | [Pairing](docs/pairing.md) | Scopes, revoking a device, and why there is no QR code |
