@@ -48,19 +48,19 @@ Two things follow, and they are the whole shape of M4:
 
 | Phase | Scope | Depends on | Status |
 | --- | --- | --- | --- |
-| M4.0 | This plan, and the M4→M5 renumber | — | ⬜ |
-| M4.1 | Licence and security policy | — | ⬜ |
-| M4.2 | Make the documentation describe what the code does | — | ⬜ |
-| M4.3 | Neutral defaults: a first install that starts | — | ⬜ |
-| M4.4 | The `systemd` adapter | M4.3 | ⬜ |
-| M4.5 | `cueseekd check` | M4.3 | ⬜ |
-| M4.6 | Agent release: version stamping, artifacts, checksums | — | ⬜ |
-| M4.7 | Android release: coexisting builds, signing, versioning | — | ⬜ |
-| M4.8a | Documentation: requirements, install, pairing, README | M4.3–M4.7 | ⬜ |
-| M4.8b | Documentation: troubleshooting and the security model | M4.5 | ⬜ |
-| M4.8c | Documentation: configuration and per-service guides | M4.4 | ⬜ |
-| M4.9 | Website | M4.8 | ⬜ |
-| M4.10 | Fresh-VM verification, and `v0.1.0` | all | ⬜ |
+| M4.0 | This plan, and the M4→M5 renumber | — | ✅ |
+| M4.1 | Licence and security policy | — | ✅ |
+| M4.2 | Make the documentation describe what the code does | — | ✅ |
+| M4.3 | Neutral defaults: a first install that starts | — | ✅ |
+| M4.4 | The `systemd` adapter | M4.3 | ✅ |
+| M4.5 | `cueseekd check` | M4.3 | ✅ |
+| M4.6 | Agent release: version stamping, artifacts, checksums | — | ✅ |
+| M4.7 | Android release: coexisting builds, signing, versioning | — | ✅ |
+| M4.8a | Documentation: requirements, install, pairing, README | M4.3–M4.7 | ✅ |
+| M4.8b | Documentation: troubleshooting and the security model | M4.5 | ✅ |
+| M4.8c | Documentation: configuration and per-service guides | M4.4 | ✅ |
+| M4.9 | Website | M4.8 | ✅ |
+| M4.10 | Fresh-VM verification, and `v0.1.1` | all | ✅ |
 
 Each phase is independently verifiable, separately committed, and its own branch and pull
 request — the M3 convention. `main` is installable after every one of them.
@@ -341,3 +341,42 @@ that yet, and saying so in the README is more honest than a guide nobody maintai
   an unanchored `sed` silently incremented the wrong record's amendment count, and
   deliberately not built during a closure phase. It is repository hygiene, which makes M4 its
   home; it lands with M4.1 or M4.2, whichever touches the index first.
+
+---
+
+## M4 is closed — 2026-09-05
+
+Released as **`v0.1.1`**, not `v0.1.0`. `v0.1.0` had already been published and installed,
+and moving a tag would have left two different artefacts claiming one version — including
+the one running on the development host. Release history stays append-only.
+
+**What the milestone actually proved.** Not that the code works — M0–M3 established that —
+but that a stranger can install it. The test was a machine that had existed for under an
+hour, holding none of the development host's configuration, credentials or habits.
+
+It found things nothing else could:
+
+- **The shipped polkit rule granted two units a fresh install never configures.** M4.3
+  neutralised the configuration and left the rule beside it naming `jellyfin.service` and
+  `qbittorrent.service`. On the development host both are configured, the two lists agree,
+  and `cueseekd check` stays silent — the defect is invisible there by construction.
+- **`install.md` gave no download command.** It said "From the releases page:" and jumped to
+  `sha256sum -c`. A server has no browser.
+- **The `gh` caveat covered the wrong error.** It anticipated `unknown command` from an old
+  `gh`; a stock Ubuntu Server has none at all and says `command not found`.
+- **It pointed at an APK that did not exist**, and then, once one did, at an upgrade Android
+  refuses: a client built from source is debug-signed and cannot be replaced by a
+  release-signed package. Everyone following the build-from-source instruction would have
+  hit that wall.
+
+**Two long-open items closed.** Lifecycle control through polkit for a `type: systemd`
+service — restart, stop and start, confirmed from systemd rather than from the agent's own
+report, and driven from a phone. And the release-signed APK on a real device, where the
+on-device bytes were checked against the published artefact rather than assumed.
+
+**One demonstration that could not have been planned.** The same client showed `48°C
+coretemp` against the HP host and no temperature row at all against the VM. Absent versus
+present, one build, two machines — "absent is not zero" shown rather than argued.
+
+The verification record is [`m4-verification.md`](m4-verification.md). What M4 deliberately
+excluded is listed above and unchanged; none of it was smuggled in.
