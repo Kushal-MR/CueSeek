@@ -148,3 +148,10 @@ database. Verified across an M3.7 → v0.1.0 upgrade.
 backup and device-to-device transfer on purpose — a restored copy would be sealed by a key
 that no longer exists, producing a phone that believes it is paired and fails every request.
 Honestly unpaired is the better state.
+
+**Moving from a source build to the published APK counts as a reinstall**, and it is not
+optional: Android will not replace a debug-signed package with a release-signed one, so the
+old build has to be uninstalled first ([install](install.md)). Once you are on published
+APKs this stops happening — they share a signing key, so later versions upgrade in place and
+the pairing survives. Verified across a `1.0` debug build to `v0.1.1`, which required it,
+and an M3.7 → v0.1.0 agent upgrade, which did not.
