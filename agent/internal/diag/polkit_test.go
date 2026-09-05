@@ -27,21 +27,30 @@ func TestReadsTheShippedRule(t *testing.T) {
 		t.Fatalf("cannot read allowedUnits from the shipped rule: %v", err)
 	}
 
-	// The shipped rule's allowlist matches the shipped example config's worked examples.
-	want := map[string]bool{"jellyfin.service": true, "qbittorrent.service": true}
-	if len(units) != len(want) {
-		t.Fatalf("allowedUnits = %v, want %d entries", units, len(want))
+	// The shipped rule grants NOTHING, matching config.example.yaml's `services: []`.
+	//
+	// It named jellyfin.service and qbittorrent.service until M4.10, when installing on a
+	// machine that had never run CueSeek showed what that meant: a stock install granting
+	// the agent's user restart and stop on two units the operator had never configured.
+	// The names now live in a comment instead.
+	//
+	// Empty must arrive as an empty list, not as an error. The distinction is the whole of
+	// ErrArrayNotFound: "the rule grants nothing" is a fact worth reporting, and "I could
+	// not read the rule" is a different one with a different fix.
+	if err != nil {
+		t.Fatalf("an empty allowlist must read as empty, not as an error: %v", err)
 	}
-	for _, u := range units {
-		if !want[u] {
-			t.Errorf("allowedUnits contains unexpected %q", u)
-		}
+	if len(units) != 0 {
+		t.Errorf("the shipped rule grants %v; it must grant nothing", units)
 	}
 
-	// The prose above the array names qbittorrent-nox.service as an example of what NOT
-	// to use. A reader that did not strip comments would have granted it.
+	// And this is now the sharper half of the test. Both unit names still appear in the
+	// file, inside the commented example — so a reader that did not strip comments would
+	// hand back exactly the allowlist M4.10 removed. Same for qbittorrent-nox.service,
+	// which the prose names as what NOT to use.
 	for _, u := range units {
-		if strings.Contains(u, "nox") {
+		if strings.Contains(u, "jellyfin") || strings.Contains(u, "qbittorrent") ||
+			strings.Contains(u, "nox") {
 			t.Errorf("a unit named only in a comment reached the allowlist: %q", u)
 		}
 	}
