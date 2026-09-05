@@ -690,3 +690,72 @@ FAIL  configuration  parse config: yaml: unmarshal errors:
 
 Both line numbers, and a refusal rather than a silent last-one-wins. Not a defect — worth
 recording because a duplicate key resolved silently is the kind of thing nobody ever debugs.
+
+### The published APK on a real phone — and the upgrade that could not happen
+
+The last item M4 had open. It did not go the way the plan assumed, and the reason is worth
+more than the result.
+
+**The installed client could not be upgraded.** Inspected before touching anything:
+
+| | Installed | Published `v0.1.1` |
+| --- | --- | --- |
+| applicationId | `dev.cueseek.android` | `dev.cueseek.android` |
+| versionCode / Name | `1` / `1.0` | `101` / `0.1.1` |
+| signer | `C=US, O=Android, CN=Android Debug` | `CN=Kushal M R, O=CueSeek, C=IN` |
+| cert SHA-256 | `bcc0911b…` | `5c2be404…` |
+| flags | `DEBUGGABLE` | — |
+
+The phone was carrying a **debug-key build**, made before the signing work in M4.7 existed.
+Attempted anyway, because a prediction is not an observation:
+
+```
+INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.cueseek.android
+signatures do not match newer version; ignoring!
+```
+
+Rejected atomically — `versionCode` and `lastUpdateTime` were unchanged afterwards. This is
+Android's signature check working, and it is the foundation of APK identity rather than an
+inconvenience.
+
+**So this is a documentation defect, not a product one.** `install.md` tells a reader whose
+release has no APK that "the client has to be built from `clients/android/`". Everyone who
+follows that line builds a debug-signed client, and every one of them hits this wall the
+first time a release carries a real APK. `pairing.md` says reinstalling costs the pairing; it
+does not say that upgrading from a self-built client is impossible without one.
+
+After `adb uninstall` and a clean install:
+
+| Check | Observed |
+| --- | --- |
+| applicationId | `dev.cueseek.android` |
+| version | `versionCode=101`, `versionName=0.1.1` |
+| signature | `CN=Kushal M R, O=CueSeek, C=IN`, `5c2be404…` |
+| **on-device bytes** | sha256 `d47d9de3…` — **identical to the published artefact** |
+| `DEBUGGABLE` | **gone** |
+| launches | `MainActivity` focused |
+
+The byte comparison matters: what is running on the phone is provably the artefact GitHub
+attested, not merely something that resembles it.
+
+**The HP pairing did not survive, and no choice could have preserved it.** The token lives in
+app-private storage, excluded from backup by design, so it dies with the package. The app
+came up on the pairing screen — `pairing.md`'s documented behaviour, observed. Re-paired
+against the HP host over Tailscale, and the dashboard returned:
+
+```
+kushal-HP-paviliong6 · Operational · live
+CPU 2%  4 cores   MEM 16% 3.3 GB free   / 63% 180 GB free   48°C coretemp
+Jellyfin  Running    qBittorrent  Running
+```
+
+Live refresh confirmed by sampling rather than by the word "live": uptime advanced
+`36m → 37m`, CPU `2% → 1%`, free memory `3.3 → 3.4 GB`, load `0.4 → 0.2`.
+
+**`48°C coretemp` is the interesting line.** The same build showed no temperature at all
+against the VM an hour earlier. Absent versus present, from one client against two hosts —
+"absent is not zero" demonstrated as a real capability difference rather than argued.
+
+**The `.debug` client was untouched throughout** — `lastUpdateTime` unchanged, still paired
+to the VM. That is `applicationIdSuffix` from M4.7 earning itself: the two builds are
+different packages to Android, so verifying a release could not disturb the test pairing.
