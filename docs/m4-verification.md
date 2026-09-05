@@ -599,3 +599,39 @@ A device paired with `read,service.control` only:
 `cueseekd host` offers only `status` and `restart`, not `start`/`stop`. Every document
 referring to it says `host restart`, and the binary's own help says "inspect or restart one
 managed unit". The narrower surface is deliberate and consistently described.
+
+### Second pass, on the fixes
+
+The plan's actual requirement is not one install but *"repeat until a clean run needs no
+outside knowledge"*. So the machine was purged — `install.sh --uninstall --purge`, confirmed
+to leave no binary, no user, no state and no rule — and installed again from an artefact
+built by `scripts/release-agent.sh` carrying the fixes.
+
+```
+  ok    configuration     /etc/cueseek/config.yaml parsed; 0 services
+  WARN  bind address      127.0.0.1:7777 is loopback, so only this machine can reach the agent
+  ok    state directory   /var/lib/cueseek is writable by root
+  ok    polkit allowlist  no services name a unit, and the rule grants none
+  ok    power actions     all four logind actions granted
+  ok    managed units     none configured; no service offers lifecycle actions
+  ok    services          none configured; the agent reports host vitals only
+
+6 ok, 1 warning, 0 failures
+```
+
+The line that was a warning is now `ok`, in a sentence that describes the shipped state
+accurately: *"no services name a unit, and the rule grants none"*.
+
+The remaining warning is not a defect and should not be removed. A fresh install **is** on
+loopback, the reader **does** need to change it, and saying so is the whole job of that
+check.
+
+### Still open after M4.10
+
+- **An APK on a release page.** `v0.1.0` has none; `install.md` now says so plainly instead
+  of pointing at a file that is not there. Closed by the next tag, which runs the M4.7
+  workflow — and the tag should not be called done until the asset is confirmed present.
+- **A release-signed APK installed on a phone**, and **pairing a phone against this VM over
+  the LAN**. Both need the physical device. The LAN path itself is no longer untested: the
+  API answered from a different machine, and the pairing flow was exercised end to end by a
+  CLI device, which is the same code path with a different client.
