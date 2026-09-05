@@ -7,11 +7,20 @@ Fifteen minutes, most of it deciding which services you want.
 
 ## 1. Download and verify
 
-From the [releases page](https://github.com/Kushal-MR/CueSeek/releases):
+Take both files from the [releases page](https://github.com/Kushal-MR/CueSeek/releases). A
+server usually has no browser, so:
+
+```bash
+curl -LO https://github.com/Kushal-MR/CueSeek/releases/latest/download/cueseek-agent_v0.1.0_linux_amd64.tar.gz
+curl -LO https://github.com/Kushal-MR/CueSeek/releases/latest/download/SHA256SUMS
+```
 
 ```bash
 sha256sum -c SHA256SUMS
 ```
+
+That must print `OK`. Anything else means the download is incomplete or altered — fetch it
+again rather than continuing.
 
 Optionally, confirm the archive came from this repository's workflow rather than merely
 from a page that says so:
@@ -20,9 +29,14 @@ from a page that says so:
 gh attestation verify cueseek-agent_*_linux_amd64.tar.gz --repo Kushal-MR/CueSeek
 ```
 
-That needs GitHub CLI **2.49 or later**. Ubuntu 24.04 ships 2.45, which has no `attestation`
-command at all — if you see "unknown command", run it from a machine with a newer `gh`
-rather than concluding the artefact is unverifiable.
+This step is genuinely optional, and skipping it costs you nothing the checksum already
+gave you. Two ways it will not work, neither of which means the artefact is bad:
+
+- **`gh: command not found`** — GitHub CLI is not installed. A stock Ubuntu Server has no
+  `gh` at all.
+- **`unknown command "attestation"`** — your `gh` predates **2.49**. Ubuntu 24.04 ships 2.45.
+
+In either case, run it from a machine with a newer `gh`, or move on.
 
 ## 2. Install
 
@@ -90,7 +104,13 @@ See [pairing](pairing.md). Briefly:
 sudo -u cueseek cueseekd pair
 ```
 
-Install `cueseek_*.apk` from the same release page, then type the address, port and code.
+Then install the Android client and type the address, port and code into it.
+
+**`v0.1.0` does not carry an APK.** It was tagged before the Android release workflow
+existed, so that release has only the agent tarball and `SHA256SUMS` — if you went looking
+for `cueseek_*.apk` there and found nothing, that is why, not a mistake at your end.
+Releases from `v0.1.1` onward publish a signed APK beside the agent. Until then the client
+has to be built from `clients/android/`.
 
 At this point you have a working dashboard of the machine itself.
 

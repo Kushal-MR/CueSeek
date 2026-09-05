@@ -36,12 +36,19 @@ polkit.addRule(function (action, subject) {
      * not `qbittorrent-nox.service`. Check with:
      *
      *   systemctl list-units --type=service | grep -i <name>
+     *
+     * Empty as shipped, and that is deliberate. A fresh install grants nothing,
+     * matching config.example.yaml's `services: []` — so the rule never claims
+     * authority over a unit the operator did not ask for. Add yours here as you
+     * add them to the config; both lists are enforced and must agree.
+     *
+     *   var allowedUnits = [
+     *       "jellyfin.service",
+     *       "qbittorrent.service"
+     *   ];
      */
     if (action.id === "org.freedesktop.systemd1.manage-units") {
-        var allowedUnits = [
-            "jellyfin.service",
-            "qbittorrent.service"
-        ];
+        var allowedUnits = [];
 
         /* The agent calls RestartUnit, StartUnit and StopUnit, which systemd
          * reports to polkit as "restart", "start" and "stop". try-restart and
