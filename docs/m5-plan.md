@@ -67,7 +67,7 @@ for.
 
 | Phase | Deliverable | Depends on | Status |
 | --- | --- | --- | --- |
-| M5.0 | Plan, and the pairing ADR | — | ⬜ |
+| M5.0 | Plan, and the pairing ADR | — | ✅ |
 | M5.1 | `clients/wear/` builds and installs | M5.0 | ⬜ |
 | M5.2 | Theme: shared tokens, Wear components | M5.1 | ⬜ |
 | M5.3a | Address handoff from the phone | M5.0 | ⬜ |
@@ -90,7 +90,19 @@ for.
 
 ---
 
-### M5.0 — Plan, and the pairing decision
+### M5.0 — Plan, and the pairing decision ✅
+
+**Decided in [ADR-0014](adr/0014-watch-pairing-address-handoff.md).** The phone publishes
+`host` and `port` over the Wearable Data Layer; the watch presents a code field alone,
+redeems it against the agent itself, and stores a token the phone has never seen. Default
+scopes are `read` and `service.control` — not `host.power`.
+
+A manual address field survives as a fallback, reached deliberately rather than shown first,
+because the Data Layer can fail and the bad flow always works.
+
+The reasoning below is what led there, kept because the alternatives matter.
+
+---
 
 The one place M5 cannot avoid a design decision, and it needs an ADR before any code.
 

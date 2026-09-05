@@ -55,3 +55,4 @@ Context, Decision, Consequences. Short and readable in a couple of minutes.
 | [0011](0011-sequencing-spike-then-slice.md) | De-risking spike, then thin slice | Accepted · amended ×4 (latest 2026-09-05) |
 | [0012](0012-alerting-vs-vpn-only-access.md) | Alerting reopens the access model | Proposed |
 | [0013](0013-android-client-architecture.md) | Four shared `core` modules; features are packages | Accepted |
+| [0014](0014-watch-pairing-address-handoff.md) | The phone carries the address; the watch mints its own token | Accepted |
