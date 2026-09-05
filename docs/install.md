@@ -106,11 +106,31 @@ sudo -u cueseek cueseekd pair
 
 Then install the Android client and type the address, port and code into it.
 
-**`v0.1.0` does not carry an APK.** It was tagged before the Android release workflow
-existed, so that release has only the agent tarball and `SHA256SUMS` — if you went looking
-for `cueseek_*.apk` there and found nothing, that is why, not a mistake at your end.
-Releases from `v0.1.1` onward publish a signed APK beside the agent. Until then the client
-has to be built from `clients/android/`.
+`cueseek_*.apk` is on the release page from **`v0.1.1`** onward. `v0.1.0` has only the agent
+tarball — it was tagged before the Android release workflow existed, so if you looked there
+and found no APK, that is why.
+
+**If you built the client from source, you cannot upgrade to the published APK.** Android
+refuses to replace a package with one signed by a different key, and a source build is
+signed with the debug key:
+
+```
+INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.cueseek.android
+signatures do not match newer version; ignoring!
+```
+
+That is the signature check doing its job. Uninstall the build you have first:
+
+```bash
+adb uninstall dev.cueseek.android
+adb install cueseek_0.1.1.apk
+```
+
+**This costs you the pairing** — the token is app-private and excluded from backup, so it
+does not survive the uninstall. Mint a new code and pair again; the agent, its database and
+every other device are unaffected. Do it once, when you move from a source build to a
+published one, and never again: released APKs share a signing key, so `v0.1.1` upgrades to
+`v0.1.2` in place with the pairing intact.
 
 At this point you have a working dashboard of the machine itself.
 
