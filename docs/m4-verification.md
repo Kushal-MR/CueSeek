@@ -635,3 +635,58 @@ check.
   the LAN**. Both need the physical device. The LAN path itself is no longer untested: the
   API answered from a different machine, and the pairing flow was exercised end to end by a
   CLI device, which is the same code path with a different client.
+
+### The phone, against the VM, over the LAN
+
+The last thing a VM alone cannot prove. The **debug** build was used deliberately: the client
+shows one host, so pairing the release build here would have displaced the HP server it has
+been paired to since M2. That is what `applicationIdSuffix` was added for in M4.7.
+
+Reachability was checked from the device itself before anything was typed:
+
+```
+adb shell curl http://192.168.1.10:7777/v1/system   ->  HTTP 401
+phone wlan0: 192.168.1.6/24        VM enp0s8: 192.168.1.10/24
+```
+
+Paired with `read,service.control,host.power`:
+
+```
+device paired  device_id=a0c4ba65ae72644c name=CPH2707
+               scopes="read, service.control, host.power"
+```
+
+The dashboard rendered `cueseek-vm`, `Operational`, live, 2 cores, 3.6 GB free, 20.8 GB
+free, and Cron running.
+
+**No temperature row appeared**, and that is the point rather than a gap. A virtual machine
+exposes no thermal sensors, so the field is absent instead of `0°C` — "absent is not zero"
+observed on a screen rather than argued in a document.
+
+The row's menu offered **Restart Cron** and **Stop Cron** in red, and no Start, matching
+what `/v1/services` had returned. Restart was confirmed through the dialog:
+
+```
+action accepted   service=cron action=restart action_id=412689b5cb3a1b7e
+                  device=a0c4ba65ae72644c risk=disruptive
+action completed  service=cron action=restart action_id=412689b5cb3a1b7e
+```
+
+`MainPID` moved `4223 → 5605`. Read from systemd, not from the agent.
+
+That is the whole path — phone, LAN, unprivileged agent, D-Bus, polkit, systemd — on a
+machine that had existed for under an hour, with the action attributed to a named device in
+the audit log.
+
+### One more parser behaviour, found by fumbling
+
+Appending a second `services:` block while the shipped `services: []` was still present
+produced:
+
+```
+FAIL  configuration  parse config: yaml: unmarshal errors:
+                     line 284: mapping key "services" already defined at line 129
+```
+
+Both line numbers, and a refusal rather than a silent last-one-wins. Not a defect — worth
+recording because a duplicate key resolved silently is the kind of thing nobody ever debugs.
