@@ -86,8 +86,14 @@ Not a claim about what works everywhere — a record of what this was run agains
 | Jellyfin | 10.11.11 |
 | qBittorrent | qbittorrent-nox 4.6.3 |
 | VPN | Tailscale 1.102.2 |
+| **LAN** | **tested** — an agent bound to a `192.168.1.x` address, reached from a phone and a laptop on the same network (M4.10) |
+| WireGuard | untested |
 | Phone | Android 16 (API 36), OnePlus CPH2707 |
 | Agent | built with Go 1.25 |
+
+A second host was added in M4.10: **Ubuntu Server 24.04.4 LTS**, kernel 6.8.0-139-generic,
+systemd 255, polkit 124, in a virtual machine that had never run CueSeek. It is the only
+install performed from the published artefacts following only the published documentation.
 
 Other distributions, other versions of those services, and other phones **should** work.
 None of them has been tried. The verification records are in

@@ -185,3 +185,39 @@ result rather than allowing a favourable count on an easy case to close the ques
 
 **What did not change.** The decision, and every step in it. Spike, thin slice, widen,
 measure at a third adapter — with the measurement now taken once and explicitly held open.
+
+---
+
+### Amendment 4 — 2026-09-05: the website takes M6; the third adapter moves to M7
+
+**What changed.** A milestone is inserted again, and the third-adapter measurement moves for
+the second time.
+
+| Was | Is | Milestone |
+| --- | --- | --- |
+| M5 | **M5** | Wear OS standalone client (unchanged) |
+| M6 | **M6** | The website — the real one, replacing M4.9's placeholder |
+| — | **M7** | A third adapter, as step 4 requires |
+
+**Why the website exists as a milestone at all.** M4.9 shipped one deliberately plain static
+page and called it a placeholder in its own commit message. That was correct for M4, whose
+rule was "no capability, no contract change" — but it left real work with no number, which is
+how work gets quietly dropped. Naming it makes it a commitment rather than an intention.
+
+**Why after Wear rather than before.** A site's job is to show the thing. Right now it can
+show a phone; after M5 it can show a phone and a watch, which is a materially better
+demonstration of the capability model than any amount of prose about it — a watch renders the
+same capabilities from the same agent with no server change, and that is the architecture's
+central claim made visible.
+
+**What this costs, stated plainly.** Step 4's measurement — *does adding an adapter still
+touch only its own package?* — slips a second time, from M6 to M7. Amendment 3 already
+recorded that `systemd` was a weaker test than the second adapter, because it implements a
+strict subset and could not exercise the per-adapter options map. So the question ADR-0011
+has held open since M0 stays open for another two milestones.
+
+That is a real cost and it is being taken knowingly. The mitigation is that it is written
+here rather than forgotten: **the third adapter is not optional, and it is not a nice-to-have
+after the website.** If M7 slips again, this ADR is failing at the one job it has.
+
+**What did not change.** The decision, and every step in it.
