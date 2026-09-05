@@ -430,3 +430,172 @@ Stated rather than left to be assumed from an absence.
 - ~~`gh attestation verify` on a stock distribution.~~ Not fixed, but no longer a trap: the
   release notes now state that the command needs `gh` 2.49 or later and that Ubuntu 24.04
   ships 2.45, so a reader meets the limitation in the instructions rather than in a shell.
+
+---
+
+## M4.10 — a machine that had never seen CueSeek
+
+The test the earlier sections could not be: Ubuntu Server installed from an ISO an hour
+earlier, holding none of the development host's configuration, credentials or muscle memory.
+Every step below followed the published documentation, from the published artefacts.
+
+### The machine
+
+| | |
+| --- | --- |
+| Host | `cueseek-vm`, VirtualBox 7.2.16 on a Windows 11 laptop |
+| Distribution | Ubuntu Server 24.04.4 LTS, kernel 6.8.0-139-generic, x86_64 |
+| systemd / polkit | 255 / 124 |
+| `/etc/polkit-1/rules.d` | `750 root:polkitd` |
+| `gh` | **not installed** |
+| Resources | 2 vCPU, 4 GB RAM, 25 GB disk |
+| Network | NAT plus a bridged adapter on the LAN at `192.168.1.10` |
+
+Deliberately **not** Tailscale. `requirements.md` listed the LAN as supported but untested,
+and a fresh machine was the chance to close that rather than re-test the path that already worked.
+
+### Install, following `install.md` exactly
+
+The ISO's checksum was verified against Ubuntu's published `SHA256SUMS` before anything
+else, so a corrupted base image could not be mistaken for a CueSeek fault later.
+
+```
+cueseek-agent_v0.1.0_linux_amd64.tar.gz: OK
+```
+
+The tarball's modes survived a real round trip — `cueseekd` and `install.sh` at `0755`,
+everything else `0644`. That is the M4.6 two-pass `tar --mode` fix holding on an extraction
+performed by somebody other than the machine that built it.
+
+`sudo ./install.sh` completed, and every claim the documentation makes about the result was
+checked rather than assumed:
+
+| Claim | Observed |
+| --- | --- |
+| config is `0640 root:cueseek` | `640 root:cueseek` |
+| state dir belongs to the agent | `750 cueseek:cueseek` |
+| the user has no shell and no other group | `uid=999(cueseek) gid=988(cueseek) groups=988(cueseek)`, `/usr/sbin/nologin` |
+| the installer does not start the service | `disabled`, `inactive` |
+| the binary reports its version | `cueseekd v0.1.0 (linux/amd64, go1.25.0)` |
+
+### `cueseekd check` before configuring anything
+
+Run on the untouched shipped configuration, and this is where the milestone earned itself:
+
+```
+  ok    configuration     /etc/cueseek/config.yaml parsed; 0 services
+  WARN  bind address      127.0.0.1:7777 is loopback, so only this machine can reach the agent
+  ok    state directory   /var/lib/cueseek is writable by root
+  WARN  polkit allowlist  "jellyfin.service" and "qbittorrent.service" are granted by the
+                          rule but not configured
+  ok    power actions     all four logind actions granted
+  ok    managed units     none configured; no service offers lifecycle actions
+  ok    services          none configured; the agent reports host vitals only
+
+5 ok, 2 warnings, 0 failures
+```
+
+**The second warning is a real defect, and only a fresh machine could produce it.**
+`deploy/config.example.yaml` ships `services: []`, but `deploy/10-cueseek.rules` shipped with
+`jellyfin.service` and `qbittorrent.service` hard-coded in `allowedUnits`. M4.3 neutralised
+the configuration and did not neutralise the rule beside it.
+
+So a stock install granted the `cueseek` user start, stop and restart on two units the
+operator had never mentioned — on any machine that happened to run them. Bounded, because
+the agent's own allowlist was empty and it therefore never asked; but the rule claimed more
+than `SECURITY.md` says it does, and the whole argument for that file is that reading it
+tells you exactly what CueSeek may do.
+
+The development host cannot surface this. There, those two units *are* configured, the two
+lists agree, and `check` is silent.
+
+**Fixed** by shipping `var allowedUnits = []` with the two names demoted to a comment.
+
+### The `systemd` adapter's lifecycle, through polkit
+
+The item open since M4.5, closed here because the development host runs neither of its
+services as `type: systemd`. `cron.service` was configured at the basic tier.
+
+```
+job 5017 enqueued for cron.service — waiting for JobRemoved...
+job result:    done
+active since:  2026-09-05T04:37:15Z -> 2026-09-05T05:11:20Z
+verified:      the unit genuinely restarted
+```
+
+`MainPID` moved `839 → 3267`. Independently confirmed, not taken from the agent's own word.
+
+Stop and start went through the HTTP API, which is the path a phone uses:
+
+| Step | Observed |
+| --- | --- |
+| actions offered while active | `restart` (disruptive), `stop` (destructive) — **no `start`** |
+| after `stop` | `MainPID=0`, `inactive`, `unit_inactive`, reported `inactive (dead)` |
+| **still enabled after stop** | `enabled` |
+| actions offered while inactive | `start` only |
+| after `start` | `MainPID=3814`, `active` |
+
+The state-dependence is ADR-0002 Amendment 1 behaving as specified. `enabled` surviving a
+stop is the bound `SECURITY.md` puts on the `stop` grant — *"a stopped unit stays enabled and
+returns on the next boot"* — observed rather than asserted.
+
+### The allowlist comparison, in both directions
+
+Emptying the rule while leaving `cron.service` configured produced the opposite finding from
+the one above, which is the property ADR-0002 keeps two copies for:
+
+```
+  FAIL  polkit allowlist  "cron.service" is configured but not granted by the rule
+```
+
+and the refusal itself arrived in the words `troubleshooting.md` documents:
+
+```
+not authorized to perform this operation on the host: Interactive authentication required.
+  -> polkit refused.
+```
+
+Restoring the entry returned the install to `7 ok, 0 warnings, 0 failures`.
+
+An unlisted unit was refused before D-Bus was reached:
+
+```
+cueseekd host: unit is not managed by this agent: "ssh.service"
+```
+
+### Reachable over the LAN, from a different machine
+
+`requirements.md` listed the LAN as supported and untested. Requested from the Windows host:
+
+```
+GET http://192.168.1.10:7777/v1/system -> HTTP 401
+{"type":"https://cueseek.dev/problems/unauthorized", ...}
+```
+
+Two things at once: the LAN path works, and the problem URI matches the table published on
+the website character for character.
+
+### Scopes are enforced by the agent
+
+A device paired with `read,service.control` only:
+
+```
+403 {"type":"https://cueseek.dev/problems/insufficient-scope",
+     "detail":"this operation requires the \"host.power\" scope;
+               this device holds read, service.control"}
+```
+
+### Documentation defects found
+
+| # | Where | What |
+| --- | --- | --- |
+| 1 | `deploy/10-cueseek.rules` | Shipped granting two units a fresh install never configures. **Fixed.** |
+| 2 | `install.md` §1 | Says "From the releases page:" and gives no download command. A headless server has no browser, and the reader is left to infer `curl -LO` and the asset URL. **Fixed.** |
+| 3 | `install.md` §1 | The `gh` caveat anticipates `unknown command` from an old `gh`. A stock Ubuntu Server has no `gh` at all and says `command not found`. **Fixed.** |
+| 4 | `install.md` §5 | Tells the reader to install `cueseek_*.apk` "from the same release page". **`v0.1.0` carries no APK** — it was tagged before M4.7 merged, so the release has only the agent tarball and `SHA256SUMS`. Open; closed by the next tag. |
+
+### Not a defect, checked anyway
+
+`cueseekd host` offers only `status` and `restart`, not `start`/`stop`. Every document
+referring to it says `host restart`, and the binary's own help says "inspect or restart one
+managed unit". The narrower surface is deliberate and consistently described.

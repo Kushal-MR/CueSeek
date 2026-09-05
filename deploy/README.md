@@ -56,6 +56,12 @@ nothing, so the agent starts, reports the machine's own vitals — which need no
 configuration and no privilege — and shows an empty service list. Worked examples for
 every supported type sit commented at the bottom of that file.
 
+**And the shipped rule grants nothing**, for the same reason: `allowedUnits` is empty, so a
+fresh install claims no authority over any unit until you name one. Until M4.10 it shipped
+naming `jellyfin.service` and `qbittorrent.service`, which meant a stock install granted
+restart and stop on two units the operator had never configured. `cueseekd check` reported
+it on the first fresh machine CueSeek was ever installed on.
+
 ## The polkit rule is the security boundary
 
 `10-cueseek.rules` is the most important file in this directory and one of the most
