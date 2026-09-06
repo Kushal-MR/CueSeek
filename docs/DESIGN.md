@@ -472,5 +472,15 @@ five first-class `numeral*` roles — `numeralExtraSmall` through `numeralExtraL
 the watch the rule is configuration rather than discipline: every numeral role is Plex Mono,
 every other role is Plex Sans, and there is no way to get it wrong by forgetting.
 
-Worth knowing when the phone's type scale is next revisited: the shape §4 reached for
-already exists one form factor over.
+**Corrected in M5.3a, on the watch, one phase later.** That holds for *magnitudes* and not
+for *identifiers*. Wear's numeral scale runs **24sp to 60sp** — built for one glanceable
+number, a heart rate or a count, and very good at it. An agent address is not that:
+`192.168.1.10:7777` is fifteen monospace characters, needing roughly 216sp of width at
+`numeralSmall` on a screen that offers about 200. It rendered as `192.168.1.1` / `0:7777`.
+
+So the watch needed its own mono-at-body-size role after all, at exactly the 12sp the
+phone's `Data.Small` already uses. **The rule is shared; so is the gap in the scale that
+carries it.** Material 3 has nowhere to put mono body text on either form factor.
+
+The original claim was written from reading the API and was half wrong. It took rendering
+one address on a wrist to find out — which is the whole argument for M5.17.

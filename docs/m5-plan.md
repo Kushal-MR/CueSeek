@@ -70,7 +70,7 @@ for.
 | M5.0 | Plan, and the pairing ADR | — | ✅ |
 | M5.1 | `clients/wear/` builds and installs | M5.0 | ✅ |
 | M5.2 | Theme: shared tokens, Wear components | M5.1 | ✅ |
-| M5.3a | Address handoff from the phone | M5.0 | ⬜ |
+| M5.3a | Address handoff from the phone | M5.0 | ✅ |
 | M5.3b | Code entry, token minting, secure storage | M5.3a | ⬜ |
 | M5.4a | Dashboard: the verdict and host vitals | M5.3b | ⬜ |
 | M5.4b | Dashboard: the service list | M5.4a | ⬜ |
@@ -236,7 +236,30 @@ domain value — the same class of check as the capability registry test.
 
 ---
 
-### M5.3a — Address handoff from the phone
+### M5.3a — Address handoff from the phone ✅
+
+**Observed on hardware: `192.168.1.10:7777` appeared on the watch with nobody typing it.**
+The negative case was confirmed first — the watch read "no address from a phone" while the
+phone still ran the release build — so the address appeared because of the handoff rather
+than from anything cached.
+
+The wire format lives in `:core:model`, so both halves share it by construction and it is
+tested with no device on either end. It is ADR-0006 Amendment 3's QR URI minus `code`, and
+**`decode` refuses any payload carrying one**, in either parameter position. ADR-0014 turns
+on no credential crossing between devices; a pairing code is one redemption away from being
+one; so the constraint is enforced by the parser rather than by a sentence in a record.
+
+**One defect found by rendering it, and one claim of mine corrected.** The address was
+styled `numeralSmall` and wrapped mid-octet as `192.168.1.1` / `0:7777`. Wear's numeral
+scale is 24–60sp, built for a single glanceable magnitude — not for a fifteen-character
+identifier. M5.2 concluded that Wear's numeral roles turn DESIGN.md's "mono is confined to
+data" rule into configuration; that is true for magnitudes and false for identifiers, and
+the watch needed a mono-at-body-size role at exactly the 12sp the phone's `Data.Small`
+already uses. DESIGN.md §12 now carries the correction rather than the original claim.
+
+The original description follows.
+
+---
 
 Implements the transport half of M5.0. The phone app publishes `host:port` over the Wearable
 Data Layer; the watch reads it.
