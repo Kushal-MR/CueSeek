@@ -9,9 +9,17 @@ in about two seconds, and offers a small number of actions. Everything else belo
 the phone.
 
 **Standalone, not tethered.** The watch pairs with the agent directly and holds its own
-scoped token. It does not proxy through the phone app over the Data Layer. That means it
+scoped token. **No request and no credential passes through the phone.** That means it
 works when the phone is elsewhere, and it means a lost watch is revoked independently of
 the phone (ADR-0006).
+
+The one exception is first-run, decided after this file was written: the phone hands the
+watch the agent's **address** over the Data Layer, because typing `100.92.18.125` on a
+round screen is the step where somebody stops setting the app up. The token is still minted
+by the watch, for the watch
+([ADR-0014](../../docs/adr/0014-watch-pairing-address-handoff.md)). So the watch is
+standalone at runtime and assisted at setup, and a manual address field remains as the
+fallback that keeps the claim above true.
 
 **Polls, does not stream.** `GET /v1/services` on wake, not a held SSE connection. A
 persistent stream on a watch is a battery problem in exchange for latency nobody

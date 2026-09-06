@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The watch talks to the agent itself. It does not proxy through the phone
+         (clients/wear/README.md), so it needs the network on its own. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Refuses to install on anything that is not a watch. Better than installing and
+         then rendering a round-screen layout on a phone. -->
+    <uses-feature android:name="android.hardware.type.watch" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault">
+
+        <!-- Standalone: usable without the phone app present.
+             ADR-0014 qualifies this precisely — the watch is standalone at RUNTIME but
+             not for first-run setup, where the phone hands over the agent's address. The
+             manual address field is the fallback that keeps this declaration honest. -->
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="true" />
+
+        <!-- allowBackup is false for the same reason as the phone client: the token is
+             sealed by a Keystore key that does not survive a restore, so a backed-up copy
+             would produce a watch that believes it is paired and fails every request
+             (ADR-0006 Amendment 2). -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>
