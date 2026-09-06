@@ -68,7 +68,7 @@ for.
 | Phase | Deliverable | Depends on | Status |
 | --- | --- | --- | --- |
 | M5.0 | Plan, and the pairing ADR | — | ✅ |
-| M5.1 | `clients/wear/` builds and installs | M5.0 | ⬜ |
+| M5.1 | `clients/wear/` builds and installs | M5.0 | ✅ |
 | M5.2 | Theme: shared tokens, Wear components | M5.1 | ⬜ |
 | M5.3a | Address handoff from the phone | M5.0 | ⬜ |
 | M5.3b | Code entry, token minting, secure storage | M5.3a | ⬜ |
@@ -131,7 +131,42 @@ press-and-hold reasoning applies harder on a screen you brush against doorframes
 
 ---
 
-### M5.1 — The module skeleton
+### M5.1 — The module skeleton ✅
+
+Built and installed on the OnePlus Watch 2R. **The device, read off the device:**
+
+| | |
+| --- | --- |
+| Model | `OPWWE234` — OnePlus Watch 2R |
+| OS | Android 14, **API 34**, Wear SDK 5 |
+| Display | 466 × 466 px @ 320dpi = **233 × 233 dp**, fully circular |
+
+`minSdk = 30` (Wear OS 3, the first with the standalone app model), `targetSdk = 34` to
+match the device. The library floor is lower — Wear Compose Material 3 declares minSdk 25 —
+but a Wear OS 2 companion app is a different product.
+
+**Not its own Gradle project.** The plan said it would be; it is a project in the existing
+`clients/android` build instead, with `projectDir` pointing at `clients/wear/app`. Two
+separate builds cannot share a project, and making them would need a composite build with
+dependency substitution — a second build system to understand before reading any application
+code, which is the cost ADR-0013 already refused for convention plugins. The directory
+layout ADR-0009 specified is unchanged; only the build root differs. Reasoning is in
+`settings.gradle.kts`, with the trigger to revisit.
+
+**`applicationId` is shared with the phone** (`dev.cueseek.android`), namespace is not
+(`dev.cueseek.wear`). The Wearable Data Layer that ADR-0014's handoff depends on expects one
+identity across form factors, and it is the only shape that could ever be delivered from a
+single listing. The cost is that the two artefacts must coordinate `versionCode` — M5.16.
+
+**ADR-0013's claim held.** `:core:model` was consumed with no change and no audit, and is
+exercised rather than merely linked: the watch renders `HealthStatus.fromWire("healthy")`,
+so the companion object and the wire mapping both run in a Wear process. `:core:api` is
+declared and resolves — which proves its Retrofit/OkHttp/serialization graph is compatible
+with a Wear build — but nothing calls it until M5.3b.
+
+The original description follows.
+
+---
 
 `clients/wear/` as its own Gradle project, mirroring `clients/android/`. It builds, installs,
 and shows one screen naming itself.
