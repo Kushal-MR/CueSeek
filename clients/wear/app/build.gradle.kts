@@ -91,6 +91,13 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:api"))
 
+    // The design system, for its tokens: the status palette, the Plex faces, motion.
+    // NOT for its components -- those are phone Material 3 and are wrong on a wrist
+    // (ADR-0010). Since M5.2 that is enforced rather than requested: :core:design demoted
+    // Material 3 to `implementation`, so this module cannot see it and an accidental
+    // import fails the build.
+    implementation(project(":core:design"))
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
@@ -104,4 +111,6 @@ dependencies {
     implementation(libs.androidx.wear.compose.navigation)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    testImplementation(libs.junit)
 }

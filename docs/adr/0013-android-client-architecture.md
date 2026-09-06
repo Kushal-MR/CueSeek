@@ -66,3 +66,38 @@ revisit is feature-module promotion in M3, not a line count.
   is not, the fix is well-known and mechanical.
 - Cost: the mixed JVM/Android module split means two slightly different build file shapes
   in one tree, which reads as inconsistency until you know why. Hence this record.
+
+## Amendments
+
+### Amendment 1 — 2026-09-06: `:core:design` shared Material 3 as well as its tokens
+
+**What changed.** Nothing about the decision. A dependency scope was wrong, and the second
+consumer this record was designed for is the thing that found it.
+
+This ADR says `:core:design` is *"Android — tokens and component catalogue"* and shared with
+Wear. ADR-0010 states the boundary precisely: **the tokens are shared, the components are
+not**, because Wear Material 3 is a different library and phone components are wrong on a
+wrist.
+
+As built, `:core:design` declared `api(libs.androidx.compose.material3)`. So every consumer
+inherited the **phone's** Material 3 on its compile classpath, and "do not import
+`androidx.compose.material3` on the watch" was a rule enforced by review — exactly the kind
+of thing this record's own Consequences section says it prefers not to rely on:
+
+> The rule "no ViewModel sees a generated type" is enforced by module visibility rather than
+> by discipline.
+
+M5.2 demoted it to `implementation`. The phone app declares Material 3 for itself and is
+unaffected; the watch module now cannot see it, and an accidental import fails to compile.
+Verified by adding the import deliberately and watching the build fail.
+
+**What did not change.** Four `core` modules, the dependency directions, and feature areas
+as packages. `:core:model` and `:core:api` were consumed by the Wear client with no change
+and no audit, exactly as predicted — the claim held, and only the mechanism enforcing the
+neighbouring one was weaker than stated.
+
+**The cost that remains.** `implementation` removes Material 3 from the watch's *compile*
+classpath, not from its runtime one, so an unused copy is still packaged into a debug APK.
+R8 strips it from release builds. Removing it properly would mean extracting the tokens into
+a module of their own — a sixth module, and the trigger for that is a third consumer rather
+than a byte count.

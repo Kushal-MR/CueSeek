@@ -31,7 +31,17 @@ dependencies {
     api(project(":core:model"))
 
     implementation(platform(libs.androidx.compose.bom))
-    api(libs.androidx.compose.material3)
+    // `implementation`, not `api`, since M5.2.
+    //
+    // This module is shared with the Wear client, and Wear's Material 3 is a different
+    // library (ADR-0010: tokens shared, components not). While this was `api`, every
+    // consumer of the design system inherited the PHONE's Material 3 on its compile
+    // classpath — so "do not import androidx.compose.material3 on the watch" was a rule
+    // enforced by discipline, which ADR-0013 explicitly prefers not to rely on.
+    //
+    // Demoting it makes the compiler enforce it instead. The phone app declares Material 3
+    // for itself and is unaffected; the watch simply cannot see it.
+    implementation(libs.androidx.compose.material3)
     api(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
