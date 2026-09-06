@@ -18,6 +18,7 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import dev.cueseek.core.model.HealthStatus
+import dev.cueseek.wear.theme.CueSeekWearTheme
 
 /**
  * M5.1: the skeleton. One screen that names itself and proves the build works end to end.
@@ -40,7 +41,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun WearApp() {
-    MaterialTheme {
+    CueSeekWearTheme {
         // AppScaffold owns what persists across screens — the clock at the top. Each
         // screen then supplies its own ScreenScaffold. This pairing has no phone
         // equivalent and is the first thing that makes a Wear layout behave correctly.

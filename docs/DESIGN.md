@@ -450,5 +450,27 @@ Genuinely unsettled, and where exploration is wanted:
 - **Multi-host** switching, without a nav drawer.
 - Whether a **second accent** — the tertiary eucalyptus `#3B6664` — should carry a role of
   its own, or stay incidental.
+- **The `*Dim` roles Wear requires and this system has no answer for.** Wear Material 3's
+  scheme has `primaryDim`, `secondaryDim`, `tertiaryDim` and `errorDim` — a fill that is
+  present but not the primary action. The phone's scheme has no equivalent, so §3 never had
+  to define one. M5.2 derived all four as `base * 0.65 + background * 0.35`, which preserves
+  hue and is reproducible, but it is a rule invented to fill a gap rather than a decision
+  taken. Either §3 adopts the four values, or it defines better ones.
+- Likewise the **`on` roles for secondary, tertiary and error**, which §3 does not give.
+  M5.2 reused `background` and `onBackground` rather than introduce new hexes, and pinned
+  the contrast in a test. Cheap and legible, and still not a decision.
 
 Anything in §2 is not open.
+
+### Settled by the watch
+
+**Mono is confined to data** (§4) stopped being a convention this codebase maintains.
+
+On the phone that rule is carried by two hand-rolled roles, `Data.Small` and
+`Data.Emphasis`, because Material 3's type scale has nowhere to put it. Wear Material 3 has
+five first-class `numeral*` roles — `numeralExtraSmall` through `numeralExtraLarge` — so on
+the watch the rule is configuration rather than discipline: every numeral role is Plex Mono,
+every other role is Plex Sans, and there is no way to get it wrong by forgetting.
+
+Worth knowing when the phone's type scale is next revisited: the shape §4 reached for
+already exists one form factor over.

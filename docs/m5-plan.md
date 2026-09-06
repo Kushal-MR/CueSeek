@@ -69,7 +69,7 @@ for.
 | --- | --- | --- | --- |
 | M5.0 | Plan, and the pairing ADR | — | ✅ |
 | M5.1 | `clients/wear/` builds and installs | M5.0 | ✅ |
-| M5.2 | Theme: shared tokens, Wear components | M5.1 | ⬜ |
+| M5.2 | Theme: shared tokens, Wear components | M5.1 | ✅ |
 | M5.3a | Address handoff from the phone | M5.0 | ⬜ |
 | M5.3b | Code entry, token minting, secure storage | M5.3a | ⬜ |
 | M5.4a | Dashboard: the verdict and host vitals | M5.3b | ⬜ |
@@ -188,7 +188,38 @@ not off a blog post.
 
 ---
 
-### M5.2 — Theme: shared tokens, Wear components
+### M5.2 — Theme: shared tokens, Wear components ✅
+
+**The sharing did not work as recorded, and fixing it is the phase's main result.**
+`:core:design` declared `api(libs.androidx.compose.material3)`, so every consumer inherited
+the *phone's* Material 3 — meaning ADR-0010's "tokens shared, components not" was enforced by
+review rather than by the compiler. Demoted to `implementation`; the watch now cannot see it,
+verified by adding the import deliberately and watching the build fail.
+[ADR-0013 Amendment 1](adr/0013-android-client-architecture.md).
+
+**Wear's `ColorScheme` is confirmed incompatible field-for-field**: 29 roles, including
+`primaryDim`/`secondaryDim`/`tertiaryDim`/`errorDim` with no phone equivalent, and no plain
+`surface`. Read off the AAR rather than assumed.
+
+**The status palette crossed unchanged**, which is ADR-0010 paying for itself somewhere
+nobody aimed: status roles live outside `ColorScheme` so meaning could not be themed, and
+that is exactly why they survived a scheme that turned out to be form-factor-specific.
+
+**Dark only.** An OLED panel, all day, on a fraction of a phone's battery — and DESIGN.md's
+dark palette is the one whose contrast was tuned at low brightness.
+
+**Two gaps DESIGN.md could not answer** and now records as open: the four `*Dim` roles
+(derived here as `base * 0.65 + background * 0.35`, with a test proving the committed
+literals match the formula) and the `on` roles for secondary/tertiary/error (reused from
+`background`/`onBackground`, contrast pinned at ≥ 4.5:1).
+
+**One thing the watch settled rather than opened:** Wear Material 3 has five first-class
+`numeral*` type roles, so "mono is confined to data" stops being a convention the codebase
+maintains and becomes configuration. Fed back into DESIGN.md §12.
+
+Five unit tests, 0 skipped. The original description follows.
+
+---
 
 `DESIGN.md`'s palette expressed through Wear's `ColorScheme`, which has different roles from
 the phone's and cannot be copied field for field.
