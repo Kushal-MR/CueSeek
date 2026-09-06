@@ -49,6 +49,25 @@ internal object WearType {
     )
 
     /**
+     * Mono at body size, for data that is an **identifier** rather than a magnitude.
+     *
+     * Wear's `numeral*` roles run 24sp to 60sp. They are built for one glanceable number —
+     * a heart rate, a percentage, a count — and they are excellent at that. An agent
+     * address is not that: `192.168.1.10:7777` is fifteen monospace characters, which at
+     * `numeralSmall` needs roughly 216sp of width on a screen that offers about 200.
+     *
+     * M5.3a found this the way it should be found, by rendering one on the watch and
+     * watching it wrap mid-octet as `192.168.1.1` / `0:7777`.
+     *
+     * So M5.2's conclusion was half right. "Mono is confined to data" does become
+     * configuration on Wear — for magnitudes. Identifiers still need a role the scale does
+     * not offer, which is exactly what the phone's `CueSeekType.Data.Small` is, at exactly
+     * the same 12sp. The rule is shared; the gap is shared too.
+     */
+    val DataSmall
+        get() = Typography().bodySmall.copy(fontFamily = PlexMono)
+
+    /**
      * Wear's default scale with CueSeek's faces substituted.
      *
      * Built by copying each default and replacing only `fontFamily`, so the sizes, line

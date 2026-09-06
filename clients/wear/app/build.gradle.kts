@@ -110,6 +110,12 @@ dependencies {
     implementation(libs.androidx.wear.compose.foundation)
     implementation(libs.androidx.wear.compose.navigation)
 
+    // The Wearable Data Layer, for ADR-0014's address handoff. This is the dependency that
+    // ADR-0014 named as its cost: CueSeek's only Google dependency anywhere, and a real
+    // narrowing of where the watch app can run. It is optional at runtime -- a watch
+    // without it simply falls back to the manual address field.
+    implementation(libs.play.services.wearable)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)
