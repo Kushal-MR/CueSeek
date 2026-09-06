@@ -71,7 +71,7 @@ for.
 | M5.1 | `clients/wear/` builds and installs | M5.0 | ✅ |
 | M5.2 | Theme: shared tokens, Wear components | M5.1 | ✅ |
 | M5.3a | Address handoff from the phone | M5.0 | ✅ |
-| M5.3b | Code entry, token minting, secure storage | M5.3a | ⬜ |
+| M5.3b | Code entry, token minting, secure storage | M5.3a | ✅ |
 | M5.4a | Dashboard: the verdict and host vitals | M5.3b | ⬜ |
 | M5.4b | Dashboard: the service list | M5.4a | ⬜ |
 | M5.5 | Service detail | M5.4b | ⬜ |
@@ -271,7 +271,46 @@ information printed on their own terminal.
 
 ---
 
-### M5.3b — Code entry, token minting, secure storage
+### M5.3b — Code entry, token minting, secure storage ✅
+
+The watch paired against the VM agent. From the agent's own device list:
+
+```
+M5.3b verifier   platform=cli      scopes=read,devices.manage
+OPWWE234         platform=wearos   scopes=read,service.control
+CPH2707          platform=android  scopes=read,service.control,host.power
+```
+
+Three devices, three platforms, three scope sets. The watch holds its own token with its
+own fingerprint — **no `host.power`**, exactly as ADR-0014 decided — and the phone's is
+untouched. That is ADR-0006's per-device model and ADR-0014's handoff, both verified at once
+rather than argued.
+
+**`:core:data` is shared after all.** ADR-0013 named only `:core:model` and `:core:design`.
+It carries nothing phone-specific — DataStore, the Android Keystore and coroutines all exist
+on Wear — so the watch reuses `PairingRepository` and the same `TokenCipher` rather than
+growing a second implementation of "seal a credential".
+
+**One latent bug in the phone client, found by adding a second one.**
+`PairingRepository` hardcoded `Platform.Android`. `Platform.WearOs` had existed unused in the
+model since M1, and a watch reporting itself as a phone would have made the device list and
+the audit log — whose entire job is saying *which device did this* — both lie.
+
+**One bug of my own, and a false negative that hid it.** The Wear app shipped with no
+`networkSecurityConfig`, so Android blocked cleartext from API 28 and it could not reach any
+agent. `curl` on the same watch succeeded, because a shell is not subject to an app's network
+policy — which is exactly the check that gave false confidence. The config now lives in
+`:core:data` with the module that owns agent connectivity, referenced by both manifests,
+because the drift *was* the bug.
+
+**RemoteInput cannot be driven by `adb shell input tap`** — the chooser opens, the keyboard
+accepts text, and send never returns a result. Under a real finger it completes immediately.
+Synthetic taps are not equivalent to touch for that system UI, so this is a checklist item
+M5.17 has to hand to a person.
+
+The original description follows.
+
+---
 
 The watch asks for the pairing code alone, redeems it, and seals its own token in its own
 Keystore — reusing `:core:data`'s cipher approach rather than reimplementing it.

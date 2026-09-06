@@ -91,6 +91,13 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:api"))
 
+    // ADR-0013 never claimed this one was shared -- it names only :core:model and
+    // :core:design. It turns out to carry nothing phone-specific: DataStore, the Android
+    // Keystore and coroutines all exist on Wear, so the watch reuses the pairing flow and
+    // the token cipher rather than writing a second one. A second implementation of "seal
+    // a credential" is the last thing this project should have.
+    implementation(project(":core:data"))
+
     // The design system, for its tokens: the status palette, the Plex faces, motion.
     // NOT for its components -- those are phone Material 3 and are wrong on a wrist
     // (ADR-0010). Since M5.2 that is enforced rather than requested: :core:design demoted
@@ -103,6 +110,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
 
     // Wear's Material 3, not the phone's. Both are on the classpath transitively through
     // the BOM; importing androidx.compose.material3 in this module is a defect.
@@ -115,6 +124,11 @@ dependencies {
     // narrowing of where the watch app can run. It is optional at runtime -- a watch
     // without it simply falls back to the manual address field.
     implementation(libs.play.services.wearable)
+
+    // Wear's text entry. An 8-character code is exactly the length RemoteInput is for:
+    // it opens the system input, which offers a keyboard, voice and handwriting, instead
+    // of asking somebody to hit a 20dp field with a thumb.
+    implementation(libs.androidx.wear.input)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
 
