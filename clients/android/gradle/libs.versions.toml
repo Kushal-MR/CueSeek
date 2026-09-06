@@ -27,6 +27,9 @@ wearCompose = "1.6.2"
 # The Wearable Data Layer, for ADR-0014's address handoff. CueSeek's first and only Google
 # dependency, and it is in the clients -- never the agent, never the contract.
 playServicesWearable = "20.0.1"
+# RemoteInput: Wear's own text entry, which hands off to the system keyboard, voice or
+# handwriting rather than cramming a field onto a round screen.
+wearInput = "1.2.0"
 
 # Test
 junit = "4.13.2"
@@ -49,6 +52,7 @@ androidx-wear-compose-material3 = { group = "androidx.wear.compose", name = "com
 androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wearCompose" }
 androidx-wear-compose-navigation = { group = "androidx.wear.compose", name = "compose-navigation", version.ref = "wearCompose" }
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
+androidx-wear-input = { group = "androidx.wear", name = "wear-input", version.ref = "wearInput" }
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }

@@ -41,10 +41,20 @@ class PairingRepository(
      * claim about *why* the code was rejected, because the agent merges unknown, expired
      * and already-redeemed on purpose.
      */
+    /**
+     * @param platform what this device tells the agent it is. Defaults to
+     *   [Platform.Android] so the phone's calls are unchanged.
+     *
+     *   It was hardcoded until M5.3b, which is the first time a second form factor called
+     *   this. A watch reporting itself as `android` would have shown up wrong in the device
+     *   list and in the audit log — the two places whose entire job is saying *which device
+     *   did this* (ADR-0006). `Platform.WearOs` had existed in the model since M1, unused.
+     */
     suspend fun pair(
         address: AgentAddress,
         code: String,
         deviceName: String,
+        platform: Platform = Platform.Android,
     ): ApiResult<PairedHost> {
         val unauthenticated = CueSeekApiFactory.create(
             address = address,
@@ -52,7 +62,7 @@ class PairingRepository(
             http = http,
         )
 
-        val pairing = when (val result = unauthenticated.pair(code, deviceName, Platform.Android)) {
+        val pairing = when (val result = unauthenticated.pair(code, deviceName, platform)) {
             is ApiResult.Failure -> return result
             is ApiResult.Success -> result.value
         }

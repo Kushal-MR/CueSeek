@@ -15,6 +15,17 @@
   The alternative — building the config at runtime — does not exist on Android. The
   narrowing that matters is therefore behavioural, not declarative: the app only ever
   issues requests to the host address the user entered.
+
+  Lives in :core:data rather than in an app module, since M5.3b.
+
+  It was the phone's alone, and the Wear client shipped without it. Cleartext is blocked by
+  default from API 28, so the watch could not reach any agent at all — while `curl` on the
+  same watch could, because a shell is not subject to an app's network policy. The failure
+  surfaced as a transport error that looked exactly like a wrong address.
+
+  Every client that talks to an agent needs this identical policy for the identical
+  ADR-0001 reason, so it belongs with the module that owns agent connectivity. Both app
+  manifests point at this one file; there is nothing left to forget.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
