@@ -30,7 +30,7 @@ is not, and how to install it, on one page.
 A single console for **health, activity and control** across many self-hosted services and
 the machine they run on:
 
-- **Health** — is each service up, reachable and behaving? Is the host healthy?
+- **Operational** — is each service up, reachable and behaving? Is the host healthy?
 - **Activity** — what is happening right now: playback sessions, transfers, jobs.
 - **Control** — restart a service, reboot the host, shut it down.
 
