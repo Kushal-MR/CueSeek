@@ -48,7 +48,7 @@ the machine they run on:
 ## Installing
 
 You need a Linux host with systemd and polkit 0.106 or later, and Tailscale, WireGuard or a
-LAN between it and your phone. No clone, and no Go toolchain.
+LAN between it and your phone. 
 
 ```bash
 # from the releases page
