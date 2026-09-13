@@ -72,7 +72,7 @@ for.
 | M5.2 | Theme: shared tokens, Wear components | M5.1 | ✅ |
 | M5.3a | Address handoff from the phone | M5.0 | ✅ |
 | M5.3b | Code entry, token minting, secure storage | M5.3a | ✅ |
-| M5.4a | Dashboard: the verdict and host vitals | M5.3b | ⬜ |
+| M5.4a | Dashboard: the verdict and host vitals | M5.3b | ✅ |
 | M5.4b | Dashboard: the service list | M5.4a | ⬜ |
 | M5.5 | Service detail | M5.4b | ⬜ |
 | M5.6 | Lifecycle actions, with confirmation | M5.5 | ⬜ |
@@ -323,7 +323,49 @@ scopes, and revoking it does not affect the phone.
 
 ---
 
-### M5.4a — Dashboard: the verdict and host vitals
+### M5.4a — Dashboard: the verdict and host vitals ✅
+
+On the watch, against the VM agent:
+
+```
+cueseek-vm
+Operational
+1/1 healthy
+CPU 0%   MEM 11%   / 17%
+```
+
+**No temperature row**, because a VM exposes no sensors — absent is not zero, observed on a
+third surface now.
+
+**The verdict had to be shared, and was not.** `verdict`, `hostConcern`, the pressure
+thresholds and `Tally` all lived inside the phone app's dashboard package, three of them
+`internal`. Layout is per form factor and M5.3b already gave the watch its own error copy on
+exactly that reasoning — but this is not layout. "Is everything fine?" is one question about
+one machine, and a watch that answered it differently from the phone in your pocket would be
+a console contradicting itself. All four moved to `:core:model`, with the phone's 10 verdict
+tests and 12 vitals tests passing unchanged against the new home.
+
+`verdict` also gained an overload taking `(stale, services, hostMetrics, tally)`. It required
+an `AgentState`, which is shaped by the phone's event stream; a polling watch holds none of
+that, so the alternative was fabricating a stream state or writing a second verdict.
+
+**Polling, not streaming** (ADR-0004): `ServicesRepository.snapshot()` fetches system,
+services, metrics and actions in one round trip. There is no timer — the screen refreshes
+when it appears, and that is the whole schedule.
+
+**One bug, found by launching it twice.** Routing used a `remember { mutableStateOf(false) }`
+set when pairing succeeded, so an already-paired watch showed the pairing screen on every
+launch — the token was in the store and nothing ever asked. Routing now derives from the
+store, with `Deciding` as a distinct state rather than defaulting to `Pairing` while it
+loads: flashing "Pair with an agent" at somebody who paired last week is a wrong answer shown
+confidently, which is the same thing this project refuses everywhere else.
+
+Staleness is computed from a clock on a 5s ticker scoped to the screen, not from the fetch —
+6 tests including the boundary and an 8-hour sleep.
+
+The original description follows.
+
+---
 
 The screen that justifies the app.
 
