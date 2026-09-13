@@ -20,34 +20,9 @@ import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.design.token.CueSeekMotion
 import dev.cueseek.core.design.token.CueSeekShapes
 import dev.cueseek.core.design.token.CueSeekSpacing
-import dev.cueseek.core.model.HealthStatus
 import dev.cueseek.core.model.Service
+import dev.cueseek.core.model.Tally
 
-/** How many services sit in each status. */
-data class Tally(
-    val healthy: Int = 0,
-    val degraded: Int = 0,
-    val unreachable: Int = 0,
-    val unknown: Int = 0,
-) {
-    val total: Int get() = healthy + degraded + unreachable + unknown
-    val needingAttention: Int get() = degraded + unreachable
-
-    companion object {
-        fun of(services: List<Service>): Tally {
-            var h = 0; var d = 0; var u = 0; var k = 0
-            services.forEach {
-                when (it.health.status) {
-                    HealthStatus.Healthy -> h++
-                    HealthStatus.Degraded -> d++
-                    HealthStatus.Unreachable -> u++
-                    HealthStatus.Unknown -> k++
-                }
-            }
-            return Tally(h, d, u, k)
-        }
-    }
-}
 
 /**
  * The whole fleet's composition, as an 8dp rule.

@@ -1,8 +1,7 @@
 package dev.cueseek.android.ui
 
-import dev.cueseek.android.ui.dashboard.hostConcern
-import dev.cueseek.android.ui.dashboard.verdict
-import dev.cueseek.core.design.status.Tally
+import dev.cueseek.core.model.hostConcern
+import dev.cueseek.core.model.verdict
 import dev.cueseek.core.model.AgentAddress
 import dev.cueseek.core.model.AgentState
 import dev.cueseek.core.model.Capability
@@ -18,6 +17,7 @@ import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.StorageMetrics
 import dev.cueseek.core.model.StreamStatus
+import dev.cueseek.core.model.Tally
 import dev.cueseek.core.model.ThermalMetrics
 import java.time.Instant
 import org.junit.Assert.assertEquals

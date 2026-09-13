@@ -16,11 +16,11 @@ import androidx.compose.ui.unit.dp
 import dev.cueseek.core.design.CueSeekTheme
 import dev.cueseek.core.design.status.BeatDot
 import dev.cueseek.core.design.status.StatusMark
-import dev.cueseek.core.design.status.Tally
 import dev.cueseek.core.design.status.TallyRule
 import dev.cueseek.core.design.status.statusStyle
 import dev.cueseek.core.design.token.CueSeekType
 import dev.cueseek.core.model.HealthStatus
+import dev.cueseek.core.model.Tally
 
 /**
  * Every state the status language can be in, on one screen.

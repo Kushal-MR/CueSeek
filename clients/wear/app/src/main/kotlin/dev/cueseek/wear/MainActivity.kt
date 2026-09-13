@@ -4,87 +4,66 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.material3.AppScaffold
-import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
-import androidx.wear.compose.material3.Text
+import dev.cueseek.wear.dashboard.DashboardScreen
 import dev.cueseek.wear.pairing.PairingScreen
 import dev.cueseek.wear.theme.CueSeekWearTheme
 
 /**
- * M5.3b: pair the watch with an agent.
+ * M5.4a: the dashboard, once there is something to show.
  *
- * Still one screen and a `Boolean`. Navigation, the dashboard and swipe-to-dismiss arrive
- * in M5.4 and M5.8; building a nav graph around a single destination now would be
- * scaffolding for a shape nobody knows yet.
+ * Routing comes from the store rather than from a flag this class remembers — see
+ * [RootViewModel] for why that distinction cost a bug. Navigation proper, and
+ * swipe-to-dismiss between screens, arrive in M5.8.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Build.MODEL is what the operator will see in the phone's device list, so it has
-        // to be recognisable there rather than pretty here.
+        // Build.MODEL is what the operator sees in the phone's device list, so it has to be
+        // recognisable there rather than pretty here.
         setContent { WearApp(deviceName = Build.MODEL) }
     }
 }
 
 @Composable
-fun WearApp(deviceName: String) {
+fun WearApp(
+    deviceName: String,
+    model: RootViewModel = viewModel(),
+) {
     CueSeekWearTheme {
         AppScaffold {
-            var paired by remember { mutableStateOf(false) }
-            if (paired) {
-                PairedPlaceholder()
-            } else {
-                PairingScreen(deviceName = deviceName, onPaired = { paired = true })
-            }
-        }
-    }
-}
+            val root by model.root.collectAsStateWithLifecycle()
 
-/**
- * Where the dashboard goes in M5.4a.
- *
- * Deliberately blunt, so nobody mistakes it for a screen that has been designed.
- */
-@Composable
-private fun PairedPlaceholder() {
-    ScreenScaffold {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = "Paired",
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text = "dashboard lands in M5.4",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            when (root) {
+                // Nothing, deliberately. The store answers in milliseconds, and a spinner
+                // that appears for one frame is worse than a dark screen for one frame.
+                Root.Deciding -> ScreenScaffold {
+                    Box(modifier = Modifier.fillMaxSize()) {}
+                }
+
+                Root.Pairing -> PairingScreen(
+                    deviceName = deviceName,
+                    // No navigation call. Pairing writes a host to the store, the root flow
+                    // sees it, and this recomposes to the dashboard — so the screen that
+                    // paired does not also have to know what comes after it.
+                    onPaired = {},
+                )
+
+                Root.Dashboard -> DashboardScreen()
+            }
         }
     }
 }
 
 @Preview(device = "id:wearos_large_round", showSystemUi = true)
 @Composable
-private fun PairingPreview() = WearApp(deviceName = "Watch")
+private fun WearAppPreview() = WearApp(deviceName = "Watch")

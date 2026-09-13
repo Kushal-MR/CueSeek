@@ -3,7 +3,7 @@ package dev.cueseek.android.ui
 import dev.cueseek.android.ui.dashboard.chipOf
 import dev.cueseek.android.ui.dashboard.loadPhrase
 import dev.cueseek.android.ui.dashboard.mostConcerning
-import dev.cueseek.android.ui.dashboard.fullest
+import dev.cueseek.core.model.fullest
 import dev.cueseek.android.ui.dashboard.trimZero
 import dev.cueseek.android.ui.dashboard.uptimePhrase
 import dev.cueseek.core.model.CpuMetrics

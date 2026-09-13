@@ -33,9 +33,12 @@ import dev.cueseek.core.design.token.CueSeekMotion
 import dev.cueseek.core.design.token.CueSeekShapes
 import dev.cueseek.core.design.token.CueSeekSpacing
 import dev.cueseek.core.design.token.CueSeekType
+import dev.cueseek.core.model.CRITICAL
 import dev.cueseek.core.model.HostMetrics
+import dev.cueseek.core.model.PRESSURE
 import dev.cueseek.core.model.StorageMetrics
 import dev.cueseek.core.model.ThermalMetrics
+import dev.cueseek.core.model.fullest
 import kotlin.math.roundToInt
 
 /**
@@ -349,8 +352,6 @@ internal fun mostConcerning(sensors: List<ThermalMetrics>?): ThermalMetrics? {
  * it cannot disagree about whether something is wrong. Two separate copies of 0.85 was the
  * original "All good over a red rule" defect waiting to happen a second time.
  */
-internal const val PRESSURE = 0.85f
-internal const val CRITICAL = 0.95f
 
 /**
  * The colour of a filling resource.
@@ -399,6 +400,3 @@ internal fun trimZero(value: Float): String {
     return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
 }
 
-/** The fullest of the reported filesystems, or null when none can be judged. */
-internal fun fullest(storage: List<StorageMetrics>?): StorageMetrics? =
-    storage?.filter { it.usedFraction != null }?.maxByOrNull { it.usedFraction ?: 0f }
