@@ -2,6 +2,7 @@ package dev.cueseek.wear.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,7 +58,10 @@ import dev.cueseek.wear.theme.WearType
  * contradicting itself, which is worse than either being wrong alone.
  */
 @Composable
-fun DashboardScreen(model: DashboardViewModel = viewModel()) {
+fun DashboardScreen(
+    model: DashboardViewModel = viewModel(),
+    onServiceClick: (String) -> Unit = {},
+) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val listState = rememberTransformingLazyColumnState()
 
@@ -134,7 +138,11 @@ fun DashboardScreen(model: DashboardViewModel = viewModel()) {
                         count = state.services.size,
                         key = { state.services[it].id },
                     ) { index ->
-                        ServiceRow(service = state.services[index], stale = stale)
+                        ServiceRow(
+                            service = state.services[index],
+                            stale = stale,
+                            onClick = onServiceClick,
+                        )
                     }
                 }
             }
@@ -282,13 +290,20 @@ private fun Vital(label: String, fraction: Float, judge: Boolean) {
  * Nothing here asks which service it is.
  */
 @Composable
-private fun ServiceRow(service: Service, stale: Boolean) {
+private fun ServiceRow(
+    service: Service,
+    stale: Boolean,
+    onClick: (String) -> Unit,
+) {
     val style = statusStyle(service.health.status, stale)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            // The id is passed along, never inspected. The row does not know or care which
+            // service this is.
+            .clickable { onClick(service.id) }
+            .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

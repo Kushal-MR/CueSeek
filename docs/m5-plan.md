@@ -74,7 +74,7 @@ for.
 | M5.3b | Code entry, token minting, secure storage | M5.3a | ✅ |
 | M5.4a | Dashboard: the verdict and host vitals | M5.3b | ✅ |
 | M5.4b | Dashboard: the service list | M5.4a | ✅ |
-| M5.5 | Service detail | M5.4b | ⬜ |
+| M5.5 | Service detail | M5.4b | ✅ |
 | M5.6 | Lifecycle actions, with confirmation | M5.5 | ⬜ |
 | M5.7 | Host power actions | M5.6 | ⬜ |
 | M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ⬜ |
@@ -425,7 +425,49 @@ M4.10 observed on the phone.
 
 ---
 
-### M5.5 — Service detail
+### M5.5 — Service detail ✅
+
+On the watch, tapping a roster row:
+
+```
+Cron                          Nonexistent
+Running                       Unreachable
+active (running)              systemd has no unit called
+                              "definitely-not-a-unit.service".
+                              Check the exact name with
+                              `systemctl list-units --type=service`.
+```
+
+`active (running)` is systemd's own word, carried verbatim; the second is the agent's own
+diagnostic reaching a wrist. That is the whole point of the screen — the row says a service
+is unhealthy, this says **why**.
+
+**One item, not a list, and *which* one is a decision.** The phone shows every session and
+every torrent because a thumb flicks through twelve rows in a second; twelve rotations of a
+crown is not the same interaction. So the screen shows one and the count says how many it
+stands for. A transcoding session outranks a direct play — one 4K transcode saturates the CPU
+every other service on that host shares — and an active transcode outranks a paused one.
+Transfers rank by speed among those actually moving, which is the finding the qBittorrent
+adapter already recorded when it stopped sorting the whole list by `dlspeed`. 14 tests.
+
+**Navigation arrived early.** `SwipeDismissableNavHost` rather than hand-rolled back, because
+on Wear the back gesture *is* a swipe and an app that implements it by hand gets the edge
+behaviour subtly wrong. One `DashboardViewModel` is shared by both destinations, so opening a
+service costs no radio round trip. M5.8 still owns making rotary and haptics systematic.
+
+**Not verified on hardware, and stated rather than implied:** the `now_playing` and
+`transfers` rendering. The VM runs only `type: systemd` units, and the HP host — which has
+Jellyfin and qBittorrent — is unreachable from the watch, which has no Tailscale. The focus
+rules are covered by unit tests; the *drawing* of them is not, and M5.17 should carry it.
+
+**A second thing synthetic input cannot do.** Swipe-to-dismiss does not fire from
+`adb shell input swipe`, exactly as RemoteInput does not fire from `input tap`. Back via
+`KEYCODE_BACK` confirmed the navigation itself is correct, so this is an automation limit
+rather than a defect — and it is the second item M5.17 has to hand to a person.
+
+The original description follows.
+
+---
 
 One service, full height: health, reported status, reasons, and what it is doing. Activity
 capabilities (`now_playing`, `transfers`) get watch-shaped renderers — a wrist shows *one*
