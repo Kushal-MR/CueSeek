@@ -7,6 +7,7 @@ import dev.cueseek.core.api.CueSeekApiFactory
 import dev.cueseek.core.data.AgentClients
 import dev.cueseek.core.data.HostRepository
 import dev.cueseek.core.data.ServicesRepository
+import dev.cueseek.core.model.ActionStatus
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.PairedHost
@@ -20,6 +21,16 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
+
+/** What an invoked action is doing, as far as a polling client can honestly say. */
+sealed interface ActionUi {
+    data object Idle : ActionUi
+    data class Working(val label: String) : ActionUi
+
+    /** The agent took the request. Not the same as it having finished — see [DashboardViewModel.invoke]. */
+    data class Accepted(val label: String) : ActionUi
+    data class Failed(val label: String, val message: String) : ActionUi
+}
 
 sealed interface DashboardUi {
     data object Loading : DashboardUi
@@ -72,6 +83,54 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _ui = MutableStateFlow<DashboardUi>(DashboardUi.Loading)
     val ui: StateFlow<DashboardUi> = _ui.asStateFlow()
+
+    private val _action = MutableStateFlow<ActionUi>(ActionUi.Idle)
+    val action: StateFlow<ActionUi> = _action.asStateFlow()
+
+    fun clearAction() { _action.value = ActionUi.Idle }
+
+    /**
+     * Ask the agent to do something to a service.
+     *
+     * # Why this says "asked", not "done"
+     *
+     * The agent answers an invocation with an *acceptance* — the job is enqueued, not
+     * finished — and the terminal outcome arrives as a stream event. The phone holds that
+     * stream and can therefore report success or failure honestly. This watch does not, by
+     * decision rather than omission (ADR-0004: nothing background-critical may depend on
+     * SSE, and a watch radio is the case that rule was written for).
+     *
+     * So the watch reports what it actually knows: the agent accepted the request, and here
+     * is the service's state a moment later. Claiming "Restarted" from an acceptance would be
+     * asserting something nobody observed — the same class of thing as rendering stale green.
+     */
+    fun invoke(serviceId: String, actionId: String, label: String) {
+        viewModelScope.launch {
+            val host: PairedHost = hosts.selectedHost.first() ?: return@launch
+            _action.value = ActionUi.Working(label)
+
+            when (val result = services.invokeAction(host, serviceId, actionId)) {
+                is ApiResult.Failure -> _action.value =
+                    ActionUi.Failed(label, shortMessage(result.error))
+
+                is ApiResult.Success -> {
+                    // The agent may reject an action it cannot perform without failing the
+                    // call -- an unlisted unit, a missing polkit grant. Status carries that.
+                    if (result.value.status == ActionStatus.Failed) {
+                        _action.value = ActionUi.Failed(label, "The agent refused it")
+                        return@launch
+                    }
+
+                    // Give systemd a moment, then look. The delay is the honest part: the
+                    // watch is observing a result rather than being told one, so it has to
+                    // wait long enough for there to be something to see.
+                    _action.value = ActionUi.Accepted(label)
+                    kotlinx.coroutines.delay(2_000)
+                    refresh()
+                }
+            }
+        }
+    }
 
     fun refresh() {
         viewModelScope.launch {
@@ -126,10 +185,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         fun isStale(observedAt: Instant, now: Instant = Instant.now()): Boolean =
             Duration.between(observedAt, now) > STALE_AFTER
 
-        private fun shortMessage(error: dev.cueseek.core.model.ApiError): String = when (error) {
+        fun shortMessage(error: dev.cueseek.core.model.ApiError): String = when (error) {
             is dev.cueseek.core.model.ApiError.Transport -> "Could not reach the agent"
             is dev.cueseek.core.model.ApiError.Unauthorized -> "The agent refused this device"
             is dev.cueseek.core.model.ApiError.InsufficientScope -> "Not allowed with these scopes"
+            is dev.cueseek.core.model.ApiError.ActionUnavailable -> "The agent cannot do that"
+            is dev.cueseek.core.model.ApiError.ActionInProgress -> "Already running"
             else -> "Could not load"
         }
     }

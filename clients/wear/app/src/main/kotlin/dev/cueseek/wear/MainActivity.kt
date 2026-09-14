@@ -87,6 +87,7 @@ fun WearApp(
 private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
     val navController = rememberSwipeDismissableNavController()
     val ui by dashboard.ui.collectAsStateWithLifecycle()
+    val action by dashboard.action.collectAsStateWithLifecycle()
 
     SwipeDismissableNavHost(
         navController = navController,
@@ -115,7 +116,18 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
                 // exists and is simply doing nothing.
                 navController.popBackStack()
             } else {
-                ServiceDetailScreen(service = service, stale = false)
+                // The action banner is cleared on entry rather than on exit, so arriving at
+                // a service never shows the outcome of something done to a different one.
+                androidx.compose.runtime.LaunchedEffect(service.id) { dashboard.clearAction() }
+
+                ServiceDetailScreen(
+                    service = service,
+                    stale = false,
+                    action = action,
+                    onInvoke = { actionId, label ->
+                        dashboard.invoke(service.id, actionId, label)
+                    },
+                )
             }
         }
     }
