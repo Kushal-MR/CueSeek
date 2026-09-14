@@ -73,7 +73,7 @@ for.
 | M5.3a | Address handoff from the phone | M5.0 | ✅ |
 | M5.3b | Code entry, token minting, secure storage | M5.3a | ✅ |
 | M5.4a | Dashboard: the verdict and host vitals | M5.3b | ✅ |
-| M5.4b | Dashboard: the service list | M5.4a | ⬜ |
+| M5.4b | Dashboard: the service list | M5.4a | ✅ |
 | M5.5 | Service detail | M5.4b | ⬜ |
 | M5.6 | Lifecycle actions, with confirmation | M5.5 | ⬜ |
 | M5.7 | Host power actions | M5.6 | ⬜ |
@@ -376,7 +376,44 @@ count — with vitals below it.
 `DESIGN.md` §12 lists host-metric layout as an open question for the phone. The watch forces
 an answer, and whatever it produces should feed back.
 
-### M5.4b — Dashboard: the service list
+### M5.4b — Dashboard: the service list ✅
+
+Four services on the watch, against a VM configured with three real units and one
+deliberately wrong one:
+
+```
+1 needs attention        3/4 healthy
+● Cron         Running
+● SSH          Running
+● D-Bus        Running
+● Nonexistent  Unreachable
+```
+
+The verdict moved from `Operational` to `1 needs attention` on its own, from the function
+`:core:model` shares with the phone — so the two clients cannot disagree about the machine.
+The status colours are the phone's, verbatim.
+
+**The guard got a Wear twin rather than being assumed to cover both.**
+`WearCapabilityTest` scans the watch's UI source for `when (service.id)` and its variants,
+exactly as the phone's `CapabilityAndCopyTest` does. A second client is where that rule
+decays, because the shortcut is cheapest in the file nobody has reviewed yet.
+
+**The activity line is per form factor, and that is a different answer from M5.4a's.** The
+verdict *had* to be shared — two clients disagreeing about "is everything fine?" is a
+contradiction. An activity line is a phrasing of the same fact, and the phone's does not fit:
+`3 of 12 active · ↓ 4.2 MB/s` is 28 characters, and lifting it would have dragged `byteSize`
+and its decimal-places rule into the domain module. So the watch says less, on purpose, while
+the *decisions* stay identical — idle says nothing, transcoding is named only when nonzero, a
+service doing both gets both.
+
+**One test I had to rewrite because it was wrong.** The width assertion picked 24 characters
+out of the air and failed a line that fits perfectly well. It now asserts what is actually
+being decided — that no transfer rate and no total reach the watch row — with a length bound
+as a rail rather than the claim.
+
+The original description follows.
+
+---
 
 Capabilities render through the same registry pattern ADR-0007 mandates. **Branching on
 service id is a review-blocking defect here exactly as on the phone**, and the test enforcing

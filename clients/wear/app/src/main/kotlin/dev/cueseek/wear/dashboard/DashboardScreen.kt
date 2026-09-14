@@ -1,13 +1,19 @@
 package dev.cueseek.wear.dashboard
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -24,8 +30,10 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import dev.cueseek.core.design.CueSeekStatus
+import dev.cueseek.core.design.status.statusStyle
 import dev.cueseek.core.model.CRITICAL
 import dev.cueseek.core.model.HostMetrics
+import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.PRESSURE
 import dev.cueseek.core.model.fullest
 import dev.cueseek.wear.theme.WearType
@@ -117,6 +125,17 @@ fun DashboardScreen(model: DashboardViewModel = viewModel()) {
                 is DashboardUi.Loaded -> {
                     item { Verdict(state.copy(stale = stale)) }
                     item { Vitals(state.metrics) }
+
+                    // The roster, keyed by service id so recomposition is stable when the
+                    // agent reorders. Rendered from capabilities and health only -- what
+                    // service this *is* never appears in a branch (ADR-0005, ADR-0007),
+                    // and WearCapabilityTest enforces that rather than trusting review.
+                    items(
+                        count = state.services.size,
+                        key = { state.services[it].id },
+                    ) { index ->
+                        ServiceRow(service = state.services[index], stale = stale)
+                    }
                 }
             }
         }
@@ -246,5 +265,64 @@ private fun Vital(label: String, fraction: Float, judge: Boolean) {
                 },
             ),
         )
+    }
+}
+
+/**
+ * One service: a status mark, its name, and what it is doing.
+ *
+ * Three encodings of the same fact, exactly as `DESIGN.md` §3 requires and for the reason it
+ * gives — healthy and unknown differ by 1.21:1 in luminance, so anyone who cannot separate
+ * the hues is reading the shape and the word:
+ *
+ *  1. the mark's **colour**, from the palette shared verbatim with the phone
+ *  2. its **shape** — filled when the status is a fact, hollow when it is not
+ *  3. the **label**, which is also what a screen reader announces
+ *
+ * Nothing here asks which service it is.
+ */
+@Composable
+private fun ServiceRow(service: Service, stale: Boolean) {
+    val style = statusStyle(service.health.status, stale)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .then(
+                    if (style.verified) {
+                        Modifier.background(style.content, CircleShape)
+                    } else {
+                        // Hollow, because "we do not have an answer" must not look like an
+                        // answer. The phone draws a dashed ring; at 10dp a ring is all the
+                        // distinction that survives.
+                        Modifier.border(1.dp, style.content, CircleShape)
+                    },
+                ),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = service.name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Activity when there is any, the status word when there is not. An idle
+            // service saying "0 playing" would spend the line on a non-event.
+            Text(
+                text = wearActivityLine(service) ?: style.label,
+                style = MaterialTheme.typography.bodyExtraSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
