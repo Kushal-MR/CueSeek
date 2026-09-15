@@ -19,6 +19,7 @@ import androidx.wear.compose.material3.Text
 import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.design.status.statusStyle
 import dev.cueseek.core.model.Service
+import dev.cueseek.wear.dashboard.ActionUi
 import dev.cueseek.wear.theme.WearType
 
 /**
@@ -37,13 +38,19 @@ import dev.cueseek.wear.theme.WearType
  * stands for the rest, and the count says how many — see [focusedSession] and
  * [focusedTransfer] for which one, and why choosing beats scrolling here.
  *
- * No actions either: those are M5.6, and a destructive control that appeared before its
- * confirmation was designed would be the wrong thing to ship first.
+ * Actions sit at the bottom, after the state that should inform them. Their ceremony comes
+ * from the agent's risk classification rather than from this screen's opinion — see
+ * [ActionButton].
  *
  * Nothing here asks which service it is.
  */
 @Composable
-fun ServiceDetailScreen(service: Service, stale: Boolean) {
+fun ServiceDetailScreen(
+    service: Service,
+    stale: Boolean,
+    action: ActionUi = ActionUi.Idle,
+    onInvoke: (actionId: String, label: String) -> Unit = { _, _ -> },
+) {
     val listState = rememberTransformingLazyColumnState()
     val style = statusStyle(service.health.status, stale)
 
@@ -136,6 +143,59 @@ fun ServiceDetailScreen(service: Service, stale: Boolean) {
                             )
                         }
                     }
+                }
+            }
+
+            if (service.actions.isNotEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                    ) {
+                        when (action) {
+                            is ActionUi.Working -> Text(
+                                "asking the agent…",
+                                style = MaterialTheme.typography.bodyExtraSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            // "Asked", not "Done". The agent returns an acceptance and the
+                            // terminal outcome arrives on a stream this client does not hold,
+                            // so claiming success would assert something nobody observed.
+                            is ActionUi.Accepted -> Text(
+                                "${action.label} — asked",
+                                style = MaterialTheme.typography.bodyExtraSmall,
+                                color = CueSeekStatus.colors.beat,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            is ActionUi.Failed -> Text(
+                                action.message,
+                                style = MaterialTheme.typography.bodyExtraSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            ActionUi.Idle -> Unit
+                        }
+                    }
+                }
+
+                items(
+                    count = service.actions.size,
+                    key = { service.actions[it].id },
+                ) { index ->
+                    val a = service.actions[index]
+                    ActionButton(
+                        action = a,
+                        enabled = action !is ActionUi.Working,
+                        onConfirmed = { onInvoke(a.id, a.label) },
+                    )
                 }
             }
 

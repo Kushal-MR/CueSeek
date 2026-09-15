@@ -75,7 +75,7 @@ for.
 | M5.4a | Dashboard: the verdict and host vitals | M5.3b | ✅ |
 | M5.4b | Dashboard: the service list | M5.4a | ✅ |
 | M5.5 | Service detail | M5.4b | ✅ |
-| M5.6 | Lifecycle actions, with confirmation | M5.5 | ⬜ |
+| M5.6 | Lifecycle actions, with confirmation | M5.5 | ✅ |
 | M5.7 | Host power actions | M5.6 | ⬜ |
 | M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ⬜ |
 | M5.9 | Every state: loading, empty, error, stale | M5.4b | ⬜ |
@@ -475,7 +475,54 @@ session, not five.
 
 ---
 
-### M5.6 — Lifecycle actions, with confirmation
+### M5.6 — Lifecycle actions, with confirmation ✅
+
+**The acceptance criterion, met from the wrist:** `MainPID 9739 → 11833` on a restart, read
+from systemd rather than from the agent's own report — the standard used since M3.1.
+
+The audit log attributes it to the watch, not the phone:
+
+```
+action accepted   service=cron action=restart device=207470f9dc3048cb risk=disruptive
+action accepted   service=cron action=stop    device=207470f9dc3048cb risk=destructive
+```
+
+`207470f9dc3048cb` is the device id M5.3b minted. ADR-0006's per-device attribution, working
+end to end from a watch.
+
+**Both ceremonies observed, including the negative case.** A 600ms press on the destructive
+control did **not** fire — cron stayed `active`. A 1800ms hold did: `inactive`, `MainPID=0`,
+logged `risk=destructive`. A guard nobody has tried to defeat is not a guard.
+
+**State-dependence came from the agent, not from the client.** After the stop the screen
+offered `Start Cron` alone, with `Restart` and `Stop` gone, and read `inactive (dead)` plus
+the agent's reason `"cron.service" is stopped.` The watch decided none of that — ADR-0002
+Amendment 1 did, and this is that behaviour arriving on a second form factor with no server
+change.
+
+**"Asked", not "Done".** The agent answers an invocation with an acceptance; the terminal
+outcome arrives on a stream this client deliberately does not hold (ADR-0004). So the banner
+says `Restart Cron — asked` and the screen then shows what it observed. Claiming success from
+an acceptance would assert something nobody saw — the same class of error as rendering stale
+green.
+
+**`Unrecognised` risk is treated as destructive.** A level this build has never heard of came
+from a newer agent, and guessing it is mild is the one mistake that cannot be undone by
+asking again.
+
+**The hold duration is NOT yet measured**, and the plan said it would be. It is the phone's
+1200ms, with the reasoning recorded in `ActionControls.kt`: the risk a watch adds is not
+longer accidental contact — a sleeve brush does not sustain 1.2 seconds — but a *harder
+deliberate hold*, on a small target, on a raised arm. Lengthening it would trade a sufficient
+safety margin for worse ergonomics. The watch-specific answers are a bigger target, which is
+done, and haptics, which are M5.8. **M5.17 decides whether 1200ms is holdable on a wrist.**
+
+Unlike swipe-to-dismiss and RemoteInput, a synthetic long press *does* drive this, which is
+why both the fire and no-fire cases could be checked here rather than deferred.
+
+The original description follows.
+
+---
 
 Restart, stop and start, state-dependent exactly as the API reports them. Risk classes carry
 across: `disruptive` confirms, `destructive` needs press-and-hold.
