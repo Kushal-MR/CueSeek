@@ -5,7 +5,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,7 +27,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.CircularProgressIndicator
+import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.LinearProgressIndicator
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
@@ -37,6 +41,8 @@ import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.PRESSURE
 import dev.cueseek.core.model.fullest
+import dev.cueseek.wear.power.PowerAccess
+import dev.cueseek.wear.power.powerAccess
 import dev.cueseek.wear.theme.WearType
 
 /**
@@ -61,6 +67,7 @@ import dev.cueseek.wear.theme.WearType
 fun DashboardScreen(
     model: DashboardViewModel = viewModel(),
     onServiceClick: (String) -> Unit = {},
+    onPowerClick: () -> Unit = {},
 ) {
     val ui by model.ui.collectAsStateWithLifecycle()
     val listState = rememberTransformingLazyColumnState()
@@ -88,7 +95,22 @@ fun DashboardScreen(
         }
     }
 
-    ScreenScaffold(scrollState = listState) { contentPadding ->
+    // The way to the machine itself, and the only one. An [EdgeButton] rather than a row in
+    // the roster: it is pinned to the bottom bezel instead of riding the scroll, so reaching
+    // it is a decision rather than the end of a flick — and a service list that contained
+    // "Shut down" would be presenting the machine as one of its own services.
+    //
+    // Absent entirely without the `host.power` grant, which is where this differs from the
+    // phone's greyed menu item. See `powerAccess` for why hiding is right on a wrist and
+    // wrong in a pocket.
+    val loaded = ui as? DashboardUi.Loaded
+    val access = loaded?.let { powerAccess(it.scopes, it.hostActions) } ?: PowerAccess.Ungranted
+
+    // Two scaffolds rather than one with an empty button, because the overload that takes an
+    // edge button reserves the space for it. An ungranted watch would get a permanent gap at
+    // the bottom of the roster — a dead control drawn as nothing at all, which is the one
+    // outcome worse than drawing it greyed.
+    val body: @Composable BoxScope.(PaddingValues) -> Unit = { contentPadding ->
         TransformingLazyColumn(
             state = listState,
             contentPadding = contentPadding,
@@ -147,6 +169,23 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    if (access is PowerAccess.Ungranted) {
+        ScreenScaffold(scrollState = listState, content = body)
+    } else {
+        ScreenScaffold(
+            scrollState = listState,
+            edgeButton = {
+                EdgeButton(
+                    onClick = onPowerClick,
+                    colors = ButtonDefaults.filledTonalButtonColors(),
+                ) {
+                    Text("Machine", maxLines = 1)
+                }
+            },
+            content = body,
+        )
     }
 }
 

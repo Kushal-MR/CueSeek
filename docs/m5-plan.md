@@ -76,7 +76,7 @@ for.
 | M5.4b | Dashboard: the service list | M5.4a | ✅ |
 | M5.5 | Service detail | M5.4b | ✅ |
 | M5.6 | Lifecycle actions, with confirmation | M5.5 | ✅ |
-| M5.7 | Host power actions | M5.6 | ⬜ |
+| M5.7 | Host power actions | M5.6 | ✅ |
 | M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ⬜ |
 | M5.9 | Every state: loading, empty, error, stale | M5.4b | ⬜ |
 | M5.10 | Ambient mode and battery behaviour | M5.9 | ⬜ |
@@ -535,12 +535,72 @@ host — the standard used since M3.1.
 
 ---
 
-### M5.7 — Host power actions
+### M5.7 — Host power actions ✅
 
-Reboot and shut down, if M5.0 granted the scope. Same press-and-hold, same audit trail.
+**It was not the one-paragraph outcome, and the reasoning is in
+[ADR-0014 Amendment 1](adr/0014-watch-pairing-address-handoff.md).** M5.0 made `host.power`
+**not a default** — which is not the same as making it unavailable, and the ADR had already
+written the sentence that decides it: *"An operator who wants it can ask for it by name,
+exactly as on the phone, and press-and-hold still applies."* Press-and-hold only applies to a
+control that exists.
 
-If M5.0 decided the watch does not get `host.power` by default, this phase is **one paragraph
-of documentation and no code** — a complete outcome, not a skipped one.
+Two facts closed the question:
+
+- The agent returns the power actions to **every** caller holding `read`, deliberately, so a
+  client can tell *this agent cannot* apart from *this device was not allowed*
+  (`agent/internal/api/hostpower.go`). The watch's snapshot had been carrying reboot and shut
+  down since M5.4 and dropping them on the floor — an accident of nobody having written the
+  screen, not a policy.
+- Nothing on a watch face distinguishes "correctly withheld" from "accidentally dropped". So
+  the gate is a named function with a case-by-case test rather than a condition buried in a
+  composable.
+
+**What shipped**
+
+| | |
+| --- | --- |
+| Gate | `powerAccess(scopes, hostActions)` → `Ungranted` / `NoneOffered` / `Offered` |
+| Entry | an `EdgeButton` pinned to the bottom bezel, **absent entirely** without the grant |
+| Screen | `HostPowerScreen` — what the machine is busy with, then the agent's actions |
+| Gesture | `ActionButton`, unchanged from M5.6, so `destructive` is the same press-and-hold |
+
+**Three decisions worth keeping.**
+
+*The entry point is hidden, not greyed.* This is the one place the two clients present the
+same permission differently. On the phone a greyed row with an explaining sentence costs
+nothing inside a menu somebody opened on purpose. On 233dp it would occupy the most valuable
+pixels for an explanation that cannot fit beside it, on the device least able to act on it.
+
+*It is an `EdgeButton`, not a row in the roster.* A control that ends a machine must not be
+reachable by momentum — the last flick of a scroll should never land a thumb on it. It is
+also not a service, and a roster containing "Shut down" would present the machine as one of
+its own services that could be restarted and come back.
+
+*`invokePower` is not `invoke` with a different endpoint.* `invoke` waits two seconds and
+re-reads the agent, because observing a result is how a polling client reports one honestly.
+Doing that here would be a defect: a power action that **worked** takes the agent down with
+the machine, so the refresh would fail and the screen would say "Could not reach the agent"
+at the moment everything went right. The success case would be the one that looked broken.
+So it stops at the acceptance and says *"Reboot — asked. The agent will go quiet now."*
+Nothing ever claims "Rebooted"; no client can, because the connection that would have
+reported it is gone.
+
+**Tests:** `HostPowerAccessTest`, 12 cases — the gate per scope combination, and the busy
+line, including that a capability the agent could not read contributes nothing rather than
+zero and that finished transfers are not counted as work a shutdown would interrupt. 236
+client tests, 0 failures.
+
+**Not verified on hardware, and stated rather than implied.** The test VM's bridged adapter
+is attached to a Wi-Fi NIC the host was not connected to on the day, so the agent had no LAN
+address and the watch could not reach it. Both paths are outstanding:
+
+| | |
+| --- | --- |
+| Ungranted | the current watch token, which should show no `Machine` button at all |
+| Granted | re-pair with `-scopes read,service.control,host.power` and reboot the VM from the wrist, confirming it by the machine actually going down |
+
+Neither is a code question, and both belong to **M5.17**, which now carries four deferred
+items rather than three.
 
 ---
 
@@ -667,6 +727,10 @@ Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verificatio
 
 - Paired against the VM **and** the HP host
 - A service restarted, confirmed by `MainPID` on the host
+- **No `Machine` button on a watch without `host.power`** — the default, and the case
+  nothing on screen distinguishes from a bug
+- **The VM rebooted from the wrist** on a watch re-paired with the grant, confirmed by the
+  machine going down rather than by the agent's own report
 - Rotary scrolls; swipe dismisses; haptics fire
 - Tile and complication both installed and updating
 - Ambient behaves for a full hour without the screen burning

@@ -25,10 +25,17 @@ fallback that keeps the claim above true.
 persistent stream on a watch is a battery problem in exchange for latency nobody
 perceives on a glanceable surface (ADR-0004).
 
-**Typically issued `read` and `service.control` only — never `host.power` or
+**Issued `read` and `service.control` by default — not `host.power`, and not
 `devices.manage`.** A device worn in public and unlocked by proximity should not be able
 to shut down a server, nor to revoke the phone you would use to recover. Both restrictions
 are enforced by the agent, so they hold regardless of what the watch UI offers.
+
+**Not a default is not the same as not available.** An operator who asks for `host.power`
+by name gets it, and the watch then offers reboot and shut down behind the same
+press-and-hold a destructive service action uses. Without the grant there is no entry point
+at all — where the phone greys the items out and explains, a 233dp screen has nowhere to put
+the explanation, so it spends the space on something usable
+([ADR-0014 Amendment 1](../../docs/adr/0014-watch-pairing-address-handoff.md)).
 
 ## Planned surface
 

@@ -109,3 +109,43 @@ just the watch. Rejected for M5 as a genuinely new capability with its own secur
 an agent that announces itself is a different threat model from one that must be named, and
 ADR-0001 deliberately puts CueSeek behind a VPN rather than making it findable. Worth its own
 ADR if it is ever wanted.
+
+## Amendments
+
+### Amendment 1 — 2026-09-16: ungranted by default is not the same as unavailable
+
+**What changed.** Nothing about the decision. M5.7 had to read it, the plan had written down
+two possible readings, and this records which one is correct so a later reader does not have
+to reconstruct it.
+
+**Why.** The M5 plan offered M5.7 two outcomes, and said so plainly: reboot and shut down
+*if M5.0 granted the scope*, or **one paragraph of documentation and no code** if it did not.
+
+The decision above is **not a default**, not **not available**. The sentence that settles it
+is in the Decision section:
+
+> An operator who wants it can ask for it by name, exactly as on the phone, and
+> press-and-hold still applies.
+
+"Press-and-hold still applies" is only true of a control that exists. A watch that dropped a
+grant an operator had typed out by name — after reading the warning `cueseekd pair` prints
+for that scope alone — would be quietly overruling them, which is a heavier thing than
+declining to offer a default.
+
+Two facts made the no-code reading untenable in any case:
+
+- **The agent hands the power actions to every caller holding `read`**, deliberately, so that
+  a client can tell "this agent cannot" apart from "this device was not allowed"
+  (`agent/internal/api/hostpower.go`). The watch's snapshot had therefore been carrying
+  reboot and shut down since M5.4 and discarding them — an absence caused by nobody having
+  written the screen, not by a policy.
+- **Silence is indistinguishable from a bug.** Nothing on a watch face separates "correctly
+  withheld" from "accidentally dropped", which is why the gate is now a named function with
+  a test per case rather than a condition inside a composable.
+
+**So M5.7 is scope-gated, not absent.** The watch offers host power when and only when its
+token carries `host.power`, and the entry point is removed entirely without it rather than
+shown greyed as the phone does. That divergence is deliberate and is the one place the two
+clients present the same permission differently: a greyed row plus an explaining sentence
+costs a phone nothing inside a menu somebody opened on purpose, and costs a 233dp screen its
+most valuable pixels for an explanation that cannot fit beside it.

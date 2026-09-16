@@ -7,10 +7,12 @@ import dev.cueseek.core.api.CueSeekApiFactory
 import dev.cueseek.core.data.AgentClients
 import dev.cueseek.core.data.HostRepository
 import dev.cueseek.core.data.ServicesRepository
+import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.ActionStatus
 import dev.cueseek.core.model.ApiResult
 import dev.cueseek.core.model.HostMetrics
 import dev.cueseek.core.model.PairedHost
+import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.Tally
 import dev.cueseek.core.model.verdict
@@ -44,6 +46,17 @@ sealed interface DashboardUi {
         val tally: Tally,
         val services: List<Service>,
         val metrics: HostMetrics?,
+        /**
+         * What the agent offers for the machine itself.
+         *
+         * Carried since M5.4 in the snapshot and dropped here until M5.7, which is the
+         * accident that phase turned into a decision. The agent returns these to every
+         * caller holding `read` on purpose, so their presence says nothing about whether
+         * this device may use them — [scopes] does. See `powerAccess`.
+         */
+        val hostActions: List<Action>,
+        /** This device's grants, as issued at pairing. User experience only; the agent enforces. */
+        val scopes: Set<Scope>,
         val observedAt: Instant,
         /** True once the reading is old enough that it should not be presented as fact. */
         val stale: Boolean,
@@ -132,6 +145,45 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Ask the machine to reboot or shut down.
+     *
+     * # Why this is not [invoke] with a different endpoint
+     *
+     * [invoke] ends by waiting two seconds and re-reading the agent, because observing the
+     * result is the honest way for a polling client to report one. Doing that here would be
+     * a defect rather than a refinement: a power action that **worked** takes the agent down
+     * with the machine, so the refresh would fail, and the screen would report "Could not
+     * reach the agent" at the exact moment everything had gone right. The success case would
+     * be the one that looked broken.
+     *
+     * So this stops at the acceptance and says so. Silence afterwards is the good outcome;
+     * for a reboot the dashboard's next poll finds the agent again a minute later, and for a
+     * shut down it never does — which is also correct, and is what `stale` is for.
+     *
+     * The failure that *can* be reported is the agent refusing outright — an unsupported
+     * platform, a missing polkit grant, or a token without `host.power` on a device whose
+     * cached scopes said otherwise. That last one is why the gate in `powerAccess` is
+     * described as user experience: this call handles a `403` regardless of what the screen
+     * believed.
+     */
+    fun invokePower(actionId: String, label: String) {
+        viewModelScope.launch {
+            val host: PairedHost = hosts.selectedHost.first() ?: return@launch
+            _action.value = ActionUi.Working(label)
+
+            _action.value = when (val result = services.invokeHostAction(host, actionId)) {
+                is ApiResult.Failure -> ActionUi.Failed(label, shortMessage(result.error))
+                is ApiResult.Success ->
+                    if (result.value.status == ActionStatus.Failed) {
+                        ActionUi.Failed(label, "The agent refused it")
+                    } else {
+                        ActionUi.Accepted(label)
+                    }
+            }
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             val host: PairedHost? = hosts.selectedHost.first()
@@ -164,6 +216,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         tally = tally,
                         services = snapshot.services,
                         metrics = snapshot.hostMetrics,
+                        hostActions = snapshot.hostActions,
+                        scopes = host.scopes,
                         observedAt = Instant.now(),
                         stale = false,
                     )

@@ -98,8 +98,20 @@ device you would reach for. A watch paired with `read` and `service.control` mus
 able to lock out your phone.
 
 **Scopes are enforced in the agent, not in the app.** A token without `host.power` is
-refused by the API regardless of what UI produced the request. The client greys those items
-out and says why — that is user experience; the agent's check is the control.
+refused by the API regardless of what UI produced the request. What the clients do with the
+scope is user experience; the agent's check is the control.
+
+The two clients present that particular absence differently, on purpose:
+
+| Client | Without `host.power` |
+| --- | --- |
+| Phone | the power items are greyed out, with a sentence saying the device was not granted it |
+| Watch | there is no way into the machine screen at all |
+
+The phone's version teaches, and costs nothing inside a menu you opened deliberately. On a
+233dp screen there is nowhere for that sentence to live beside a control that will never
+work, so the watch spends the space on something usable instead — and the phone in the same
+pocket still explains it. See ADR-0014 Amendment 1.
 
 ## Devices paired before a scope existed
 
