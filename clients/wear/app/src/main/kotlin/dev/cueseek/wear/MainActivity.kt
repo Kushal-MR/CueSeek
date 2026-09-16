@@ -24,10 +24,13 @@ import dev.cueseek.wear.dashboard.DashboardUi
 import dev.cueseek.wear.dashboard.DashboardViewModel
 import dev.cueseek.wear.detail.ServiceDetailScreen
 import dev.cueseek.wear.pairing.PairingScreen
+import dev.cueseek.wear.power.HostPowerScreen
+import dev.cueseek.wear.power.PowerAccess
+import dev.cueseek.wear.power.powerAccess
 import dev.cueseek.wear.theme.CueSeekWearTheme
 
 /**
- * M5.5: the dashboard, and one service in full.
+ * The dashboard, one service in full, and the machine itself.
  *
  * Routing between paired and unpaired comes from the store rather than from a flag this
  * class remembers — see [RootViewModel] for why that distinction cost a bug.
@@ -97,6 +100,25 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
             DashboardScreen(
                 model = dashboard,
                 onServiceClick = { id -> navController.navigate("$ROUTE_SERVICE/$id") },
+                onPowerClick = { navController.navigate(ROUTE_POWER) },
+            )
+        }
+
+        composable(ROUTE_POWER) {
+            val loaded = ui as? DashboardUi.Loaded
+
+            androidx.compose.runtime.LaunchedEffect(Unit) { dashboard.clearAction() }
+
+            HostPowerScreen(
+                // Recomputed from the current reading rather than passed in at navigation
+                // time, so a revoked scope or an agent that stopped offering power takes
+                // effect on the next poll instead of on the next launch.
+                access = loaded
+                    ?.let { powerAccess(it.scopes, it.hostActions) }
+                    ?: PowerAccess.Ungranted,
+                services = loaded?.services.orEmpty(),
+                action = action,
+                onInvoke = { actionId, label -> dashboard.invokePower(actionId, label) },
             )
         }
 
@@ -135,6 +157,7 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
 
 private const val ROUTE_DASHBOARD = "dashboard"
 private const val ROUTE_SERVICE = "service"
+private const val ROUTE_POWER = "power"
 private const val ARG_SERVICE = "id"
 
 @Preview(device = "id:wearos_large_round", showSystemUi = true)
