@@ -590,17 +590,60 @@ line, including that a capability the agent could not read contributes nothing r
 zero and that finished transfers are not counted as work a shutdown would interrupt. 236
 client tests, 0 failures.
 
-**Not verified on hardware, and stated rather than implied.** The test VM's bridged adapter
-is attached to a Wi-Fi NIC the host was not connected to on the day, so the agent had no LAN
-address and the watch could not reach it. Both paths are outstanding:
+## Verified on the OnePlus Watch 2R — 2026-09-18
+
+Deferred for two days because the test VM's bridged adapter is attached to a Wi-Fi NIC the
+host was not connected to; done on the first evening it was. **Run as an A/B on one build,
+against one agent, with the token's scopes as the only variable.**
 
 | | |
 | --- | --- |
-| Ungranted | the current watch token, which should show no `Machine` button at all |
-| Granted | re-pair with `-scopes read,service.control,host.power` and reboot the VM from the wrist, confirming it by the machine actually going down |
+| Ungranted | scrolled to the end of the roster — **no `Machine` button at the bezel** |
+| Granted | re-paired with `read,service.control,host.power` — **the button is there** |
+| 600ms press | nothing fired; `boot_id` unchanged |
+| 1800ms hold | *"Restart machine — asked. The agent will go quiet now."* |
+| The machine | `boot_id 974761d4… → 933e7416…`, down at t+6s, back at t+18s |
 
-Neither is a code question, and both belong to **M5.17**, which now carries four deferred
-items rather than three.
+```
+host power action accepted       action=reboot action_id=c81840443c71bd98 device=OPWWE234
+host power action handed to logind  action=reboot action_id=c81840443c71bd98
+```
+
+The reboot is confirmed by the kernel's own `boot_id` changing, not by the agent's report —
+the standard used since M3.1, and the only one available here, because the process that would
+have reported success is the one that went down.
+
+### The defect it found, which is the point of doing this at all
+
+**The first build rendered both action descriptions and neither button.** Every unit test
+passed; the gate was correct; the screen was wrong. In `HostPowerScreen` the button and its
+description were emitted as **two siblings inside one lazy item slot**, and a
+`TransformingLazyColumn` item takes a single composable — so the description was drawn and the
+control was not. Fixed by wrapping them in a `Column`.
+
+Nothing short of running it could have caught that. It is not a logic error, it produces no
+warning, and the screen it produces looks deliberate: two calm sentences about what reboot and
+shut down do, on a screen titled "Machine", with no way to do either. **A watch granted
+`host.power` would have had no way to use it, and the app would have looked finished.**
+
+### Also confirmed along the way
+
+- **The address handoff still works.** After clearing the app, the watch showed
+  `192.168.1.10:7777` *"from your phone"* with nothing typed — ADR-0014's flow, and the mono
+  `DataSmall` style holding the address on one line without breaking mid-octet (M5.2's fix).
+- **The watch recovers on its own.** After the reboot it found the agent again on the next
+  poll with no intervention.
+- **RemoteInput still cannot be driven synthetically.** `input text` fills the field; tapping
+  send **clears it instead**. One real tap completes it immediately. Third confirmation, and
+  the reason a person is still needed for any pairing test.
+
+**Correction to an earlier reading in this file's spirit:** the `Nonexistent` fixture's status
+mark is *filled*, not hollow. `unreachable` is a fact the agent established, so it is drawn as
+one; the hollow ring is reserved for `unknown`. An earlier screenshot appeared to show a ring,
+which was the lazy column's edge transform clipping the item, not the status encoding.
+
+**Still owed to M5.17:** whether `HOLD_MILLIS = 1200` is holdable on a raised wrist by a
+person rather than by `input swipe`, and the `now_playing` / `transfers` rendering.
 
 ---
 
@@ -727,10 +770,8 @@ Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verificatio
 
 - Paired against the VM **and** the HP host
 - A service restarted, confirmed by `MainPID` on the host
-- **No `Machine` button on a watch without `host.power`** — the default, and the case
-  nothing on screen distinguishes from a bug
-- **The VM rebooted from the wrist** on a watch re-paired with the grant, confirmed by the
-  machine going down rather than by the agent's own report
+- ~~No `Machine` button without `host.power`, and a reboot from the wrist with it~~ — both
+  done 2026-09-18, recorded under M5.7
 - Rotary scrolls; swipe dismisses; haptics fire
 - Tile and complication both installed and updating
 - Ambient behaves for a full hour without the screen burning
