@@ -108,15 +108,22 @@ fun HostPowerScreen(
                         key = { access.actions[it].id },
                     ) { index ->
                         val power = access.actions[index]
-                        ActionButton(
-                            action = power,
-                            enabled = action !is ActionUi.Working,
-                            onConfirmed = { onInvoke(power.id, power.label) },
-                        )
-                        // The agent's own sentence, under its own button rather than above
-                        // it: it is the half that knows whether this machine comes back on
-                        // its own, and it is read after the label has raised the question.
-                        power.description?.takeIf { it.isNotBlank() }?.let { Note(it) }
+                        // One [Column], not two siblings. A lazy item slot takes a single
+                        // composable, and emitting two put the button and its description in
+                        // the same place — which rendered as the description alone and cost a
+                        // watch to find, because every unit test still passed.
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            ActionButton(
+                                action = power,
+                                enabled = action !is ActionUi.Working,
+                                onConfirmed = { onInvoke(power.id, power.label) },
+                            )
+                            // The agent's own sentence, under its own button rather than
+                            // above it: it is the half that knows whether this machine comes
+                            // back on its own, and it is read after the label has raised the
+                            // question.
+                            power.description?.takeIf { it.isNotBlank() }?.let { Note(it) }
+                        }
                     }
                 }
             }
