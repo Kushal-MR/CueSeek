@@ -30,6 +30,7 @@ import androidx.wear.compose.material3.Text
 import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.ActionRisk
+import dev.cueseek.wear.feedback.rememberCueSeekHaptics
 import kotlinx.coroutines.launch
 
 /**
@@ -79,6 +80,7 @@ internal fun ActionButton(
     onConfirmed: () -> Unit,
 ) {
     var confirming by remember(action.id) { mutableStateOf(false) }
+    val haptics = rememberCueSeekHaptics()
 
     when (action.risk) {
         ActionRisk.Safe -> PlainButton(action.label, enabled, onConfirmed)
@@ -88,7 +90,10 @@ internal fun ActionButton(
                 ConfirmRow(
                     label = action.label,
                     description = action.description,
-                    onConfirm = { confirming = false; onConfirmed() },
+                    // The same commitment the hold's threshold marks, reached by a second
+                    // tap instead of by time. One vocabulary: whatever the ceremony, the
+                    // moment it ends feels the same.
+                    onConfirm = { confirming = false; haptics.committed(); onConfirmed() },
                     onCancel = { confirming = false },
                 )
             } else {
@@ -169,6 +174,7 @@ private fun HoldButton(action: Action, enabled: Boolean, onConfirmed: () -> Unit
     val scope = rememberCoroutineScope()
     val progress = remember(action.id) { Animatable(0f) }
     var holding by remember(action.id) { mutableStateOf(false) }
+    val haptics = rememberCueSeekHaptics()
 
     Box(
         modifier = Modifier
@@ -184,6 +190,11 @@ private fun HoldButton(action: Action, enabled: Boolean, onConfirmed: () -> Unit
                         holding = true
                         val completed = scope.launch {
                             progress.animateTo(1f, tween(HOLD_MILLIS))
+                            // At the threshold, not at the lift. This is the signal that
+                            // says "you can stop pressing now", which is worth nothing if it
+                            // arrives after you already have. See [CueSeekHaptics.committed]
+                            // for what that costs in the cancelled case.
+                            haptics.committed()
                         }
                         // Waits for the finger. tryAwaitRelease returns false when the
                         // gesture is cancelled — a scroll stealing the pointer — and that

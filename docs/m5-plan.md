@@ -27,7 +27,8 @@ stopping for.
 The goal is not a port of the phone app onto a smaller screen. It is an app that a Wear user
 would not immediately identify as a port. That means a specific, checkable list:
 
-- The **rotating side button** scrolls everything scrollable.
+- The **rotating side button** scrolls everything scrollable. (True of the code; **not
+  checkable on this project's watch**, which has no rotary encoder — see M5.8.)
 - **Swipe-to-dismiss** works on every screen, because on Wear that is the back gesture.
 - **Haptics** confirm destructive actions, because a watch is often used without looking.
 - **Ambient mode** does something sensible instead of burning the panel.
@@ -77,7 +78,7 @@ for.
 | M5.5 | Service detail | M5.4b | ✅ |
 | M5.6 | Lifecycle actions, with confirmation | M5.5 | ✅ |
 | M5.7 | Host power actions | M5.6 | ✅ |
-| M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ⬜ |
+| M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ✅ |
 | M5.9 | Every state: loading, empty, error, stale | M5.4b | ⬜ |
 | M5.10 | Ambient mode and battery behaviour | M5.9 | ⬜ |
 | M5.11 | A Tile | M5.4b | ⬜ |
@@ -651,13 +652,74 @@ person rather than by `input swipe`, and the `now_playing` / `transfers` renderi
 
 The phase that separates a Wear app from a shrunk phone app.
 
-- **Rotary input** scrolls every scrollable surface, with the correct fling behaviour.
-- **Swipe-to-dismiss** on every screen — on Wear this *is* back, and an app that swallows it
-  feels broken.
-- **Haptics** on confirmation and on action completion, because a watch is often operated
-  without looking at it.
+**The audit came first, and it changed what this phase is.** Two of the three were already
+true — by library default rather than by decision, which is the same condition M5.7 found and
+the same reason to write it down: an absence nobody chose looks exactly like one somebody
+did.
 
-**Acceptance:** every screen reachable and dismissable using only the crown and a swipe.
+| | state before this phase | what M5.8 did |
+| --- | --- | --- |
+| Rotary | `TransformingLazyColumn` wires `RotaryScrollableDefaults.behavior(state)` and `requestFocusOnHierarchyActive()` itself, and **all four screens use one** | recorded it, and recorded what cannot be verified here |
+| Swipe-to-dismiss | `SwipeDismissableNavHost` covers detail and power; `Theme.DeviceDefault` sets `windowSwipeToDismiss` for the root | recorded it; needs a finger to confirm |
+| Haptics | **nothing, anywhere** | the whole of the code below |
+
+#### Haptics: three events, deliberately only three
+
+A watch is often operated without looking at it — most of why the app exists on one. So the
+wrist carries the facts a glance would otherwise have to: **that a control committed**, and
+**whether the agent took it or refused it**.
+
+| | when | why it is felt |
+| --- | --- | --- |
+| `committed()` | a hold crosses its threshold, or a disruptive action is confirmed | the decision is made; you can let go |
+| `accepted()` | the agent took the request | it is on its way |
+| `refused()` | the agent declined it, or the call failed | it is *not* on its way |
+
+Everything else stays silent — taps, scrolls, navigation, arriving at a screen. A device that
+buzzes at everything communicates nothing: the signal stops being information and becomes
+texture, and then the one buzz that mattered is indistinguishable from the twenty that did
+not.
+
+`refused()` is the row that earns the file. Without it a failed action on a screen nobody is
+looking at is indistinguishable from a successful one, and the watch becomes a thing you have
+to verify on your phone — the opposite of the point. It matters most on the **power** screen,
+where success is silence by design, so a refusal is the only thing there is to report.
+
+**The threshold buzz fires at the threshold, not at the lift.** It is the signal that says
+*stop pressing now*, which is worth nothing if it arrives after you already have. The cost,
+stated rather than hidden: a hold that reaches the threshold and is then cancelled will have
+buzzed for something that did not happen. The alternative is a control you must watch to use,
+on the device least suited to being watched.
+
+The constants are semantic (`GestureThresholdActivate`, `Confirm`, `Reject`), not durations
+chosen here. Hand-rolling amplitudes would mean overruling a vendor's tuning for their own
+motor — and `aw-haptic-hv` on the Watch 2R is not the motor it would have been tuned against.
+
+#### The acceptance criterion was falsified by the hardware
+
+It read: *every screen reachable and dismissable using only the crown and a swipe.*
+
+**The OnePlus Watch 2R has no crown to rotate.** Its input devices, read off the device:
+
+```
+Device 4: sec_touchscreen    Device 3: qpnp_pon
+Device 2: gpio-keys          Device 5: aw-haptic-hv
+```
+
+No `ROTARY_ENCODER` source. The side button is a button. So the criterion as written cannot
+be met on the only watch this project has, and pretending otherwise would put an untestable
+claim in the record.
+
+**Amended acceptance, split by what can actually be established:**
+
+| | how |
+| --- | --- |
+| Every screen scrolls by rotary | **not verifiable on this hardware.** Needs a Wear emulator, which has a rotary control |
+| Every screen dismissable by swipe | a person, on the watch — synthetic swipes cannot drive it |
+| The three haptics fire, and are distinguishable | a person, on a wrist. A buzz cannot be read over ADB |
+
+None of the three can be closed by automation, which is unusual for this project and worth
+saying plainly rather than quietly downgrading.
 
 ---
 
