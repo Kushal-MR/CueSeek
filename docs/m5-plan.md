@@ -721,6 +721,46 @@ claim in the record.
 None of the three can be closed by automation, which is unusual for this project and worth
 saying plainly rather than quietly downgrading.
 
+#### Felt on the wrist — 2026-09-20
+
+Performed by hand rather than by `input swipe`, which is better evidence: the gestures were
+real, and the judgement being made is subjective by nature.
+
+| gesture | ceremony | felt |
+| --- | --- | --- |
+| Restart Cron | tap → confirm | **two buzzes**, second different |
+| Stop Cron | press-and-hold | one at the threshold *while holding*, one **on release** |
+| Restart Nonexistent | tap → confirm, **refused** | two buzzes, *"2nd one stronger"* |
+| Stop Cron, polkit grant removed | hold, **refused** | *"sharper buzz… I felt that it failed"* |
+
+**The refusals were real, not simulated.** `Nonexistent` points at a unit that does not exist,
+and the second was produced by removing `cron.service` from the polkit allowlist — exactly the
+missing-grant failure ADR-0002 describes — leaving the agent healthy throughout. A faked
+transport error would have tested the error path without testing the thing that matters: that
+a refusal the *host layer* produced reaches the wrist.
+
+**"I felt that it failed", without looking.** That is the whole claim this phase makes.
+
+##### A hypothesis the hardware corrected
+
+After the first run — two buzzes on the tap path, *"one longer buzz"* on the hold path — the
+reading was that the threshold and acceptance buzzes were **fusing**, and the fix being
+considered was to delay the outcome buzz so it could not.
+
+**That was wrong, and the second run falsified it.** The operator's own description:
+
+> when i hold it down one buzz comes but when i leave the red button another buzz comes
+
+The two events were always separable. What differs is the *waveform*: `Confirm` is soft
+enough to read as one longer pulse when it follows the threshold closely, and `Reject` is
+sharp enough to stand alone. So the success case feels like one event and the failure case
+feels like two — an asymmetry that was never designed, and is kept because it points the
+right way. **The failure is the one that needs attention, and it is the one that announces
+itself.**
+
+The delay was not implemented. It would have fixed nothing and cost the thing that makes the
+threshold buzz worth having — its immediacy.
+
 ---
 
 ### M5.9 — Every state, designed rather than defaulted
