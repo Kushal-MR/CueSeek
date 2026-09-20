@@ -20,6 +20,7 @@ import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.design.status.statusStyle
 import dev.cueseek.core.model.Service
 import dev.cueseek.wear.dashboard.ActionUi
+import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 import dev.cueseek.wear.theme.WearType
 
 /**
@@ -53,6 +54,11 @@ fun ServiceDetailScreen(
 ) {
     val listState = rememberTransformingLazyColumnState()
     val style = statusStyle(service.health.status, stale)
+
+    // The outcome, felt rather than read. A restart asked for while the wrist is down is the
+    // case this exists for: without it, a refusal is indistinguishable from success until
+    // somebody looks (M5.8).
+    ActionOutcomeHaptics(action)
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(

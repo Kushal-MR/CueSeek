@@ -18,6 +18,7 @@ import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.model.Service
 import dev.cueseek.wear.dashboard.ActionUi
 import dev.cueseek.wear.detail.ActionButton
+import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 
 /**
  * The machine itself: reboot, and shut down.
@@ -52,6 +53,11 @@ fun HostPowerScreen(
     onInvoke: (actionId: String, label: String) -> Unit,
 ) {
     val listState = rememberTransformingLazyColumnState()
+
+    // Felt, not read — and this is the screen where that matters most. A power action's
+    // success is silence by design, so the *refusal* is the only thing there is to report,
+    // and it must not need a glance to notice.
+    ActionOutcomeHaptics(action)
 
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
