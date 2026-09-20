@@ -715,8 +715,8 @@ claim in the record.
 | | how |
 | --- | --- |
 | Every screen scrolls by rotary | **not verifiable on this hardware.** Needs a Wear emulator, which has a rotary control |
-| Every screen dismissable by swipe | a person, on the watch — synthetic swipes cannot drive it |
-| The three haptics fire, and are distinguishable | a person, on a wrist. A buzz cannot be read over ADB |
+| ~~Every screen dismissable by swipe~~ | ✅ **2026-09-20** — swiped right from a service detail back to the dashboard |
+| ~~The three haptics fire, and are distinguishable~~ | ✅ **2026-09-20** — see below |
 
 None of the three can be closed by automation, which is unusual for this project and worth
 saying plainly rather than quietly downgrading.
@@ -732,6 +732,12 @@ real, and the judgement being made is subjective by nature.
 | Stop Cron | press-and-hold | one at the threshold *while holding*, one **on release** |
 | Restart Nonexistent | tap → confirm, **refused** | two buzzes, *"2nd one stronger"* |
 | Stop Cron, polkit grant removed | hold, **refused** | *"sharper buzz… I felt that it failed"* |
+
+**Swipe-to-dismiss works**, confirmed the same way and for the same reason — a right swipe
+from a service detail returned to the dashboard. `input swipe` cannot fire it, so this was
+never going to be closed by anything but a finger. That leaves rotary as the only part of
+M5.8 still unverified, and it is unverifiable here rather than untested: there is no encoder
+to turn.
 
 **The refusals were real, not simulated.** `Nonexistent` points at a unit that does not exist,
 and the second was produced by removing `cron.service` from the polkit allowlist — exactly the
