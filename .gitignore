@@ -97,3 +97,12 @@ desktop.ini
 # Where scripts/release-agent.sh assembles the tarball. Build output, reproducible
 # from any tag, and an 18 MB binary that would be committed by accident exactly once.
 dist/
+
+# ---------- Scratch captures from hardware sessions ----------
+# Screenshots pulled off the watch or the test VM console while verifying a phase.
+# They are how a claim gets checked, not evidence worth keeping: the finding belongs
+# in the plan or a verification record, in words. One slipped into a docs commit on
+# 2026-09-21 via `git add -A`, and one of that session's frames had the VM's sudo
+# password echoed on screen — this one did not, but the next one might.
+.vmshot.png
+.watch.png
