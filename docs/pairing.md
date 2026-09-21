@@ -136,8 +136,48 @@ If you lose a phone and no device holds `devices.manage`, pair something that do
 sudo -u cueseek cueseekd pair -scopes read,devices.manage
 ```
 
+**There is no `cueseekd devices` subcommand**, so that code is redeemed and used over the
+API like any other client. The whole sequence, start to finish:
+
+```bash
+# 1. Redeem the code. Keep the token it returns.
+curl -sX POST http://192.168.1.10:7777/v1/pair \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"UAMJ-DJ7B","device_name":"cleanup","platform":"cli"}'
+
+# 2. See what is paired. `id` is what you revoke by.
+curl -s -H "Authorization: Bearer csk_..." http://192.168.1.10:7777/v1/devices
+
+# 3. Revoke one. 204 means gone.
+curl -sX DELETE -H "Authorization: Bearer csk_..." \
+  http://192.168.1.10:7777/v1/devices/207470f9dc3048cb
+
+# 4. Revoke the credential you just made. A device may revoke itself.
+curl -sX DELETE -H "Authorization: Bearer csk_..." \
+  http://192.168.1.10:7777/v1/devices/<its-own-id>
+```
+
+**Step 4 is not optional housekeeping.** Skipping it leaves a token holding the most
+dangerous scope in the API sitting in the device list indefinitely, used by nothing — which
+is a worse state than the one you opened the terminal to fix. The token is dead the moment
+step 4 returns, and `GET /v1/devices` with it answers `401` afterwards, which is how to check.
+
+Listing needs only `read`; it is revoking that needs `devices.manage`.
+
 If you lose every device, delete `/var/lib/cueseek/cueseek.db` and pair again. That is the
 last resort and it is meant to be: it also erases the audit log.
+
+### Reinstalling an app leaves a row behind
+
+Clearing an app's data or reinstalling it destroys the token on the device — the Keystore key
+it is sealed with does not survive — but **the agent is never told**. The row stays in the
+device list, and after re-pairing you have two entries with the same device name, one of
+which is dead.
+
+That is the scope model working rather than a bug: the agent cannot distinguish a device that
+was wiped from one that is merely switched off, and guessing would mean revoking tokens
+nobody asked it to. Tell them apart by `last_seen_at` — the dead one stops at the moment you
+cleared the app — and revoke it with the sequence above.
 
 ## What is recorded
 
