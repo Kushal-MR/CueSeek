@@ -10,14 +10,17 @@ control they cannot provide themselves.
 **[kushal-mr.github.io/CueSeek](https://kushal-mr.github.io/CueSeek/)** — what it is, what it
 is not, and how to install it, on one page.
 
-> **Status: `v0.1.0` released.** The agent is installable from a signed, self-contained
-> release; the whole path — phone → Tailscale → `cueseekd` → polkit → systemd — has been
-> verified end to end on real hardware. Jellyfin and qBittorrent are supported in full; any
-> other systemd unit is supported for health and lifecycle control. The phone can read the
-> machine's own vitals and reboot or shut it down.
+> **Status: `v0.1.1` released, and installable by a stranger.** The agent and a signed
+> Android APK both ship from the release page; the whole path — phone → Tailscale →
+> `cueseekd` → polkit → systemd — is verified end to end on real hardware, and on a
+> fresh virtual machine that had never seen CueSeek. Jellyfin and qBittorrent are supported
+> in full; any other systemd unit is supported for health and lifecycle control. The phone
+> can read the machine's own vitals and reboot or shut it down.
 >
-> M4 is making it installable by somebody who has never seen the author's machine
-> ([plan](docs/m4-plan.md) · [what has been verified](docs/m4-verification.md)).
+> **M5 is building the Wear OS client** — 11 of 20 phases, running on a real OnePlus Watch
+> 2R: it pairs without the phone holding its token, shows the verdict and the roster,
+> restarts services, and can power the machine off when the operator grants it
+> ([plan](docs/m5-plan.md)). **There is no Wear release artefact yet** — that is M5.16.
 
 ---
 
@@ -85,6 +88,14 @@ It installs as `dev.cueseek.android`; a build made from source installs as
 `dev.cueseek.android.debug`, and the two coexist — so a development build never displaces
 the one you rely on. Android 8.0 or later.
 
+### The watch
+
+**Not released yet.** The Wear OS client is built and runs on real hardware, but signing and
+artefacts are M5.16 — so there is nothing on the release page to sideload, and building from
+source is the only way to run it today. When it ships it will need the phone app installed
+once, to hand the watch the host's address; after that it talks to the agent by itself.
+Wear OS 3 or later.
+
 ## Documentation
 
 | | |
@@ -97,6 +108,8 @@ the one you rely on. Android 8.0 or later.
 | [Configuration](docs/configure.md) | The four blocks, the three decisions per service, and what happens when one is wrong |
 | [Jellyfin](docs/services/jellyfin.md) · [qBittorrent](docs/services/qbittorrent.md) | Per-service setup: the API key, the unit name that is not what the process calls itself, the localhost bypass |
 | [`config.example.yaml`](deploy/config.example.yaml) | The annotated reference — every option, with the reasoning, beside the value |
+| [Wear OS client](clients/wear/README.md) | What the watch is for, why it is standalone at runtime but assisted at setup, and what it deliberately does not do |
+| [M5 plan](docs/m5-plan.md) | The Wear milestone phase by phase, each with what was verified on the watch and what could not be |
 | [Security model](SECURITY.md) | What CueSeek can and cannot do to a machine, the risks knowingly accepted, and how to verify both |
 | [Deployment](deploy/README.md) | The polkit rule, the hardened unit, and the packaging |
 | [Architecture decisions](docs/adr/) | Every significant decision, its cost, and what was rejected. **Start here if you are reading the code.** |
@@ -104,10 +117,11 @@ the one you rely on. Android 8.0 or later.
 
 ## What works today
 
-Three milestones are complete. Everything below was verified on real hardware against the
-real agent, not against mocks — the records are in
-[`docs/m2-p6-verification.md`](docs/m2-p6-verification.md) and
-[`docs/m3-verification.md`](docs/m3-verification.md).
+Four milestones are complete and a fifth is underway. Everything below was verified on real
+hardware against the real agent, not against mocks — the records are in
+[`docs/m2-p6-verification.md`](docs/m2-p6-verification.md),
+[`docs/m3-verification.md`](docs/m3-verification.md) and
+[`docs/m4-verification.md`](docs/m4-verification.md).
 
 **The agent — `cueseekd`.** Runs as an unprivileged `cueseek` user on a systemd host.
 Serves the REST contract and an SSE event stream, stores paired devices and hashed tokens
@@ -124,6 +138,23 @@ trailing menu carries the web interface and its lifecycle actions, gated by the 
 agent assigns. The host menu carries reboot and shut down, which name what they will
 interrupt before you hold the button. Outcomes arrive as stream events rather than being
 assumed from the acknowledgement.
+
+**The Wear OS client — in progress, and already the point of the architecture.** It pairs
+against the agent *directly* and mints its own token: the phone hands over only the host's
+address over the Wearable Data Layer, because typing `192.168.1.10` on a round screen is
+where people give up. No credential ever passes through the phone, so the watch has its own
+row, its own scopes and its own revocation
+([ADR-0014](docs/adr/0014-watch-pairing-address-handoff.md)). It polls rather than holding
+the stream, because nothing background-critical may depend on SSE and a watch radio is the
+case that rule was written for.
+
+It shares the tokens and the verdict with the phone and **none of the components** — Wear
+Material 3 is a different library, and a shrunk phone layout is the most common way a Wear
+app looks wrong. The dashboard leads with the verdict because that is the whole question at
+arm's length; the detail screen shows *one* session or transfer rather than a list, since
+twelve rows is a flick on a thumb and twelve crown rotations on a wrist. Actions carry the
+same risk ceremony the phone uses, and the wrist gets three haptics and no more: a hold
+crossing its threshold, the agent accepting, the agent refusing.
 
 **What it refuses to do** is as deliberate as what it does. It never shows stale data as
 current: if the agent goes quiet the client degrades to `unknown` from a clock, never from
@@ -151,17 +182,18 @@ machine and reading CPU/disk/thermals are all host-level operations that no serv
 can perform. The agent is therefore mandatory, not an optimisation.
 
 ```
-Phone / Wear ──Tailscale──▶ cueseekd  (user: cueseek, no sudo)
-                              │
-                              ├─ api/      REST + SSE · token auth · scopes
-                              ├─ health/   computed overall status
-                              ├─ store/    SQLite: devices, token hashes, audit log
-                              ├─ host/     HostController ──D-Bus──▶ systemd / logind
-                              │                                    ▲ polkit rule
-                              └─ adapters/ registry, one goroutine per adapter
-                                    ├─ jellyfin    ──HTTP───▶ Jellyfin
-                                    ├─ qbittorrent ──HTTP───▶ qBittorrent
-                                    └─ systemd     ──D-Bus──▶ any unit
+Phone ──────Tailscale────┐
+                         ├──▶ cueseekd  (user: cueseek, no sudo)
+Watch ──────LAN / VPN────┘      │
+                                ├─ api/      REST + SSE · token auth · scopes
+                                ├─ health/   computed overall status
+                                ├─ store/    SQLite: devices, token hashes, audit log
+                                ├─ host/     HostController ──D-Bus──▶ systemd / logind
+                                │                                    ▲ polkit rule
+                                └─ adapters/ registry, one goroutine per adapter
+                                      ├─ jellyfin    ──HTTP───▶ Jellyfin
+                                      ├─ qbittorrent ──HTTP───▶ qBittorrent
+                                      └─ systemd     ──D-Bus──▶ any unit
 ```
 
 ### Two tiers of service support
@@ -227,8 +259,8 @@ simply does not exist. See [ADR-0001](docs/adr/0001-vpn-only-remote-access.md).
 | `agent/internal/health/` | Aggregates per-service health into one overall status, with reasons. |
 | `agent/internal/host/` | `HostController`; systemd/logind over D-Bus. |
 | `agent/internal/store/` | SQLite: device registry, token hashes, audit log. |
-| `clients/android/` | Android phone client (Compose). |
-| `clients/wear/` | Wear OS client. Placeholder until M5. |
+| `clients/android/` | Android phone client (Compose), and the four shared `core` modules both clients build on. |
+| `clients/wear/` | Wear OS client (Wear Compose Material 3). A project in the `clients/android` build, not its own — see `settings.gradle.kts`. |
 | `deploy/` | systemd unit, polkit rule, install script, packaging. |
 | `docs/adr/` | Architecture Decision Records. Start here. |
 | `docs/DESIGN.md` | The design system: palette, type, shape, motion, and the rules behind them. |
@@ -257,12 +289,17 @@ prose — the file a designer, a contributor or a design tool should be handed f
 | **M1** | Agent: pairing, scoped tokens, Jellyfin health + restart | ✅ Done — contract, store, API, host control, adapters, SSE stream and [deployment](deploy/) |
 | **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
 | **M3** | qBittorrent, `web_ui`, activity, host metrics, power actions | ✅ Done — nine phases, each verified on hardware as it landed ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). A second adapter reached the phone with **zero client changes**, and the reboot was confirmed by a changed kernel boot id |
-| **M4** | Productization: licence, neutral defaults, the `systemd` adapter, `cueseekd check`, released artefacts, documentation | 🔨 In progress — [plan](docs/m4-plan.md). Proven by installing on a machine that has never seen CueSeek |
-| **M5** | Wear OS standalone client, tiles and complications | ⬜ |
-| **M6** | A third adapter, used to measure whether the abstraction held | ⬜ |
+| **M4** | Productization: licence, neutral defaults, the `systemd` adapter, `cueseekd check`, released artefacts, documentation | ✅ Done — [plan](docs/m4-plan.md) · [record](docs/m4-verification.md). Proven by installing on a fresh VM that had never seen CueSeek, which found a defect the development host was structurally incapable of showing |
+| **M5** | Wear OS standalone client, tiles and complications | 🔨 In progress — **11 of 20 phases** ([plan](docs/m5-plan.md)). Pairing, dashboard, service detail, lifecycle and host power all run on a real watch; states, tile, complication, accessibility and release remain |
+| **M6** | The website — the real one, replacing M4.9's deliberately plain placeholder | ⬜ |
+| **M7** | A third adapter, used to measure whether the abstraction held | ⬜ |
 
-M4 was previously the Wear milestone; the renumber and its reasoning are
-[ADR-0011 Amendment 2](docs/adr/0011-sequencing-spike-then-slice.md).
+The numbering has moved twice. M4 was once the Wear milestone
+([ADR-0011 Amendment 2](docs/adr/0011-sequencing-spike-then-slice.md)), and the website was
+inserted as M6 with the third adapter pushed to M7
+([Amendment 4](docs/adr/0011-sequencing-spike-then-slice.md)). That ADR states plainly that
+a third slip of the adapter measurement would mean the sequencing rule is failing at its one
+job.
 
 
 ## Development
