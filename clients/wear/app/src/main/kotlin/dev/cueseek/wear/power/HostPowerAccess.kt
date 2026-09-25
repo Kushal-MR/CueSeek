@@ -83,6 +83,37 @@ fun powerAccess(scopes: Set<Scope>, hostActions: List<Action>): PowerAccess = wh
  * is running" would be a claim about services whose activity the agent could not read
  * either, and this cannot tell those two apart.
  */
+/**
+ * What the machine's power screen may claim about what it is about to interrupt.
+ *
+ * Three outcomes, and the middle one is why this is a function rather than an `if`:
+ *
+ * | | |
+ * | --- | --- |
+ * | [BusyClaim.Unknown] | the reading has aged out — say so |
+ * | [BusyClaim.Busy] | something is running, and here is what |
+ * | [BusyClaim.Quiet] | asked, and nothing is running — say nothing |
+ *
+ * **Stale is not the same as quiet, and collapsing them is the bug worth a test.** Both
+ * would render as an empty line, and on a screen whose buttons end a machine, "nothing is
+ * running" and "I have no idea what is running" are the two sentences that must never be
+ * confused. The first invites the button; the second should give pause.
+ */
+sealed interface BusyClaim {
+    /** The reading is too old to claim anything from. */
+    data object Unknown : BusyClaim
+
+    /** Nothing is running, as of a reading recent enough to believe. */
+    data object Quiet : BusyClaim
+
+    data class Busy(val summary: String) : BusyClaim
+}
+
+fun busyClaim(services: List<Service>, stale: Boolean): BusyClaim = when {
+    stale -> BusyClaim.Unknown
+    else -> wearBusySummary(services)?.let(BusyClaim::Busy) ?: BusyClaim.Quiet
+}
+
 fun wearBusySummary(services: List<Service>): String? {
     val playing = services.sumOf { it.nowPlaying?.sessions ?: 0 }
     val transferring = services.sumOf { it.transfers?.active ?: 0 }

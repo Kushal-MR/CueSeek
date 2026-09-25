@@ -22,6 +22,7 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import dev.cueseek.wear.dashboard.DashboardScreen
 import dev.cueseek.wear.dashboard.DashboardUi
 import dev.cueseek.wear.dashboard.DashboardViewModel
+import dev.cueseek.wear.dashboard.rememberStaleness
 import dev.cueseek.wear.detail.ServiceDetailScreen
 import dev.cueseek.wear.pairing.PairingScreen
 import dev.cueseek.wear.power.HostPowerScreen
@@ -92,6 +93,11 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
     val ui by dashboard.ui.collectAsStateWithLifecycle()
     val action by dashboard.action.collectAsStateWithLifecycle()
 
+    // One clock for every screen. Hoisted here at M5.9 because the detail screen had been
+    // receiving a hardcoded `false` since M5.5 — see [rememberStaleness] for why that was
+    // worse on the screen you act from than on the one you read.
+    val stale by rememberStaleness((ui as? DashboardUi.Loaded)?.observedAt)
+
     SwipeDismissableNavHost(
         navController = navController,
         startDestination = ROUTE_DASHBOARD,
@@ -99,6 +105,7 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
         composable(ROUTE_DASHBOARD) {
             DashboardScreen(
                 model = dashboard,
+                stale = stale,
                 onServiceClick = { id -> navController.navigate("$ROUTE_SERVICE/$id") },
                 onPowerClick = { navController.navigate(ROUTE_POWER) },
             )
@@ -117,6 +124,9 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
                     ?.let { powerAccess(it.scopes, it.hostActions) }
                     ?: PowerAccess.Ungranted,
                 services = loaded?.services.orEmpty(),
+                // Staleness matters more here than anywhere. Everything on this screen is a
+                // decision about the whole machine, taken from a reading that may be dead.
+                stale = stale,
                 action = action,
                 onInvoke = { actionId, label -> dashboard.invokePower(actionId, label) },
             )
@@ -144,7 +154,7 @@ private fun PairedApp(dashboard: DashboardViewModel = viewModel()) {
 
                 ServiceDetailScreen(
                     service = service,
-                    stale = false,
+                    stale = stale,
                     action = action,
                     onInvoke = { actionId, label ->
                         dashboard.invoke(service.id, actionId, label)

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
@@ -49,6 +50,16 @@ import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 fun HostPowerScreen(
     access: PowerAccess,
     services: List<Service>,
+    /**
+     * Whether the reading these controls were drawn from has aged out.
+     *
+     * Not a lock. The operator owns the machine and may have excellent reasons to shut it
+     * down on a reading they know is old — refusing would make the tool argue with the
+     * person it exists to serve (ADR-0002 Amendment 2). What it changes is the **claim**:
+     * "Right now: 2 playing" becomes a lie the moment the reading dies, so it is withdrawn
+     * and replaced with the fact that nothing recent is known.
+     */
+    stale: Boolean,
     action: ActionUi,
     onInvoke: (actionId: String, label: String) -> Unit,
 ) {
@@ -93,18 +104,27 @@ fun HostPowerScreen(
                     // operator owns this box and may have excellent reasons to shut it down
                     // mid-transcode, and a tool that argued would be arguing with the person
                     // it exists to serve (ADR-0002 Amendment 2).
-                    wearBusySummary(services)?.let { busy ->
-                        item {
-                            Text(
-                                text = "Right now: $busy",
-                                style = MaterialTheme.typography.bodyExtraSmall,
-                                color = CueSeekStatus.colors.degraded,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 4.dp),
+                    when (val claim = busyClaim(services, stale)) {
+                        // Said rather than omitted: silence here would read as "nothing is
+                        // running", which is the one thing this screen must never imply
+                        // when it does not know. The buttons below still work.
+                        BusyClaim.Unknown -> item {
+                            Note(
+                                text = "Last reading is out of date — what this would interrupt is unknown.",
+                                color = CueSeekStatus.colors.unknown,
                             )
                         }
+
+                        is BusyClaim.Busy -> item {
+                            Note(
+                                text = "Right now: ${claim.summary}",
+                                color = CueSeekStatus.colors.degraded,
+                            )
+                        }
+
+                        // Deliberately nothing. "Nothing is running" would be a claim about
+                        // services whose activity the agent could not read either.
+                        BusyClaim.Quiet -> Unit
                     }
 
                     item { PowerOutcome(action) }
@@ -186,11 +206,15 @@ private fun PowerOutcome(action: ActionUi) {
 }
 
 @Composable
-private fun Note(text: String) {
+private fun Note(text: String, color: Color = Color.Unspecified) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodyExtraSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (color == Color.Unspecified) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            color
+        },
         textAlign = TextAlign.Center,
         modifier = Modifier
             .fillMaxWidth()
