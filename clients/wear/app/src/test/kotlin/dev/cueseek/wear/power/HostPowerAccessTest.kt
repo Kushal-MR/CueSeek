@@ -159,6 +159,40 @@ class HostPowerAccessTest {
         assertNull(wearBusySummary(listOf(service(transfers = settled))))
     }
 
+    // ------------------------------------------------------------------ the claim (M5.9)
+
+    /**
+     * The distinction this whole type exists for. Both render as an empty line, and on a
+     * screen whose buttons end a machine, *"nothing is running"* and *"I have no idea what
+     * is running"* are the two sentences that must never be confused.
+     */
+    @Test
+    fun `a stale reading is not the same as a quiet machine`() {
+        val idle = listOf(service())
+        assertEquals(BusyClaim.Quiet, busyClaim(idle, stale = false))
+        assertEquals(BusyClaim.Unknown, busyClaim(idle, stale = true))
+    }
+
+    /** Staleness withdraws the claim rather than qualifying it. A count from a dead reading is not a count. */
+    @Test
+    fun `a stale reading withdraws a busy summary it would otherwise have made`() {
+        val busy = listOf(service(nowPlaying = playing(2)))
+        assertEquals(BusyClaim.Busy("2 playing"), busyClaim(busy, stale = false))
+        assertEquals(BusyClaim.Unknown, busyClaim(busy, stale = true))
+    }
+
+    @Test
+    fun `a fresh reading reports what is running`() {
+        val mixed = listOf(service(nowPlaying = playing(1)), service(transfers = transferring(2)))
+        assertEquals(BusyClaim.Busy("1 playing · 2 transferring"), busyClaim(mixed, stale = false))
+    }
+
+    /** No services at all is quiet, not unknown — the agent answered, and the answer was nothing. */
+    @Test
+    fun `an empty roster is quiet rather than unknown`() {
+        assertEquals(BusyClaim.Quiet, busyClaim(emptyList(), stale = false))
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     private fun service(

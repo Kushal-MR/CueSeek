@@ -79,7 +79,7 @@ for.
 | M5.6 | Lifecycle actions, with confirmation | M5.5 | ✅ |
 | M5.7 | Host power actions | M5.6 | ✅ |
 | M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ✅ |
-| M5.9 | Every state: loading, empty, error, stale | M5.4b | ⬜ |
+| M5.9 | Every state: loading, empty, error, stale | M5.4b | ✅ |
 | M5.10 | Ambient mode and battery behaviour | M5.9 | ⬜ |
 | M5.11 | A Tile | M5.4b | ⬜ |
 | M5.12 | A Complication | M5.4b | ⬜ |
@@ -769,20 +769,95 @@ threshold buzz worth having — its immediacy.
 
 ---
 
-### M5.9 — Every state, designed rather than defaulted
+### M5.9 — Every state, designed rather than defaulted ✅
 
 Four states per screen, each written on purpose:
 
-| State | What it must not do |
-| --- | --- |
-| Loading | show a blank screen |
-| Empty | look like an error |
-| Error | show a stack trace or a bare code |
-| **Stale** | show confident green while the agent is unreachable |
+| State | What it must not do | outcome |
+| --- | --- | --- |
+| Loading | show a blank screen | a spinner **and a sentence** — a bare spinner does not say whether the app is thinking or the agent is slow |
+| Empty | look like an error | *"No services configured. Add them on the host."* — an instruction, not a fault |
+| Error | show a stack trace or a bare code | the agent's own words, shortened for a wrist, plus **Try again** |
+| **Stale** | show confident green while the agent is unreachable | **it was doing exactly that — see below** |
 
-Stale matters most. The client degrades to `unknown` from its own clock rather than trusting
-the connection to notice its own death — the phone's behaviour, and a watch radio sleeps far
-more aggressively.
+#### The defect this phase existed to catch
+
+`ServiceDetailScreen` had been receiving **`stale = false`, hardcoded**, since M5.5. The
+dashboard computed staleness correctly and kept it to itself; every screen reached *through*
+the dashboard was told the reading was fresh, forever.
+
+So a service detail could sit on screen showing a confident green **Running** with the agent
+dead and nothing to say so — the precise failure the whole staleness design exists to
+prevent, reintroduced one screen down.
+
+**It is worse there than on the dashboard, because the detail screen is where you act.**
+Deciding to restart something from a reading two minutes dead is a different class of mistake
+from merely reading one. The power screen had no notion of staleness at all, and it is the
+screen where a wrong reading costs the most.
+
+The clock is now hoisted to `rememberStaleness`, owned by the one composable all three
+screens share. Still composable scope rather than the ViewModel — it stops when the app is
+off screen, because a ticker behind a dark panel spends battery correcting a display nobody
+is looking at. The old comment justifying its old home is quoted in the new file, because it
+was *right* when the dashboard was the only screen, and it stopped being right silently.
+
+#### Stale on the power screen withdraws the claim rather than blocking the action
+
+`busyClaim(services, stale)` returns one of three things, and the middle one is why it is a
+function rather than an `if`:
+
+| | |
+| --- | --- |
+| `Unknown` | the reading aged out — *"Last reading is out of date — what this would interrupt is unknown."* |
+| `Busy` | something is running, and here is what |
+| `Quiet` | asked, and nothing is running — say nothing |
+
+**Stale is not the same as quiet, and collapsing them is the bug worth a test.** Both would
+render as an empty line, and on a screen whose buttons end a machine, *"nothing is running"*
+and *"I have no idea what is running"* are the two sentences that must never be confused. The
+first invites the button; the second should give pause.
+
+The buttons still work either way. The operator owns the machine and may have excellent
+reasons to act on a reading they know is old; refusing would make the tool argue with the
+person it exists to serve (ADR-0002 Amendment 2).
+
+#### Verified on the watch — 2026-09-25
+
+The agent was stopped so nothing could refresh the reading, then the clock was allowed to run
+out.
+
+| | before | after 90s |
+| --- | --- | --- |
+| Service detail | **Running**, green | **Unverified**, grey |
+| Roster rows | filled marks, "Running" | **hollow** marks, "Unverified" |
+| Machine screen | *"Right now: …"* | *"Last reading is out of date…"* |
+
+All three encodings move together — colour, shape and word — which is what `DESIGN.md` §3
+requires and why the roster is still readable by somebody who cannot separate the hues.
+
+**Error and recovery**: relaunched cold against a dead agent → *"Could not reach the agent"*
+with **Try again**; agent restarted, button tapped, dashboard live again.
+
+#### A layout defect only the device could show
+
+The error state first drew as **`ould not reach the agen`** — clipped at both ends.
+
+A round screen is not a rectangle with the corners missing. At the top of a 466px circle the
+chord is far shorter than the screen is wide, and a full-width line drawn there runs off the
+glass. **Horizontal padding did not fix it** — the content had to move down to where the
+circle is wide. Now `fillMaxWidth(0.78f)` with a 40dp top inset, measured on the device
+rather than derived.
+
+Every state test so far had been a logic question. This one was pure geometry, and no unit
+test, screenshot test at rectangular sizes, or amount of reading would have produced it.
+
+**Not verified on hardware: the empty state.** Producing it needs an agent with no services,
+and the attempt to edit the VM's config into that shape broke the YAML — the agent refused
+to start with `parse config: yaml: line 22: did not find expected key`, which is itself the
+config validation behaving correctly. The fixture was restored rather than cut at further.
+The code path is two lines and reads correctly; it belongs to **M5.17**, and it matters more
+than its size suggests, because `services: []` is what ships and therefore what every new
+operator sees first.
 
 ---
 

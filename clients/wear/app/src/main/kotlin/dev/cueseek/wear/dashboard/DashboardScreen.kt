@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.EdgeButton
@@ -66,6 +67,7 @@ import dev.cueseek.wear.theme.WearType
 @Composable
 fun DashboardScreen(
     model: DashboardViewModel = viewModel(),
+    stale: Boolean = false,
     onServiceClick: (String) -> Unit = {},
     onPowerClick: () -> Unit = {},
 ) {
@@ -75,25 +77,6 @@ fun DashboardScreen(
     // The whole poll schedule. A watch screen is on for seconds at a time, and a timer
     // behind a dark panel would spend battery producing readings nobody sees (ADR-0004).
     LaunchedEffect(Unit) { model.refresh() }
-
-    // Staleness is a function of the clock, not of the fetch that produced the reading, so
-    // it is re-evaluated while the screen is up rather than fixed at load. A reading taken
-    // 30 seconds before you raised your wrist is fine; the same reading two minutes later
-    // is not, and nothing new arrives to say so.
-    //
-    // The ticker lives here rather than in the ViewModel so it stops when the screen does —
-    // this is the surface it exists to correct, and nothing off-screen needs it.
-    val observedAt = (ui as? DashboardUi.Loaded)?.observedAt
-    val stale by produceState(initialValue = false, key1 = observedAt) {
-        if (observedAt == null) {
-            value = false
-            return@produceState
-        }
-        while (true) {
-            value = DashboardViewModel.isStale(observedAt)
-            delay(5_000)
-        }
-    }
 
     // The way to the machine itself, and the only one. An [EdgeButton] rather than a row in
     // the roster: it is pinned to the bottom bezel instead of riding the scroll, so reaching
@@ -117,16 +100,23 @@ fun DashboardScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             when (val state = ui) {
+                // Never a blank screen, and never a bare spinner either: a spinner alone
+                // does not say whether the app is thinking or the agent is slow.
                 DashboardUi.Loading -> item {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(6.dp),
+                        // Same bezel inset as the error state, for the same reason.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp),
                     ) {
                         CircularProgressIndicator()
                         Text(
                             "reading the agent…",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }
@@ -139,18 +129,61 @@ fun DashboardScreen(
                     )
                 }
 
+                // The agent's own words, already shortened for a wrist by `shortMessage` —
+                // never a status code and never a stack trace. Below it, the one thing that
+                // is actually actionable from here: ask again.
                 is DashboardUi.Failed -> item {
-                    Text(
-                        state.message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        // Pushed down and narrowed, because a round screen is not a
+                        // rectangle with corners missing: at the top of a 466px circle the
+                        // chord is far shorter than the screen is wide, so a full-width line
+                        // drawn there runs off the glass at both ends. "Could not reach the
+                        // agent" rendered as "ould not reach the agen", and padding alone
+                        // did not fix it — the content had to move to where the circle is
+                        // wide. Measured on the device, not derived.
+                        modifier = Modifier
+                            .fillMaxWidth(0.78f)
+                            .padding(top = 40.dp),
+                    ) {
+                        Text(
+                            state.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
+                        Button(
+                            onClick = { model.refresh() },
+                            colors = ButtonDefaults.filledTonalButtonColors(),
+                        ) {
+                            Text("Try again", maxLines = 1)
+                        }
+                    }
                 }
 
                 is DashboardUi.Loaded -> {
                     item { Verdict(state.copy(stale = stale)) }
                     item { Vitals(state.metrics) }
+
+                    // Configured nothing, which is a working install rather than a fault:
+                    // `services: []` is what ships, and the machine's own vitals above need
+                    // no configuration and no privilege. So this says what is true and
+                    // points at the fix, in the register of an instruction rather than an
+                    // error — it must not look like the agent is broken, because it is not.
+                    if (state.services.isEmpty()) {
+                        item {
+                            Text(
+                                text = "No services configured.\nAdd them on the host.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp),
+                            )
+                        }
+                    }
 
                     // The roster, keyed by service id so recomposition is stable when the
                     // agent reorders. Rendered from capabilities and health only -- what
