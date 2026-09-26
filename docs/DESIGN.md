@@ -571,5 +571,10 @@ meaning reads unaided. If it is ever reconsidered, that is the question to start
 **Verified on the OnePlus Watch 2R**: the sweep gradient renders as designed, the near-black
 tile shows as a faint disc against the launcher's pure black — the accepted cost, visible and
 modest — the splash is the mark floating on near-black, and the watch's circular crop leaves
-every part intact. **Not yet seen on
-a phone launcher or as a themed icon.**
+every part intact.
+
+**Verified on the phone (Android 16, themed icons on)**: App Info draws the flat monochrome
+layer correctly — the whole mark, in the system's themed greyscale. The phone's *launcher* kept
+showing a stale cached icon for the debug build; the M5.13 record explains how that was told
+apart from a render failure. The graded foreground as a phone launcher icon is unseen, since it
+only appears with themed icons switched off.

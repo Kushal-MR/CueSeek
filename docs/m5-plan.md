@@ -1071,14 +1071,19 @@ M5.17.
 
 ---
 
-### M5.13 — Identity: icon, name, launcher, splash ✅ (watch verified; phone pending)
+### M5.13 — Identity: icon, name, launcher, splash ✅
 
 The unglamorous phase that decides whether the app looks finished.
 
-**It replaced pure boilerplate.** Both apps shipped the Android Studio template: the stock
-`#3DDC84` tile and a circle containing a **play triangle** — which reads "media player", in an
-app whose README says it is not a media client. The phone's themed icon was the play triangle
-too, because its `<monochrome>` pointed at the foreground.
+**It replaced placeholders, and two different ones.** The phone shipped the Android Studio
+template: the **Android robot** on the stock `#3DDC84` tile — and because its `<monochrome>`
+pointed at the foreground, the robot was its themed icon too. The watch had a placeholder of
+its own: a green circle containing a **play triangle**, which reads "media player" in an app
+whose README says it is not a media client.
+
+*An earlier draft of this record said both apps showed the play triangle. That was written
+from the watch's file and assumed for the phone's; the phone's home screen showed the robot,
+and `git show` confirmed it.*
 
 **The mark is "Swell"**: a dial, open at the bottom, that swells from a hairline into a round
 handle at 1:30 and tapers away after it. A dial is something you read and something you turn
@@ -1118,8 +1123,36 @@ circle.
 Measured rather than looked at, because "does not flash white" is a claim about a few hundred
 milliseconds that a screenshot taken afterwards cannot make.
 
-**Not yet verified: the phone** — its launcher, and the themed icon, which is the only place
-the flat monochrome layer is drawn at full size.
+#### Verified on the phone — 2026-09-26, and a cache that nearly looked like a bug
+
+The phone (OnePlus, **Android 16**) runs **themed icons**, so it draws the flat monochrome
+layer rather than the graded one — the most important thing to check there.
+
+**Its launcher kept showing the Android robot for the new build.** That had two explanations
+that look identical, and they were separated rather than guessed between:
+
+| | if it were this | what was seen |
+| --- | --- | --- |
+| a render failure | the launcher cannot draw the new icon and falls back to Android's default — also a robot | — |
+| **a stale cache** | the launcher is still showing the debug app's *old* icon, which was the robot | ✅ |
+
+The installed APK was pulled and inspected: the graded foreground, the tile and the new
+`ic_launcher_monochrome` are all present. Then **App Info, which draws the icon from the package
+and bypasses the launcher's cache, showed the Swell mark in themed greyscale** — the monochrome
+layer rendering correctly, on the device that uses it.
+
+So the build is right and the OxygenOS launcher's cache is stale. Restarting the launcher and
+toggling the package to force a `PACKAGE_CHANGED` broadcast both failed to clear it. **The
+likely cause is that a debug build keeps one `versionCode` forever**, so a launcher that keys
+its cache on the version never notices the icon changed. The next release's new `versionCode`
+should clear it; a reboot may too. Clearing the launcher's data would certainly work and
+would also wipe the home screen, so it was not done.
+
+**The released v0.1.1 app still shows the robot, correctly.** An installed release only gains
+the new icon from a new release, which is M5.16.
+
+**Not verified on the phone:** the graded foreground as a launcher icon, which only appears
+with themed icons switched off.
 
 ---
 
