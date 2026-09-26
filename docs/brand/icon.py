@@ -66,15 +66,25 @@ MARK = f"{SWELL} {TAIL} {HANDLE}"
 
 # ---------------------------------------------------------------------------- colour
 # All from DESIGN.md's dark scheme. One hue; the grade is lightness only.
-TILE = "#FF344E38"      # primaryContainer
-BRIGHT = "#FFCDE8CF"    # onPrimaryContainer -- the handle, and the swell's thick end
-QUIET = "#FF79937C"     # onPrimaryContainer at ~45% over the tile -- both hairline ends
+#
+# The tile is the app's own page colour, near-black. Deep green #1D3722 and primaryContainer
+# #344E38 were both tried; near-black was chosen knowing its cost -- on a dark wallpaper the
+# tile's edge disappears and the mark carries the icon alone -- because opening the app then
+# continues the icon's background instead of changing it. Do not "fix" this back to green.
+TILE = "#FF0E1210"      # background / surface
+BRIGHT = "#FFCDE8CF"    # onPrimaryContainer: the handle, and the swell's thick end
 
 
 def lerp(a, b, t):
     ca = [int(a[i:i + 2], 16) for i in (3, 5, 7)]
     cb = [int(b[i:i + 2], 16) for i in (3, 5, 7)]
     return "#FF" + "".join(f"{round(x + (y - x) * t):02X}" for x, y in zip(ca, cb))
+
+
+# Both hairline ends: the mark at 45% over the tile. Derived rather than written down, because
+# it depends on the tile -- it was #79937C over the green, and a hard-coded value would have
+# quietly gone on describing a tile that no longer exists.
+QUIET = lerp(TILE, BRIGHT, 0.45)
 
 
 # Android's sweep gradient starts at 3 o'clock and runs clockwise -- the same convention as the
@@ -131,7 +141,7 @@ FILES = {
     f"{PHONE}/drawable/ic_launcher_foreground.xml": graded(GRADED),
     f"{PHONE}/drawable/ic_launcher_monochrome.xml": flat("#FFFFFFFF", MONO),
     f"{PHONE}/drawable/ic_launcher_background.xml": solid(
-        TILE, "The tile, primaryContainer. Chosen over near-black #0E1210, which disappears on dark wallpapers."),
+        TILE, "The tile: the app's own page colour, so opening the app continues the icon instead of changing it."),
     f"{WEAR}/drawable/ic_launcher_foreground.xml": graded(GRADED),
     f"{WEAR}/drawable/ic_launcher_monochrome.xml": flat("#FFFFFFFF", MONO),
     f"{WEAR}/drawable/ic_complication.xml": flat(
@@ -155,7 +165,7 @@ FILES["docs/brand/cueseek-mark.svg"] = svg(
     "The mark alone, in currentColor, so it takes the colour of whatever it sits in.",
     f'  <path fill="currentColor" d="{MARK}"/>\n', view="24 26 60 56")
 FILES["docs/brand/cueseek-icon.svg"] = svg(
-    "The icon as it appears in a launcher: the flat mark on the primaryContainer tile.",
+    "The icon as it appears in a launcher: the flat mark on the near-black tile.",
     f'  <rect x="18" y="18" width="72" height="72" rx="17" fill="#{TILE[3:]}"/>\n'
     f'  <path fill="#{BRIGHT[3:]}" d="{MARK}"/>\n')
 

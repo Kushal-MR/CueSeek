@@ -13,12 +13,12 @@
                 android:type="sweep"
                 android:centerX="55"
                 android:centerY="57.5">
-                <item android:offset="0.000" android:color="#FFBBD6BD" />
-                <item android:offset="0.125" android:color="#FF79937C" />
-                <item android:offset="0.375" android:color="#FF79937C" />
+                <item android:offset="0.000" android:color="#FFB6CFB8" />
+                <item android:offset="0.125" android:color="#FF647266" />
+                <item android:offset="0.375" android:color="#FF647266" />
                 <item android:offset="0.784" android:color="#FFCDE8CF" />
                 <item android:offset="0.966" android:color="#FFCDE8CF" />
-                <item android:offset="1.000" android:color="#FFBBD6BD" />
+                <item android:offset="1.000" android:color="#FFB6CFB8" />
             </gradient>
         </aapt:attr>
     </path>

@@ -1087,7 +1087,7 @@ handle at 1:30 and tapers away after it. A dial is something you read and someth
 
 | | |
 | --- | --- |
-| Launcher, both apps | adaptive icon: graded foreground, `#344E38` tile, flat monochrome layer |
+| Launcher, both apps | adaptive icon: graded foreground, near-black `#0E1210` tile (the app's page), flat monochrome layer |
 | Themed icon | new `ic_launcher_monochrome` — the phone's previously reused the foreground |
 | Watch tile picker | `tile_preview`, the flat mark on black |
 | Complication picker | new `ic_complication`, the flat mark alone |
@@ -1110,9 +1110,9 @@ circle.
 
 | | |
 | --- | --- |
-| Launcher | found among real apps; tile samples at exactly `#344E38`; circular crop leaves every part intact |
+| Launcher | found among real apps; the near-black tile shows as a faint disc on the launcher's pure black; circular crop leaves every part intact |
 | Sweep gradient | renders as designed — brightest at the handle, quieter at both hairline ends |
-| Splash | the new icon, centred on near-black |
+| Splash | the mark floating on near-black: icon, splash and app are one surface |
 | **No white flash** | a six-frame capture of the launch never exceeds mean luminance 18/255, and never more than 0.3% near-white pixels, which is text |
 
 Measured rather than looked at, because "does not flash white" is a claim about a few hundred

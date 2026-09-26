@@ -505,12 +505,18 @@ changes continuously, eased at both ends.
 | **Flat** | themed icons, 24dp watch tile, complication | a themed icon is one tinted colour by definition, and at 24dp a grade is invisible anyway |
 
 They are the same outline. The grade is lightness only, within one hue — `onPrimaryContainer
-#CDE8CF` at the handle, falling to `#79937C` (the same token at about 45% over the tile) at both
+#CDE8CF` at the handle, falling to `#647266` (the same colour at 45% over the tile) at both
 hairline ends. **One hue is the line.** A grade across several hues would stop being emphasis
-and start being decoration.
+and start being decoration. The quiet stop is *derived* from the tile in `icon.py` rather than
+written down, because it depends on it — it was `#79937C` over the green tile below, and a
+hard-coded value would have gone on describing a tile that no longer exists.
 
-The tile is `primaryContainer #344E38`. Near-black `#0E1210` was tried and rejected: it
-matches the app's page exactly and disappears on a dark wallpaper.
+**The tile is near-black `#0E1210` — the app's own page colour.** Two greens came first:
+`primaryContainer #344E38`, which was too light, then `onPrimary #1D3722`. Near-black was chosen
+over both, and chosen *knowing its cost*: on a dark wallpaper the tile's edge disappears and
+the mark carries the icon alone. What it buys is continuity — the launcher icon, the splash
+and the app are one surface, so opening CueSeek continues the icon's background instead of
+changing it. **Do not "fix" this back to green**; the trade was seen and taken.
 
 ### Construction
 
@@ -562,6 +568,8 @@ icon is a VectorDrawable with a monochrome layer — neither of which a PNG can 
 about directly. It stays because the mark is better with it than without, not because its
 meaning reads unaided. If it is ever reconsidered, that is the question to start from.
 
-**Verified on the OnePlus Watch 2R**: the sweep gradient renders as designed, the tile samples
-at exactly `#344E38`, and the watch's circular crop leaves every part intact. **Not yet seen on
+**Verified on the OnePlus Watch 2R**: the sweep gradient renders as designed, the near-black
+tile shows as a faint disc against the launcher's pure black — the accepted cost, visible and
+modest — the splash is the mark floating on near-black, and the watch's circular crop leaves
+every part intact. **Not yet seen on
 a phone launcher or as a themed icon.**
