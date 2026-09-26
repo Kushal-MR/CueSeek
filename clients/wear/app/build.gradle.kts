@@ -152,6 +152,12 @@ dependencies {
     // something honest to draw.
     implementation(libs.androidx.datastore.preferences)
 
+    // Complications (M5.12). Not a surface CueSeek draws: the app supplies typed data and
+    // somebody else's watch face renders it, in their layout and their colours. The `-ktx`
+    // variant carries `SuspendingComplicationDataSourceService`, which is what lets the
+    // reading be read from disk without blocking a system callback.
+    implementation(libs.androidx.watchface.complications.data.source.ktx)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

@@ -1,6 +1,8 @@
 package dev.cueseek.wear.dashboard
 
 import android.app.Application
+import android.content.ComponentName
+import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.cueseek.core.api.CueSeekApiFactory
@@ -16,6 +18,7 @@ import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.Tally
 import dev.cueseek.core.model.verdict
+import dev.cueseek.wear.complication.CueSeekComplicationService
 import dev.cueseek.wear.tile.CueSeekTileService
 import dev.cueseek.wear.tile.LastReading
 import dev.cueseek.wear.tile.LastReadingStore
@@ -205,6 +208,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 ),
             )
             CueSeekTileService.requestUpdate(getApplication())
+
+            // The complication is pushed rather than polled — its manifest asks the system
+            // never to wake it on a timer, precisely so that a slot nobody has glanced at
+            // costs nothing. This is the push (M5.12).
+            ComplicationDataSourceUpdateRequester
+                .create(
+                    context = getApplication(),
+                    complicationDataSourceComponent = ComponentName(
+                        getApplication(),
+                        CueSeekComplicationService::class.java,
+                    ),
+                )
+                .requestUpdateAll()
         }
     }
 
