@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- DESIGN.md's dark background. The real palette arrives in M5.2. -->
-    <color name="ic_launcher_background">#0E1210</color>
+    <!-- The icon tile: primaryContainer from DESIGN.md's dark scheme, the same as the phone's.
+         Kept in sync with docs/brand/icon.py's TILE. -->
+    <color name="ic_launcher_background">#344E38</color>
 </resources>
