@@ -130,6 +130,11 @@ dependencies {
     // of asking somebody to hit a 20dp field with a thumb.
     implementation(libs.androidx.wear.input)
 
+    // Ambient. There is no Compose-level signal for "the screen has dimmed" — it is an
+    // Activity-lifecycle fact, and `AmbientLifecycleObserver` is the only way to be told.
+    // This artefact is used for that and nothing else (M5.10).
+    implementation(libs.androidx.wear)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

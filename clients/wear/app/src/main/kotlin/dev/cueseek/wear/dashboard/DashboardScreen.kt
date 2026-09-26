@@ -74,9 +74,11 @@ fun DashboardScreen(
     val ui by model.ui.collectAsStateWithLifecycle()
     val listState = rememberTransformingLazyColumnState()
 
-    // The whole poll schedule. A watch screen is on for seconds at a time, and a timer
-    // behind a dark panel would spend battery producing readings nobody sees (ADR-0004).
-    LaunchedEffect(Unit) { model.refresh() }
+    // The poll is *not* triggered here. It was until M5.10, and then ambient gave the app
+    // a second way to become visible — leaving this in would have meant two fetches on
+    // every wrist-raise that landed on the dashboard, on the one phase whose whole subject
+    // is not spending battery. It lives in `PairedApp`, which is the boundary every
+    // destination enters through.
 
     // The way to the machine itself, and the only one. An [EdgeButton] rather than a row in
     // the roster: it is pinned to the bottom bezel instead of riding the scroll, so reaching
