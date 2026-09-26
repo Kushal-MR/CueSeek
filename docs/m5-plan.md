@@ -82,7 +82,7 @@ for.
 | M5.9 | Every state: loading, empty, error, stale | M5.4b | ✅ |
 | M5.10 | Ambient mode and battery behaviour | M5.9 | ✅ |
 | M5.11 | A Tile | M5.4b | ✅ |
-| M5.12 | A Complication | M5.4b | ⬜ |
+| M5.12 | A Complication | M5.4b | ✅ |
 | M5.13 | Identity: icon, name, launcher, splash | M5.2 | ⬜ |
 | M5.14 | Accessibility pass | M5.8, M5.9 | ⬜ |
 | M5.15 | Golden tests at real Wear geometries | M5.4–M5.13 | ⬜ |
@@ -1009,14 +1009,65 @@ and RemoteInput. Every tile screenshot in this record needed a person to put it 
 
 ---
 
-### M5.12 — A Complication
+### M5.12 — A Complication ✅
 
 A watch face slot: one number or one state. The smallest surface in the project and the one
 with the least room to be wrong.
 
-Scope discipline applies hardest here. A complication that tries to show four services shows
-none of them. Supports the handful of complication types that actually suit a status value,
-and declines the rest rather than rendering them badly.
+**The one thing worth a slot is `3/4`** — how many services are healthy out of how many. Not
+the verdict sentence: *"1 needs attention"* does not fit a seven-character slot, and a face
+free to truncate would draw *"1 needs…"*, which is worse than silence. Not a service name,
+because a complication that tries to show four services shows none of them.
+
+| Type | |
+| --- | --- |
+| `SHORT_TEXT` | `3/4`, with the age offered as the title |
+| `RANGED_VALUE` | the same, plus the ratio as a **shape** — the only type that makes "most things are fine" readable without reading |
+| `LONG_TEXT` | room for the sentence, so it gets the sentence |
+| everything else | **declined** — returns `null` |
+
+The image-only types are the ones worth declining out loud. They can carry a mark but not a
+state, and a CueSeek logo sitting on a watch face saying nothing about the machine would be
+decoration pretending to be instrumentation.
+
+#### It reads; it never fetches
+
+**This is the difference between a complication and the tile**, and it is the whole reason
+the two are built differently. `onTileRequest` runs when somebody *looks* at a tile. A
+complication is refreshed on the **system's** schedule whether anybody is looking or not, so
+fetching there would be precisely the background polling ADR-0004 forbids and M5.10 exists to
+prevent — a radio woken on a timer to service a slot nobody has glanced at.
+
+So `UPDATE_PERIOD_SECONDS` is **0** — never wake us — and the app *pushes* an update whenever
+a real reading arrives, alongside the tile's. The stated cost: a watch whose app has not run
+has nothing to show, and says `--` rather than `0/0`, because a zero would be a claim about a
+machine nobody has asked about yet.
+
+#### Verified on the watch — 2026-09-26, and it corrected the design
+
+Added to a real watch face, it rendered in a `RANGED_VALUE` slot: an arc three-quarters
+filled around `3/4`. That is the type doing exactly what it was supported for.
+
+**And the face did not draw the title.** Which is entirely its right — a complication hands
+over data and the face owns the layout, the colours and whether a title appears at all. This
+record said so and then leaned on the title anyway: the live, self-ticking age was the
+mechanism keeping an ageing number honest, and on the first face it met, it was invisible.
+`3/4` sat on the wrist with nothing qualifying it.
+
+**So the expiry went from twelve hours to one.** It is now carrying the weight the age was
+designed to carry, and twelve hours was sized for a slot that showed its own age. An hour
+survives an ordinary gap between glances while making it impossible for an unqualified number
+to be half a day old.
+
+Still not the 90-second threshold, deliberately: a slot that blanked every 90 seconds would
+be empty most of the day, and a complication its owner has learned to ignore is worse than
+one that is an hour behind. **That trade-off is the honest cost of this phase** — between 90
+seconds and the expiry, the slot may show a number the app would call `Unverified`, with no
+age beside it if the face declines to draw one.
+
+**Not verified:** how it renders in a `SHORT_TEXT` or `LONG_TEXT` slot, and whether *those*
+faces draw the title — which is the question the whole staleness argument now turns on.
+M5.17.
 
 ---
 
@@ -1081,6 +1132,8 @@ Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verificatio
   not checkable on this watch at all** — it has no encoder
 - Tile and complication both installed and updating — **including the tile's own 15-minute
   refresh**, which every test so far triggered by hand
+- **Whether a `SHORT_TEXT` or `LONG_TEXT` face draws the complication's title**, since the
+  first face tried did not, and the staleness argument turns on it
 - **Whether ambient engages at all on this device**, on a wrist rather than on a desk — it
   never fired while cabled and off-wrist, and M5.10 records two hypotheses for why
 - Ambient behaves for a full hour without the screen burning

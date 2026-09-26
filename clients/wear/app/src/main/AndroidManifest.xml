@@ -40,6 +40,32 @@
                 android:resource="@drawable/tile_preview" />
         </service>
 
+        <!-- The complication (M5.12). Three types only. The image-only ones are left out
+             on purpose: a slot that can carry a mark but not a state would be decoration
+             pretending to be instrumentation.
+
+             UPDATE_PERIOD_SECONDS is 0 — never poll us on a timer. This service reads what
+             the app and the tile already wrote and opens no socket, so a periodic wake
+             would cost battery to re-read an unchanged file. Updates are pushed instead,
+             whenever a real reading arrives. -->
+        <service
+            android:name=".complication.CueSeekComplicationService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:icon="@drawable/tile_preview"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT,RANGED_VALUE,LONG_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="0" />
+        </service>
+
         <!-- Ambient support rides on Wear's shared library, and an app that does not
              declare it is simply never told the screen dimmed — no error, no warning, the
              broadcast is enqueued and nothing receives it. `required="false"` so the APK
