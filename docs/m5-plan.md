@@ -80,7 +80,7 @@ for.
 | M5.7 | Host power actions | M5.6 | ✅ |
 | M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ✅ |
 | M5.9 | Every state: loading, empty, error, stale | M5.4b | ✅ |
-| M5.10 | Ambient mode and battery behaviour | M5.9 | ⬜ |
+| M5.10 | Ambient mode and battery behaviour | M5.9 | ✅ |
 | M5.11 | A Tile | M5.4b | ⬜ |
 | M5.12 | A Complication | M5.4b | ⬜ |
 | M5.13 | Identity: icon, name, launcher, splash | M5.2 | ⬜ |
@@ -861,13 +861,76 @@ operator sees first.
 
 ---
 
-### M5.10 — Ambient mode and battery behaviour
+### M5.10 — Ambient mode and battery behaviour ✅ (built; **not observed on this watch**)
 
 A watch app that keeps a screen bright and a radio awake is a bad app regardless of how it
 looks.
 
-Ambient shows the last known verdict and its age, dimmed, and **does not poll**. Coming back
-to interactive refreshes. Polling backs off when the app is not visible.
+**What shipped**
+
+| | |
+| --- | --- |
+| Ambient screen | hostname, verdict, and **the age of the reading** — three lines of unfilled text on black |
+| Polling in ambient | none, by construction: the ambient branch returns before the nav host |
+| Returning to interactive | refreshes, because ambient deliberately did not |
+| Plumbing | `AmbientLifecycleObserver`, `WAKE_LOCK`, and the `com.google.android.wearable` shared library |
+
+**Ambient says *when*, because it cannot say *now*.** It does not poll, so everything on it
+is by definition the last thing known. A dimmed screen reading `Operational` with no age
+would be confident green with nothing behind it — the failure this project keeps legislating
+against, and worse here, because ambient can sit on a wrist for an hour. So the age is the
+second line, and it is what makes the first line honest. `readingAge` rounds coarsely (`now`,
+`4m ago`, `2h ago`) because a glance is asking *current or old*, not for seconds.
+
+**The status colour is dropped in ambient, and that is a deliberate loss.** Colour is the
+weakest of the three encodings `DESIGN.md` §3 requires; the word survives without it, and a
+coloured block is exactly the shape of thing that burns into an OLED panel over a wear-day.
+
+**Ambient replaces the whole navigation graph** rather than dimming whichever screen was
+open. A dimmed detail screen would leave a service's controls on a lowered wrist, and
+ambient answers a different question anyway: interactive asks *what is going on with this
+service*, ambient asks *is everything still fine* — which is the dashboard's question and the
+only one worth keeping a panel lit for.
+
+**A double-poll removed while here.** `DashboardScreen` triggered its own refresh on
+composition. Once ambient gave the app a second way to become visible, that would have meant
+two fetches on every wrist-raise landing on the dashboard — on the one phase whose subject is
+not spending battery. The poll now lives at `PairedApp`, the boundary every destination
+enters through.
+
+#### It does not engage on the OnePlus Watch 2R, and the evidence is recorded
+
+The callback never fired. **The app asked correctly** — this is established, not assumed:
+
+| | |
+| --- | --- |
+| Shared library present | `cmd package list libraries` → `library:com.google.android.wearable` |
+| Declared | `uses-library` + `WAKE_LOCK` in the manifest |
+| Registered | `CueSeekWear: ambient observer registered`, logged at startup |
+| Result | `mWakefulness` went **Awake → Asleep**; `onEnterAmbient` never called |
+
+And the system said what it did with the app:
+
+```
+AmbientTaskStackManager: Moving task [dev.cueseek.android.debug/…MainActivity] to the back of activity stack!
+AmbientTaskStackManager: Task [#1|home|…SysUiActivity] should stay in the front.
+```
+
+**What is not established** is *why*, and it is worth two hypotheses rather than one
+confident sentence:
+
+1. OnePlus's Wear system does not grant third-party apps an ambient state, backgrounding
+   them in favour of the watch face.
+2. The watch was **off-wrist and on a cable** throughout. Wear's always-on behaviour can
+   depend on the device believing it is worn, and every test here ran on a desk.
+
+Telling those apart needs the watch on a wrist for a day, which is **M5.17** — where the
+battery measurement already lives. Until then this phase is *built and unobserved*, not
+*working*.
+
+The startup log line is kept in the shipped code for exactly this reason: ambient is the one
+behaviour with no visible evidence when it fails. The screen goes dark either way, and
+"declined by the system" and "never asked" look identical from the outside.
 
 **Acceptance:** measured battery impact over a wear-day in M5.17, not asserted here.
 
@@ -955,9 +1018,13 @@ Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verificatio
 - A service restarted, confirmed by `MainPID` on the host
 - ~~No `Machine` button without `host.power`, and a reboot from the wrist with it~~ — both
   done 2026-09-18, recorded under M5.7
-- Rotary scrolls; swipe dismisses; haptics fire
+- ~~Swipe dismisses; haptics fire~~ — done 2026-09-20, recorded under M5.8. **Rotary is
+  not checkable on this watch at all** — it has no encoder
 - Tile and complication both installed and updating
+- **Whether ambient engages at all on this device**, on a wrist rather than on a desk — it
+  never fired while cabled and off-wrist, and M5.10 records two hypotheses for why
 - Ambient behaves for a full hour without the screen burning
+- **The empty state** — an agent with `services: []`, which is what every new operator sees
 - Battery cost over a working day, measured
 - Readable outdoors
 - TalkBack pass

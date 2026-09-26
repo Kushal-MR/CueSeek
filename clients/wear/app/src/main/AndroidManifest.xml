@@ -5,6 +5,12 @@
          (clients/wear/README.md), so it needs the network on its own. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Ambient (M5.10). Wear requires WAKE_LOCK for an app to stay on screen dimmed
+         rather than being replaced by the watch face. It does not let CueSeek hold the
+         CPU awake in the background: the app has no service, no worker and no timer, and
+         the one thing ambient does is *stop* polling. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Refuses to install on anything that is not a watch. Better than installing and
          then rendering a round-screen layout on a phone. -->
     <uses-feature android:name="android.hardware.type.watch" />
@@ -16,6 +22,15 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
+
+        <!-- Ambient support rides on Wear's shared library, and an app that does not
+             declare it is simply never told the screen dimmed — no error, no warning, the
+             broadcast is enqueued and nothing receives it. `required="false"` so the APK
+             still installs on a device without it; the observer then reports that ambient
+             is unavailable rather than the app failing to start. -->
+        <uses-library
+            android:name="com.google.android.wearable"
+            android:required="false" />
 
         <!-- Standalone: usable without the phone app present.
              ADR-0014 qualifies this precisely — the watch is standalone at RUNTIME but

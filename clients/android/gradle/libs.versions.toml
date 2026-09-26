@@ -30,6 +30,9 @@ playServicesWearable = "20.0.1"
 # RemoteInput: Wear's own text entry, which hands off to the system keyboard, voice or
 # handwriting rather than cramming a field onto a round screen.
 wearInput = "1.2.0"
+# `AmbientLifecycleObserver`, for M5.10. The only thing this artefact is used for: it is
+# how an app is told the screen has dimmed, which is not something Compose can observe.
+wear = "1.3.0"
 
 # Test
 junit = "4.13.2"
@@ -53,6 +56,7 @@ androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "co
 androidx-wear-compose-navigation = { group = "androidx.wear.compose", name = "compose-navigation", version.ref = "wearCompose" }
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
 androidx-wear-input = { group = "androidx.wear", name = "wear-input", version.ref = "wearInput" }
+androidx-wear = { group = "androidx.wear", name = "wear", version.ref = "wear" }
 
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
