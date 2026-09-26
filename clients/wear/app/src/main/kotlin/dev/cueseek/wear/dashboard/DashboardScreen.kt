@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,13 @@ import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -154,6 +162,10 @@ fun DashboardScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                             textAlign = TextAlign.Center,
+                            // Announced when it appears. It replaces a spinner nobody is
+                            // looking at, so without this a screen reader user would be told
+                            // the app was "reading the agent…" and then hear nothing.
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
                         Button(
                             onClick = { model.refresh() },
@@ -229,7 +241,11 @@ private fun Verdict(state: DashboardUi.Loaded) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = Modifier.padding(bottom = 8.dp),
+        // One heading rather than three fragments: host, verdict and count are one answer,
+        // and a heading is what TalkBack's navigation jumps between.
+        modifier = Modifier
+            .padding(bottom = 8.dp)
+            .semantics(mergeDescendants = true) { heading() },
     ) {
         Text(
             text = state.hostname,
@@ -259,6 +275,11 @@ private fun Verdict(state: DashboardUi.Loaded) {
                 style = WearType.DataSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
+                // "3/4" is a fraction to a speech engine, and "three quarters healthy" is a
+                // different claim from three services out of four.
+                modifier = Modifier.semantics {
+                    contentDescription = "${state.tally.healthy} of ${state.tally.total} healthy"
+                },
             )
         }
     }
@@ -282,14 +303,21 @@ private fun Vitals(metrics: HostMetrics?) {
         // usagePercent, not a fraction: CPU is the one metric the agent reports as 0..100.
         // Null on the agent's first collection after a restart, and absent rather than zero
         // for exactly the reason the whole vitals strip exists.
-        metrics.cpu?.usagePercent?.let { Vital("CPU", it / 100f, judge = false) }
-        metrics.memory?.usedFraction?.let { Vital("MEM", it, judge = true) }
+        metrics.cpu?.usagePercent?.let { Vital("CPU", "CPU", it / 100f, judge = false) }
+        metrics.memory?.usedFraction?.let { Vital("MEM", "Memory", it, judge = true) }
         fullest(metrics.storage)?.let { disk ->
-            disk.usedFraction?.let { Vital(disk.mount, it, judge = true) }
+            disk.usedFraction?.let { Vital(disk.mount, "Disk ${disk.mount}", it, judge = true) }
         }
         metrics.thermal?.firstOrNull()?.let { sensor ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clearAndSetSemantics {
+                        contentDescription = buildString {
+                            append("${sensor.label}, ${sensor.celsius.toInt()} degrees Celsius")
+                            if (sensor.isHot) append(", hot")
+                        }
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
@@ -316,10 +344,30 @@ private fun Vitals(metrics: HostMetrics?) {
  *   processor at 100% is a transcode doing its job, and colouring it would cry wolf every
  *   time somebody watched a film. The same reasoning `hostConcern` uses, and the same
  *   thresholds, because they now come from one place.
+ * @param spoken what a screen reader says instead of [label]. "MEM" is an abbreviation to
+ *   the eye and a syllable to a speech engine, and a mount point read aloud is "slash".
  */
 @Composable
-private fun Vital(label: String, fraction: Float, judge: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun Vital(label: String, spoken: String, fraction: Float, judge: Boolean) {
+    val percent = (fraction * 100).toInt()
+    val pressure = when {
+        !judge -> null
+        fraction >= CRITICAL -> "critical"
+        fraction >= PRESSURE -> "high"
+        else -> null
+    }
+    // One node per vital, not three. The label, the number and the bar are one reading, and
+    // spoken apart they were "MEM", "11%" and an unlabelled progress bar. The judgement the
+    // bar's colour carries is said in words, because colour never reaches a screen reader.
+    // Cleared rather than merged is safe here only because nothing in a vital is clickable.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = listOfNotNull(spoken, "$percent percent", pressure)
+                    .joinToString(", ")
+            },
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -330,7 +378,7 @@ private fun Vital(label: String, fraction: Float, judge: Boolean) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "${(fraction * 100).toInt()}%",
+                "$percent%",
                 style = WearType.DataSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -370,13 +418,22 @@ private fun ServiceRow(
     onClick: (String) -> Unit,
 ) {
     val style = statusStyle(service.health.status, stale)
+    val activity = wearActivityLine(service)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             // The id is passed along, never inspected. The row does not know or care which
-            // service this is.
-            .clickable { onClick(service.id) }
+            // service this is. `clickable` merges the row into one node and keeps the action,
+            // which is the half `clearAndSetSemantics` would have erased (DESIGN.md §9).
+            .clickable(onClickLabel = "open") { onClick(service.id) }
+            .semantics {
+                // When the second line shows activity, the status word is not on screen and
+                // the mark's colour and shape are all that carry it — neither of which a
+                // screen reader hears. So it is spoken as the row's state.
+                if (activity != null) stateDescription = style.label
+            }
             .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -406,7 +463,7 @@ private fun ServiceRow(
             // Activity when there is any, the status word when there is not. An idle
             // service saying "0 playing" would spend the line on a non-event.
             Text(
-                text = wearActivityLine(service) ?: style.label,
+                text = activity ?: style.label,
                 style = MaterialTheme.typography.bodyExtraSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

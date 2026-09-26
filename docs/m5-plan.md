@@ -84,7 +84,7 @@ for.
 | M5.11 | A Tile | M5.4b | ✅ |
 | M5.12 | A Complication | M5.4b | ✅ |
 | M5.13 | Identity: icon, name, launcher, splash | M5.2 | ✅ |
-| M5.14 | Accessibility pass | M5.8, M5.9 | ⬜ |
+| M5.14 | Accessibility pass | M5.8, M5.9 | ✅ |
 | M5.15 | Golden tests at real Wear geometries | M5.4–M5.13 | ⬜ |
 | M5.16 | Release: signing, versioning, artefacts | M5.15 | ⬜ |
 | M5.17 | Verification on the OnePlus Watch 2R | all | ⬜ |
@@ -1156,13 +1156,64 @@ with themed icons switched off.
 
 ---
 
-### M5.14 — Accessibility pass
+### M5.14 — Accessibility pass ✅
 
 The floor `DESIGN.md` §9 already sets, applied to a screen where it is harder.
 
 TalkBack reads each screen in a sensible order; every control has a content description that
 says what it does rather than what it is; touch targets meet the Wear minimum; the reduced-
 motion preference is honoured.
+
+#### The finding that mattered: reduced motion turned the hold into a tap
+
+**The hold-to-confirm button timed the hold with its own fill animation**, on the watch and
+on the phone alike. Compose scales every animation by the system's animator duration, and
+"Remove animations" — an accessibility setting, and something battery savers also do — sets
+that scale to zero. The fill then finished on its first frame.
+
+Reproduced on the watch before anything was changed: animations off, a **300ms press on
+"Stop Cron — hold" stopped `cron` on the VM** (`action accepted … risk=destructive`). The
+control built to be hard to fire by accident was a tap for exactly the people most likely to
+have changed that setting. Nothing in any test suite would have caught it; the tests run with
+animations at their default.
+
+The hold is now timed by a coroutine `delay`, which no motion preference touches, and the
+fill is only a picture of it. With animations off there is no fill until the hold completes —
+a bar that jumped to full on touch would say "done" with a second still to run.
+
+| press | animations off | animations on |
+| --- | --- | --- |
+| 300ms | **fired** before the fix → does not fire | does not fire |
+| 1600ms | fires | fires |
+
+All four measured on the watch against the VM, reading `journalctl -u cueseekd`, not the
+screen. **The phone had the identical construction and has the identical fix**, verified by
+build and unit tests only — the phone was not connected; M5.17 carries the check.
+
+#### What else changed, each read back from the watch's accessibility tree
+
+| | before | after |
+| --- | --- | --- |
+| Hold button | plain text to TalkBack — no role, no action | a button, "Stop Cron. Press and hold to confirm.", with a long-press action and **no** single-tap action |
+| Hold button target | 44dp — the padding sat inside the 48 | the full 48dp, and the label wraps rather than clipping |
+| Vitals | "MEM", "11%" and an unlabelled bar, three stops each | one node: "Memory, 10 percent" — and "high" / "critical" in words, since the bar's colour never reaches a screen reader |
+| Verdict | host, verdict and count as three fragments | one heading; "3/4" spoken as "3 of 4", not "three quarters" |
+| Service row | status spoken only when no activity line replaced it | status always spoken, as the row's state; "open" as the action label; 48dp minimum |
+| Action outcome | appeared silently | a polite live region, so "Restart Cron — asked" is heard while focus is still on the button |
+| Error | replaced the spinner silently | announced |
+| Button labels | one line, ellipsised | two lines, so "Restart qBittorrent" never loses the service name |
+
+**Font scale 1.3 was checked on the watch** — dashboard and detail both fit, nothing clipped
+beyond the round screen's own scroll curvature.
+
+#### Not verified here, and carried to M5.17
+
+- **TalkBack itself, driven by a person.** The tree was read with `uiautomator`, which shows
+  what TalkBack is given; whether its double-tap-and-hold reaches the long-press action on
+  this watch needs a finger. TalkBack was deliberately *not* enabled over ADB — it would have
+  left the watch unusable to its owner until turned off by hand.
+- **The phone's hold fix on the phone.**
+- **Rotary**, still — the watch has no encoder.
 
 ---
 
@@ -1216,7 +1267,9 @@ Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verificatio
 - **The empty state** — an agent with `services: []`, which is what every new operator sees
 - Battery cost over a working day, measured
 - Readable outdoors
-- TalkBack pass
+- TalkBack pass, by a person — including double-tap-and-hold on a destructive action
+- The phone's hold button with "Remove animations" on: a short press must not confirm
+  (fixed in M5.14, verified only on the watch)
 
 ---
 
