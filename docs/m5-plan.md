@@ -81,7 +81,7 @@ for.
 | M5.8 | Rotary, swipe-to-dismiss, haptics | M5.4b | ✅ |
 | M5.9 | Every state: loading, empty, error, stale | M5.4b | ✅ |
 | M5.10 | Ambient mode and battery behaviour | M5.9 | ✅ |
-| M5.11 | A Tile | M5.4b | ⬜ |
+| M5.11 | A Tile | M5.4b | ✅ |
 | M5.12 | A Complication | M5.4b | ⬜ |
 | M5.13 | Identity: icon, name, launcher, splash | M5.2 | ⬜ |
 | M5.14 | Accessibility pass | M5.8, M5.9 | ⬜ |
@@ -936,17 +936,76 @@ behaviour with no visible evidence when it fails. The screen goes dark either wa
 
 ---
 
-### M5.11 — A Tile
+### M5.11 — A Tile ✅
 
 The first thing that makes a watch app feel native rather than installed.
 
-**Tiles are not Compose.** They render through `androidx.wear.tiles` and ProtoLayout, in a
-separate process, from a snapshot — genuinely new UI code, not a reuse of M5.4, and the phase
-most likely to be underestimated.
+**Tiles are not Compose.** They render through `androidx.wear.tiles` and ProtoLayout, from a
+snapshot the system caches — genuinely new UI code, and the phase most likely to be
+underestimated. It was, though not in the way expected: the layout was the easy half.
 
-One tile: overall status, service count, and the age of the reading. It must be honest about
-staleness; a tile is glanceable, and a stale green is worse there than anywhere else in the
-product. Tapping it opens the app.
+**A third renderer over the same capabilities.** The tile shares **no UI code** with either
+client — not a composable, not a theme, not a modifier. It imports the two things that should
+be shared: the **verdict** from `:core:model`, computed by the same function the phone and
+the watch dashboard use, and the **palette** from `:core:design`. A tile disagreeing with the
+app about the same host would be the console contradicting itself on one wrist. Judgement
+shared, drawing rewritten — ADR-0010's split, and ADR-0007's claim on its third renderer.
+
+**It fetches, then falls back.** `onTileRequest` runs when somebody looks, so fetching there
+is polling *while visible* — the rule the app already follows. But tiles are asked for at
+moments nobody chose, often with no network and sometimes before the app has ever run, so a
+failed fetch renders the last stored reading (`LastReadingStore`) rather than an empty tile.
+The app publishes to that store on every successful poll, so the common case costs no second
+round trip.
+
+#### The defect the device found: a tile that would claim "now" for fifteen minutes
+
+The first build computed the age in Kotlin and baked it into the layout. It rendered
+correctly — `1 needs attention · 3/4 healthy · now` — and was **structurally dishonest**.
+
+The Tiles carousel **caches the layout** and only calls back on its own schedule, which is
+fifteen minutes here. So with the agent stopped, the tile went on saying `now` indefinitely.
+Verified by stopping the agent and waiting: the tile did not move.
+
+That is stale-green on the surface the plan singled out as worst for it — read in a second,
+without being opened, by somebody who will act on it.
+
+**Fixed with a platform time source rather than a shorter interval.** The age and the verdict
+are now `DynamicString` expressions the **renderer** re-evaluates while the tile sits there:
+
+```
+since    = DynamicInstant.withSecondsPrecision(observedAt)
+             .durationUntil(DynamicInstant.platformTimeWithSecondsPrecision())
+verdict  = onCondition(since.toIntSeconds().gt(90)) → "Unverified" : <the verdict>
+age      = < 60s → "now" | < 60m → "Nm ago" | "Nh ago"
+```
+
+No extra request, no shortened refresh, and the tile cannot outlive its own honesty. Each
+dynamic string carries a **static fallback that is true on its own**, because a renderer
+without expression support draws that verbatim and never updates it.
+
+**Verified on the watch — 2026-09-26**
+
+| | |
+| --- | --- |
+| Fresh | `1 needs attention · 3/4 healthy · now` |
+| Agent stopped, reading aged | **`Unverified · 3/4 healthy · 1h ago`** |
+| Tap | opens `MainActivity` — confirmed by `mCurrentFocus` |
+
+**`STALE_AFTER` now exists twice**, and that is deliberate rather than sloppy: the app asks
+`isStale(observedAt)` in Kotlin at build time, while the tile compiles an expression the
+renderer evaluates later against a plain `Int` of seconds. `TileStalenessTest` asserts the
+two agree, because a tile saying `Unverified` while the dashboard says `Running` about the
+same host is the contradiction the shared verdict exists to prevent.
+
+**Not verified:** the system's own 15-minute refresh. Every observed re-render was triggered
+by a swipe or by the app publishing. Belongs to M5.17, alongside whether a tile goes stale
+because the radio slept.
+
+**Automation limits, both hit here.** A tile cannot be *added* by ADB — it is a user choice,
+and on this watch the practical route is the **phone's** watch app. Nor can the tiles
+carousel be reached by `input swipe`, which is the same class of limit as swipe-to-dismiss
+and RemoteInput. Every tile screenshot in this record needed a person to put it on screen.
 
 ---
 
@@ -1020,7 +1079,8 @@ Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verificatio
   done 2026-09-18, recorded under M5.7
 - ~~Swipe dismisses; haptics fire~~ — done 2026-09-20, recorded under M5.8. **Rotary is
   not checkable on this watch at all** — it has no encoder
-- Tile and complication both installed and updating
+- Tile and complication both installed and updating — **including the tile's own 15-minute
+  refresh**, which every test so far triggered by hand
 - **Whether ambient engages at all on this device**, on a wrist rather than on a desk — it
   never fired while cabled and off-wrist, and M5.10 records two hypotheses for why
 - Ambient behaves for a full hour without the screen burning

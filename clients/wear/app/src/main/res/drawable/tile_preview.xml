@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the tile picker shows before the tile is added.
+
+  Deliberately not a screenshot of a real reading: a preview is chosen from a list at a
+  moment when the app may never have run, and showing a specific verdict there would be
+  asserting a state nobody has measured. This is the mark and the name, in the palette's own
+  healthy green.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <path
+        android:fillColor="#0D0F0D"
+        android:pathData="M0,0h96v96h-96z" />
+    <path
+        android:fillColor="#A8C4A6"
+        android:pathData="M48,26a22,22 0,1 0,0.01 0zM48,34a14,14 0,1 1,-0.01 0zM44,41l13,7l-13,7z" />
+</vector>
