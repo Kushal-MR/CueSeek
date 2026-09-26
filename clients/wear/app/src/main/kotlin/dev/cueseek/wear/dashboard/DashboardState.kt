@@ -16,6 +16,9 @@ import dev.cueseek.core.model.Scope
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.Tally
 import dev.cueseek.core.model.verdict
+import dev.cueseek.wear.tile.CueSeekTileService
+import dev.cueseek.wear.tile.LastReading
+import dev.cueseek.wear.tile.LastReadingStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -184,6 +187,27 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Hands the reading to the tile, and asks the system to redraw it.
+     *
+     * Failures are swallowed deliberately. The tile is a secondary surface, and a store
+     * write or a carousel that declined an update must never take down the screen the
+     * operator is actually looking at.
+     */
+    private suspend fun publishToTile(verdict: String, tally: Tally) {
+        runCatching {
+            LastReadingStore(getApplication()).write(
+                LastReading(
+                    verdict = verdict,
+                    healthy = tally.healthy,
+                    total = tally.total,
+                    observedAt = Instant.now(),
+                ),
+            )
+            CueSeekTileService.requestUpdate(getApplication())
+        }
+    }
+
     fun refresh() {
         viewModelScope.launch {
             val host: PairedHost? = hosts.selectedHost.first()
@@ -205,14 +229,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 is ApiResult.Success -> {
                     val snapshot = result.value
                     val tally = Tally.of(snapshot.services)
+
+                    // The tile learns from the app for free. Every successful poll here is
+                    // a reading the tile would otherwise have had to fetch for itself, so
+                    // handing it over means the common case — open the app, glance at the
+                    // tile later — costs no second round trip (M5.11).
+                    val verdictNow = verdict(
+                        stale = false,
+                        services = snapshot.services,
+                        hostMetrics = snapshot.hostMetrics,
+                        tally = tally,
+                    )
+                    publishToTile(verdictNow, tally)
+
                     _ui.value = DashboardUi.Loaded(
                         hostname = snapshot.system.hostname,
-                        verdict = verdict(
-                            stale = false,
-                            services = snapshot.services,
-                            hostMetrics = snapshot.hostMetrics,
-                            tally = tally,
-                        ),
+                        verdict = verdictNow,
                         tally = tally,
                         services = snapshot.services,
                         metrics = snapshot.hostMetrics,

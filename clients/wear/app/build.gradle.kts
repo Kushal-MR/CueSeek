@@ -135,6 +135,23 @@ dependencies {
     // This artefact is used for that and nothing else (M5.10).
     implementation(libs.androidx.wear)
 
+    // Tiles (M5.11). A whole second UI toolkit, and that is the point rather than an
+    // accident: a tile is a ProtoLayout tree handed to the system and rendered by the
+    // Tiles carousel from a snapshot, so no composable, theme or piece of app state can
+    // cross into it. ADR-0007's claim gets its third test here — the tile renders the same
+    // capabilities from the same agent with a renderer that shares no code with either
+    // client.
+    implementation(libs.androidx.wear.tiles)
+    implementation(libs.androidx.wear.protolayout)
+    implementation(libs.androidx.wear.protolayout.material3)
+    implementation(libs.androidx.wear.protolayout.expression)
+    // A TileService must hand back a ListenableFuture; this is the bridge from a coroutine.
+    implementation(libs.androidx.concurrent.futures)
+    // DataStore directly, because :core:data keeps it `implementation` and the tile needs
+    // its own tiny store — the last reading, so a tile asked for with no network still has
+    // something honest to draw.
+    implementation(libs.androidx.datastore.preferences)
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

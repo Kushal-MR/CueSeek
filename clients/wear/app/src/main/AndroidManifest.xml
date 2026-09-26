@@ -23,6 +23,23 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
 
+        <!-- The tile (M5.11). Runs in this app's process but renders through the system's
+             Tiles carousel, which is why the permission is the system's to hold rather
+             than ours to request. -->
+        <service
+            android:name=".tile.CueSeekTileService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
+
         <!-- Ambient support rides on Wear's shared library, and an app that does not
              declare it is simply never told the screen dimmed — no error, no warning, the
              broadcast is enqueued and nothing receives it. `required="false"` so the APK
