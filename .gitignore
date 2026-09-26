@@ -106,3 +106,13 @@ dist/
 # password echoed on screen — this one did not, but the next one might.
 .vmshot.png
 .watch.png
+
+# ---------- Third-party agent skills ----------
+# Installed by `npx skills add`, which drops them in the project directory. They are
+# machine-local tooling in the same sense as .claude/settings.local.json: useful for
+# working on CueSeek, not part of it. Vendoring 600 files of someone else's design
+# library into this repository would add a licence surface and a maintenance burden for
+# something reinstallable in one command.
+.agents/
+.claude/skills/
+skills-lock.json
