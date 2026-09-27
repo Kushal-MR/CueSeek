@@ -26,6 +26,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -228,18 +230,35 @@ private fun ActionConfirmation(
  *
  * Shared by the menu and the detail sheet so the two can never drift into asking for
  * different amounts of certainty about the same action.
+ *
+ * **The hold is timed by the clock, not by the fill.** It was timed by the fill until M5.14,
+ * and Compose scales animations by the system's animator duration — which "Remove
+ * animations" sets to zero. The fill then finished on its first frame and a short press
+ * confirmed. Found on the watch, which shared the construction; the fill is now only a
+ * picture of a [delay], and with animations off it is not drawn until the hold completes.
  */
 @Composable
 internal fun HoldToConfirmButton(label: String, onConfirmed: () -> Unit) {
     val progress = remember { Animatable(0f) }
     var holding by remember { mutableStateOf(false) }
+    val animate = animationsEnabled()
 
     LaunchedEffect(holding) {
         if (holding) {
-            progress.animateTo(1f, tween(HOLD_MILLIS, easing = CueSeekMotion.Emphasized))
-            if (progress.value >= 1f) onConfirmed()
-        } else {
+            if (animate) {
+                launch {
+                    progress.animateTo(1f, tween(HOLD_MILLIS, easing = CueSeekMotion.Emphasized))
+                }
+            }
+            // Cancelled with this effect when the finger lifts, so an early release can never
+            // reach the line below.
+            delay(HOLD_MILLIS.toLong())
+            progress.snapTo(1f)
+            onConfirmed()
+        } else if (animate) {
             progress.animateTo(0f, tween(CueSeekMotion.DurationExit))
+        } else {
+            progress.snapTo(0f)
         }
     }
 

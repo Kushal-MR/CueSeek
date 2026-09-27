@@ -1,5 +1,6 @@
 package dev.cueseek.wear.detail
 
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -9,7 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,6 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.Button
@@ -31,6 +39,7 @@ import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.model.Action
 import dev.cueseek.core.model.ActionRisk
 import dev.cueseek.wear.feedback.rememberCueSeekHaptics
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -115,7 +124,9 @@ private fun PlainButton(label: String, enabled: Boolean, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(top = 4.dp),
     ) {
-        Text(label, maxLines = 1)
+        // Two lines, not one: at a large font scale "Restart qBittorrent" does not fit, and
+        // an ellipsis there cuts off the part that says which service is about to restart.
+        Text(label, maxLines = 2)
     }
 }
 
@@ -154,7 +165,7 @@ private fun ConfirmRow(
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.filledTonalButtonColors(),
         ) {
-            Text("$label — confirm", maxLines = 1)
+            Text("$label — confirm", maxLines = 2)
         }
         Button(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
             Text("Cancel", maxLines = 1)
@@ -168,6 +179,27 @@ private fun ConfirmRow(
  * Fills from the leading edge while held and fires only on completion. Releasing early
  * animates back rather than snapping, so an interrupted hold reads as "not yet" instead of
  * "nothing happened" — and so the control is legible without a label saying how it works.
+ *
+ * # The hold is timed by the clock, never by the fill
+ *
+ * **It used to be timed by the fill, and that was a safety defect.** Compose scales every
+ * animation by the system's animator duration, and "Remove animations" — an accessibility
+ * setting, and something battery savers do too — sets that scale to zero. The fill then
+ * completed on the first frame, so a 300ms press stopped `cron` on the test VM (M5.14,
+ * reproduced on the watch). The one control built to be hard to fire by accident had become
+ * a tap for exactly the people most likely to have changed that setting.
+ *
+ * So the threshold is a [delay], which no motion preference touches, and the fill is only a
+ * picture of it. With animations off there is no fill at all until the hold completes: a bar
+ * that jumped to full the moment it was touched would say "done" while the hold still had a
+ * second to run.
+ *
+ * # A screen reader holds it too
+ *
+ * The gesture alone is invisible to TalkBack, which drew this as text rather than a control.
+ * It now carries a long-press action and nothing on a single activation: TalkBack's
+ * double-tap-and-hold is itself deliberate, and a double tap alone must not stop a service
+ * any more than a tap does.
  */
 @Composable
 private fun HoldButton(action: Action, enabled: Boolean, onConfirmed: () -> Unit) {
@@ -175,21 +207,41 @@ private fun HoldButton(action: Action, enabled: Boolean, onConfirmed: () -> Unit
     val progress = remember(action.id) { Animatable(0f) }
     var holding by remember(action.id) { mutableStateOf(false) }
     val haptics = rememberCueSeekHaptics()
+    val animate = animationsEnabled()
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            // Outside the height, so the whole 48dp is touchable. It was inside, which made
+            // the target 44dp — under the floor, on the control that most needs a sure grip.
             .padding(top = 4.dp)
+            .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.large)
             .background(CueSeekStatus.colors.unreachableContainer)
+            .semantics {
+                role = Role.Button
+                contentDescription = "${action.label}. Press and hold to confirm."
+                if (enabled) {
+                    onLongClick(label = action.label) { onConfirmed(); true }
+                } else {
+                    disabled()
+                }
+            }
             .pointerInput(action.id, enabled) {
                 if (!enabled) return@pointerInput
                 detectTapGestures(
                     onPress = {
                         holding = true
-                        val completed = scope.launch {
-                            progress.animateTo(1f, tween(HOLD_MILLIS))
+                        var reached = false
+                        val fill = if (animate) {
+                            scope.launch { progress.animateTo(1f, tween(HOLD_MILLIS)) }
+                        } else {
+                            null
+                        }
+                        val gate = scope.launch {
+                            delay(HOLD_MILLIS.toLong())
+                            reached = true
+                            progress.snapTo(1f)
                             // At the threshold, not at the lift. This is the signal that
                             // says "you can stop pressing now", which is worth nothing if it
                             // arrives after you already have. See [CueSeekHaptics.committed]
@@ -201,28 +253,51 @@ private fun HoldButton(action: Action, enabled: Boolean, onConfirmed: () -> Unit
                         // must not count as a confirmation any more than an early lift does.
                         val released = tryAwaitRelease()
                         holding = false
-                        val reached = progress.value >= 1f
-                        completed.cancel()
+                        gate.cancel()
+                        fill?.cancel()
                         if (released && reached) {
                             onConfirmed()
                         }
-                        scope.launch { progress.animateTo(0f, tween(180)) }
+                        scope.launch {
+                            if (animate) progress.animateTo(0f, tween(180)) else progress.snapTo(0f)
+                        }
                     },
                 )
             },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(progress.value)
-                .fillMaxHeight()
-                .background(CueSeekStatus.colors.unreachable),
-        )
+        // Sized by the button rather than by itself, now that the label may wrap and the
+        // button's height is no longer a fixed 48dp.
+        Box(modifier = Modifier.matchParentSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress.value)
+                    .fillMaxHeight()
+                    .background(CueSeekStatus.colors.unreachable),
+            )
+        }
         Text(
             text = if (holding) "Hold…" else "${action.label} — hold",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
+    }
+}
+
+/**
+ * Whether the system wants animation at all — the reduced-motion preference, as Android
+ * spells it. Read once: a settings lookup, not something to repeat on every frame of a hold.
+ */
+@Composable
+internal fun animationsEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        Settings.Global.getFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        ) != 0f
     }
 }

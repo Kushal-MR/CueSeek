@@ -148,7 +148,7 @@ fun BoxScope.RefreshRule(
  * settings lookup, not something to do on every frame of a gesture.
  */
 @Composable
-private fun animationsEnabled(): Boolean {
+internal fun animationsEnabled(): Boolean {
     val context = LocalContext.current
     return remember(context) {
         Settings.Global.getFloat(

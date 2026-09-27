@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,7 +74,10 @@ fun ServiceDetailScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
-                    modifier = Modifier.padding(bottom = 6.dp),
+                    // Name, status and the agent's word are one answer: one heading.
+                    modifier = Modifier
+                        .padding(bottom = 6.dp)
+                        .semantics(mergeDescendants = true) { heading() },
                 ) {
                     Text(
                         text = service.name,
@@ -157,7 +164,15 @@ fun ServiceDetailScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp),
+                            .padding(top = 10.dp)
+                            // Announced when it changes, because the outcome arrives while
+                            // focus is still on the button that asked. Haptics tell a wrist;
+                            // this tells a screen reader. The container is always present
+                            // and merged, so a change of its text is what TalkBack hears —
+                            // a node that merely appears is not reliably announced.
+                            .semantics(mergeDescendants = true) {
+                                liveRegion = LiveRegionMode.Polite
+                            },
                     ) {
                         when (action) {
                             is ActionUi.Working -> Text(

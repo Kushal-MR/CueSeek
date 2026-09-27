@@ -394,6 +394,10 @@ minutes ago" is information, and a three-minute-old CPU percentage is not.
   and then shows a sheet is lying to the users who most depend on accuracy.
 - **Every gesture needs a non-gesture equivalent.** Pull-to-refresh also exists as a custom
   accessibility action.
+- **Never time a safeguard with an animation.** "Remove animations" scales every Compose
+  animation to zero, so a hold timed by its fill becomes a tap — which shipped, on both
+  clients, until M5.14 reproduced a 300ms press stopping a service. Time it with the clock;
+  let the animation only draw it, and draw nothing moving when motion is off.
 - **Test in both themes and at 1.4".**
 
 ---

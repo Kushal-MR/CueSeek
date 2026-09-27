@@ -1,6 +1,7 @@
 package dev.cueseek.wear.power
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -8,6 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
@@ -81,7 +86,9 @@ fun HostPowerScreen(
                     text = "Machine",
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    modifier = Modifier
+                        .padding(bottom = 4.dp)
+                        .semantics { heading() },
                 )
             }
 
@@ -127,7 +134,17 @@ fun HostPowerScreen(
                         BusyClaim.Quiet -> Unit
                     }
 
-                    item { PowerOutcome(action) }
+                    // In a container that is always there, so its changing text is announced;
+                    // see the same construction on the service screen.
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics(mergeDescendants = true) {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                        ) { PowerOutcome(action) }
+                    }
 
                     items(
                         count = access.actions.size,
