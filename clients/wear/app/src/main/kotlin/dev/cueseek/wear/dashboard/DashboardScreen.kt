@@ -80,6 +80,27 @@ fun DashboardScreen(
     onPowerClick: () -> Unit = {},
 ) {
     val ui by model.ui.collectAsStateWithLifecycle()
+    DashboardContent(
+        ui = ui,
+        stale = stale,
+        onRetry = model::refresh,
+        onServiceClick = onServiceClick,
+        onPowerClick = onPowerClick,
+    )
+}
+
+/**
+ * The dashboard drawn from a state rather than a view model, so the golden tests can render
+ * every state without a network, a pairing or an Application (M5.15).
+ */
+@Composable
+internal fun DashboardContent(
+    ui: DashboardUi,
+    stale: Boolean,
+    onRetry: () -> Unit = {},
+    onServiceClick: (String) -> Unit = {},
+    onPowerClick: () -> Unit = {},
+) {
     val listState = rememberTransformingLazyColumnState()
 
     // The poll is *not* triggered here. It was until M5.10, and then ambient gave the app
@@ -168,7 +189,7 @@ fun DashboardScreen(
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
                         Button(
-                            onClick = { model.refresh() },
+                            onClick = onRetry,
                             colors = ButtonDefaults.filledTonalButtonColors(),
                         ) {
                             Text("Try again", maxLines = 1)

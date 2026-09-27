@@ -227,3 +227,8 @@ jobs:
       # why it is pinned at all (ADR-0010).
       - name: Verify the design system's golden images
         run: ./gradlew :core:design:verifyPaparazziDebug
+
+      # The watch's screens at two real geometries (M5.15). Separate from the step above so
+      # a failure says which surface moved: the shared status language, or a watch layout.
+      - name: Verify the watch's golden images
+        run: ./gradlew :wear:verifyPaparazziDebug
