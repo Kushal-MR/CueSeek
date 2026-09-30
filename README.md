@@ -119,7 +119,7 @@ Wear OS 3 or later.
 ## What works today
 
 Four milestones are complete and a fifth almost done. Everything below was verified on real
-hardware against the real agent, not against mocks — the records are in
+hardware against the real agent, not against mocks — the records are in these documents:
 [`docs/m2-p6-verification.md`](docs/m2-p6-verification.md),
 [`docs/m3-verification.md`](docs/m3-verification.md) and
 [`docs/m4-verification.md`](docs/m4-verification.md).
