@@ -17,7 +17,7 @@ is not, and how to install it, on one page.
 > in full; any other systemd unit is supported for health and lifecycle control. The phone
 > can read the machine's own vitals and reboot or shut it down.
 >
-> **M5 is building the Wear OS client** — 17 of 20 phases, running on a real OnePlus Watch
+> **M5 is building the Wear OS client** — 18 of 20 phases, running on a real OnePlus Watch
 > 2R: it pairs without the phone holding its token, shows the verdict and the roster,
 > restarts services, can power the machine off when the operator grants it, and has a tile,
 > a complication, an ambient mode, its own icon and an accessibility pass

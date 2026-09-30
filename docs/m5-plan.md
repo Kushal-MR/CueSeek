@@ -85,7 +85,7 @@ for.
 | M5.12 | A Complication | M5.4b | ✅ |
 | M5.13 | Identity: icon, name, launcher, splash | M5.2 | ✅ |
 | M5.14 | Accessibility pass | M5.8, M5.9 | ✅ |
-| M5.15 | Golden tests at real Wear geometries | M5.4–M5.13 | ⬜ |
+| M5.15 | Golden tests at real Wear geometries | M5.4–M5.13 | ✅ |
 | M5.16 | Release: signing, versioning, artefacts | M5.15 | ⬜ |
 | M5.17 | Verification on the OnePlus Watch 2R | all | ⬜ |
 
@@ -1217,7 +1217,7 @@ beyond the round screen's own scroll curvature.
 
 ---
 
-### M5.15 — Golden tests at real Wear geometries
+### M5.15 — Golden tests at real Wear geometries ✅
 
 Paparazzi already covers `:core:design`. Wear needs its own goldens at **real device
 geometries** — small round and large round — because a layout that survives 45mm can break at
@@ -1225,6 +1225,46 @@ geometries** — small round and large round — because a layout that survives 
 
 The greyscale check from `DESIGN.md`'s tally-rule finding applies: contrast measured, not
 eyeballed. That finding was caught by a golden test and not by a person.
+
+#### What was built
+
+`WearGoldenTest` in the watch module, recorded twice by two subclasses:
+
+| | geometry | why this one |
+| --- | --- | --- |
+| `SmallRoundGoldenTest` | 384px, **192dp**, round | the smallest round screen Android Studio models |
+| `Watch2RGoldenTest` | 466px, **233dp**, round | the OnePlus Watch 2R every M5 phase was verified on |
+
+Ten states each, twenty images, chosen as the states where being wrong is a lie rather than
+a blemish: attention, the roster, stale, empty, failed, **the roster in greyscale**, a
+service with a hold button, a service with playback, the power screen while something is
+playing, and ambient. Verified in CI as its own step, beside `:core:design`'s.
+
+The greyscale frame is `:core:design`'s trick applied to the watch: every status colour
+replaced by the grey of the same luminance. With hue gone, "Degraded" and "Unverified" must
+still be told apart by the word and the filled-or-hollow mark — and they are.
+
+One refactor made it possible: `DashboardScreen` read a view model, which a golden cannot
+construct, so the drawing moved into a state-driven `DashboardContent` the screen now calls.
+The other screens already took plain state.
+
+Contrast was already **measured** before this phase, in `WearColorsTest` — the pairs are
+asserted numerically there, so these images do not have to carry that claim by eye.
+
+#### Checked, not assumed
+
+- **The first recording was wrong, and looking caught it.** Every frame came out on
+  layoutlib's mid-grey, because the screens do not paint a background — the app's
+  `AppScaffold` does. The harness now wraps each screen in the same scaffold (clock
+  suppressed), and the page samples as exactly `#0E1210`, the colour on the watch.
+- **All twenty were looked at.** Nothing breaks at 192dp: the verdict, the failure message,
+  both hold buttons, the power copy and ambient all fit. The only clipping is rows that sit
+  low on the circle at the scroll's starting position, which a scroll moves into the wide
+  part of the screen.
+- **The suite fails when it should.** Changing the one word "healthy" to "ok" failed
+  exactly the 8 frames that draw the tally — four states at two sizes — and nothing else.
+  Reverted, it passed again. A golden suite that has never been seen to fail has not been
+  shown to test anything.
 
 ---
 

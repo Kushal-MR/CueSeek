@@ -1,6 +1,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    // Golden images at real watch geometries (M5.15). The same plugin and version
+    // :core:design uses, so both suites record and verify the same way.
+    alias(libs.plugins.paparazzi)
 }
 
 // ---------------------------------------------------------------- version
