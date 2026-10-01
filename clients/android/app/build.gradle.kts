@@ -20,23 +20,33 @@ val releaseTag: String? = providers.environmentVariable("CUESEEK_VERSION").orNul
 /** "v0.1.0" -> "0.1.0". Absent -> a name that is obviously not a release. */
 fun versionNameFrom(tag: String?): String = tag?.removePrefix("v") ?: "0.0.0-dev"
 
+/** The phone's trailing versionCode digit. The watch's is 1, in its own build file. */
+val PHONE = 0
+
 /**
- * "v0.1.0" -> 100. Absent or unparseable -> 1.
+ * "v0.1.2" -> 1020 on the phone, 1021 on the watch. Absent or unparseable -> 10 / 11.
  *
- * `major * 10000 + minor * 100 + patch`, which stays ordered as long as minor and patch
- * remain below 100 — comfortable for a project at this scale, and it fails loudly by
- * refusing to increase rather than silently wrapping.
+ * `(major * 10000 + minor * 100 + patch) * 10 + device`, where device is 0 for the phone
+ * and 1 for the watch. The version part stays ordered as long as minor and patch remain
+ * below 100 — comfortable for a project at this scale.
+ *
+ * **The trailing digit is M5.16's decision.** The phone and the watch share one
+ * applicationId, and Play requires every APK under an id to carry a distinct versionCode.
+ * Play is not the plan, but it is not designed against either, and this keeps it open with
+ * no later migration. It cost one jump: v0.1.1 shipped as 101 under the old scheme, and
+ * v0.1.2 is 1020 — still higher, so the phone upgrades in place. The watch's copy of this
+ * function must use the same formula with its own digit.
  *
  * Known limitation, stated rather than discovered: a pre-release shares its versionCode
  * with the final release of the same number, so `v0.2.0-rc1` and `v0.2.0` collide and
  * Android will not upgrade one to the other. Pre-release APKs are therefore not published;
  * see the workflow.
  */
-fun versionCodeFrom(tag: String?): Int {
-    val core = tag?.removePrefix("v")?.substringBefore('-') ?: return 1
+fun versionCodeFrom(tag: String?, device: Int = PHONE): Int {
+    val core = tag?.removePrefix("v")?.substringBefore('-') ?: return 10 + device
     val parts = core.split('.').mapNotNull(String::toIntOrNull)
-    if (parts.size != 3) return 1
-    return parts[0] * 10000 + parts[1] * 100 + parts[2]
+    if (parts.size != 3) return 10 + device
+    return (parts[0] * 10000 + parts[1] * 100 + parts[2]) * 10 + device
 }
 
 // ---------------------------------------------------------------- signing
