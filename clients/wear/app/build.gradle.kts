@@ -13,20 +13,39 @@ plugins {
 // plugin that would remove it. The trigger to revisit is a third consumer, not a line
 // count.
 //
-// The versionCode SCHEME is deliberately not settled here — M5.16 decides how a watch
-// artefact and a phone artefact that share an applicationId coordinate their codes. This
-// is enough to build and install.
+// The versionCode scheme is the phone's, with a different last digit: (version) * 10 + 1
+// here, + 0 there. Two APKs under one applicationId need distinct codes for Play, and this
+// keeps that open without a later migration (M5.16). The two copies of the formula must
+// stay identical apart from that digit — see the phone's build file for the reasoning.
 val releaseTag: String? = providers.environmentVariable("CUESEEK_VERSION").orNull
     ?.trim()?.takeIf { it.isNotEmpty() }
 
 fun versionNameFrom(tag: String?): String = tag?.removePrefix("v") ?: "0.0.0-dev"
 
-fun versionCodeFrom(tag: String?): Int {
-    val core = tag?.removePrefix("v")?.substringBefore('-') ?: return 1
+val WATCH = 1
+
+fun versionCodeFrom(tag: String?, device: Int = WATCH): Int {
+    val core = tag?.removePrefix("v")?.substringBefore('-') ?: return 10 + device
     val parts = core.split('.').mapNotNull(String::toIntOrNull)
-    if (parts.size != 3) return 1
-    return parts[0] * 10000 + parts[1] * 100 + parts[2]
+    if (parts.size != 3) return 10 + device
+    return (parts[0] * 10000 + parts[1] * 100 + parts[2]) * 10 + device
 }
+
+// ---------------------------------------------------------------- signing
+//
+// The phone's keystore, from the same four environment variables, and that is a requirement
+// rather than tidiness: the Wearable Data Layer only connects a phone app and a watch app
+// that share an applicationId AND a signing certificate. A watch signed with any other key
+// installs and runs, and the address handoff (ADR-0014) silently never arrives (M5.16).
+val keystorePath: String? = providers.environmentVariable("CUESEEK_KEYSTORE").orNull
+    ?.trim()?.takeIf { it.isNotEmpty() }
+val keystorePassword: String? = providers.environmentVariable("CUESEEK_KEYSTORE_PASSWORD").orNull
+val keyAliasName: String? = providers.environmentVariable("CUESEEK_KEY_ALIAS").orNull
+val keyPasswordValue: String? = providers.environmentVariable("CUESEEK_KEY_PASSWORD").orNull
+
+val canSign: Boolean =
+    keystorePath != null && keystorePassword != null &&
+        keyAliasName != null && keyPasswordValue != null
 
 android {
     // The R class package. Deliberately different from the applicationId below: this is
@@ -66,11 +85,33 @@ android {
         versionName = versionNameFrom(releaseTag)
     }
 
+    signingConfigs {
+        // Only when all four values are present, so `./gradlew build` is unchanged for
+        // everyone without the key — CI on every pull request included. Same rule as the
+        // phone, for the same reason.
+        if (canSign) {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = keystorePassword
+                keyAlias = keyAliasName
+                keyPassword = keyPasswordValue
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Coexists with a release build on the same watch, exactly as on the phone.
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+        }
+
+        release {
+            // Null without a keystore: an unsigned APK, which cannot be installed, rather
+            // than a failed build.
+            signingConfig = signingConfigs.findByName("release")
+            // Off, as on the phone: this project does not ship a build it has not run.
+            isMinifyEnabled = false
         }
     }
 

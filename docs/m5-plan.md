@@ -86,7 +86,7 @@ for.
 | M5.13 | Identity: icon, name, launcher, splash | M5.2 | ✅ |
 | M5.14 | Accessibility pass | M5.8, M5.9 | ✅ |
 | M5.15 | Golden tests at real Wear geometries | M5.4–M5.13 | ✅ |
-| M5.16 | Release: signing, versioning, artefacts | M5.15 | ⬜ |
+| M5.16 | Release: signing, versioning, artefacts | M5.15 | ✅ |
 | M5.17 | Verification on the OnePlus Watch 2R | all | ⬜ |
 
 ---
@@ -1268,13 +1268,68 @@ asserted numerically there, so these images do not have to carry that claim by e
 
 ---
 
-### M5.16 — Release
+### M5.16 — Release ✅
 
 Extends `.github/workflows/release.yml` rather than forking it. Same keystore, same signing
 job shape, one more artefact — `cueseek-wear_<version>.apk`, checksummed and attested exactly
 like the other two.
 
 **The versionCode scheme needs a decision** and gets it here, before the first artefact ships.
+
+#### The decision: version × 10 + device
+
+`versionCode = (major·10000 + minor·100 + patch)·10 + device`, where device is **0 for the
+phone and 1 for the watch**. Chosen by Kushal on 2026-10-01 over keeping one shared code.
+
+| tag | phone | watch |
+| --- | --- | --- |
+| v0.1.1 (old scheme, shipped) | 101 | — |
+| v0.1.2 | **1020** | **1021** |
+
+The two apps share one applicationId, and Play requires every APK under an id to carry a
+distinct versionCode. Play is not the plan, but it is not designed against, and this keeps
+it open with no later migration. The cost was one jump in the phone's numbering, and it is
+upward — 101 to 1020 — so an installed v0.1.1 upgrades in place.
+
+#### One key, and why that is checked rather than assumed
+
+**The watch must be signed with the phone's key, and nothing would notice if it were not.**
+The Wearable Data Layer only connects a phone app and a watch app that share an
+applicationId *and* a signing certificate. A watch signed with any other key installs, runs
+and pairs — and the address handoff (ADR-0014) silently never arrives.
+
+So the workflow compares the two certificates' SHA-256 digests and fails the release if they
+differ, and it checks each versionCode ends in its device's digit. The watch build reads the
+same four `CUESEEK_*` signing variables as the phone; without them it produces an unsigned
+APK, and every pull request builds exactly as before.
+
+#### Verified, before any tag exists
+
+No tag was pushed — a tag publishes a release, which is Kushal's call. Everything up to that
+point was run locally instead:
+
+- **A signed build of both**, with a throwaway key and `CUESEEK_VERSION=v0.1.2`: versionCode
+  1020 and 1021, versionName 0.1.2, artefacts `cueseek_0.1.2.apk` and
+  `cueseek-wear_0.1.2.apk`, checksums written.
+- **The workflow's own verification step**, extracted from `release.yml` and run under
+  `bash -e` as Actions runs it. Passes with one key.
+- **It fails when it should.** The watch APK re-signed with a second throwaway key:
+  `The phone and watch APKs are signed with different keys`, exit 1. A first attempt had
+  "passed" by comparing two empty strings — `apksigner` is a `.bat` on Windows and had not
+  run — which is why the check was re-run with the tools actually present before being
+  believed.
+- **The release build runs on the watch.** Installed as `dev.cueseek.android`, it launched
+  to the pairing screen with no crash, then was uninstalled; the debug pairing was not
+  touched. The throwaway keys were deleted.
+
+**One observation, not acted on:** the watch APK is about 39MB against the phone's 11MB.
+That is unminified Compose, Wear Compose, Tiles and ProtoLayout together, with R8 off by the
+same rule as the phone's. Fine for sideloading; worth revisiting only if size is ever a
+complaint.
+
+**Not yet verified, and cannot be until a tag:** that the real `ANDROID_KEYSTORE_BASE64`
+secret signs both, and that the attestation covers the watch APK. The first tagged release
+is the check.
 
 ---
 

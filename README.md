@@ -17,11 +17,12 @@ is not, and how to install it, on one page.
 > in full; any other systemd unit is supported for health and lifecycle control. The phone
 > can read the machine's own vitals and reboot or shut it down.
 >
-> **M5 is building the Wear OS client** — 18 of 20 phases, running on a real OnePlus Watch
+> **M5 is building the Wear OS client** — 19 of 20 phases, running on a real OnePlus Watch
 > 2R: it pairs without the phone holding its token, shows the verdict and the roster,
 > restarts services, can power the machine off when the operator grants it, and has a tile,
 > a complication, an ambient mode, its own icon and an accessibility pass
-> ([plan](docs/m5-plan.md)). **There is no Wear release artefact yet** — that is M5.16.
+> ([plan](docs/m5-plan.md)). The release workflow now builds and signs a Wear APK; the
+> first one ships with the next release tag.
 
 ---
 
@@ -91,11 +92,13 @@ the one you rely on. Android 8.0 or later.
 
 ### The watch
 
-**Not released yet.** The Wear OS client is built and runs on real hardware, but signing and
-artefacts are M5.16 — so there is nothing on the release page to sideload, and building from
-source is the only way to run it today. When it ships it will need the phone app installed
-once, to hand the watch the host's address; after that it talks to the agent by itself.
-Wear OS 3 or later.
+**Ships from the next release.** From then on the release page carries
+`cueseek-wear_<version>.apk` beside the phone's APK, signed with the same key, checksummed and
+attested the same way. Until a release is tagged, building from source is the only way to run
+it. There is no Play listing, so it installs over ADB: enable wireless debugging on the
+watch, `adb connect` to it, then `adb install`. It pairs with a code of its own; the phone
+app, if installed and paired, hands the watch the host's address so it does not have to be
+typed on a wrist. Wear OS 3 or later.
 
 ## Documentation
 

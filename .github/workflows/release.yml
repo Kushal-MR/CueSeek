@@ -151,6 +151,13 @@ jobs:
           `cueseek_*.apk` is attached when a signing key is configured. Sideload it, then
           pair with the code from `sudo -u cueseek cueseekd pair`.
 
+          `cueseek-wear_*.apk` is the Wear OS client, for the watch, and is attached
+          alongside it. There is no Play listing, so it is installed over ADB — enable
+          developer options and wireless debugging on the watch, then
+          `adb connect <watch-ip>:<port>` and `adb install cueseek-wear_*.apk`. It pairs on
+          its own with a code of its own; the phone, if paired, hands it the agent's address.
+          It needs Wear OS 3 or later, and has been tested on Wear OS 5.
+
           It installs as `dev.cueseek.android`. A build made from source installs as
           `dev.cueseek.android.debug` and the two coexist, so a development build never
           displaces the one you rely on.
@@ -271,29 +278,55 @@ jobs:
           # signed build reported `package: name='dev.***.android'`, which is the kind of
           # redaction that costs an hour the day something actually goes wrong.
           CUESEEK_KEY_ALIAS: cueseek
-        run: ./gradlew :app:assembleRelease
+        # Both clients, in one invocation and with one key. The watch is M5.16's addition;
+        # see the verification step for why "one key" is checked rather than assumed.
+        run: ./gradlew :app:assembleRelease :wear:assembleRelease
 
       # An unsigned output here means the signing configuration was not picked up — which
       # would otherwise be discovered by whoever downloaded it and could not install it.
-      - name: Verify the APK is signed, and name what it is
+      - name: Verify the APKs are signed, and name what they are
         if: steps.signing.outputs.available == 'true'
         working-directory: clients/android
         run: |
-          apk="app/build/outputs/apk/release/app-release.apk"
-          if [ ! -f "$apk" ]; then
-            echo "::error::No signed APK at $apk. An unsigned build produces app-release-unsigned.apk."
-            ls -l app/build/outputs/apk/release/ || true
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          mkdir -p "${GITHUB_WORKSPACE}/apk"
+
+          # name: the artefact prefix. apk: what Gradle wrote. digit: the versionCode's
+          # last digit, which M5.16 assigned per device — 0 phone, 1 watch.
+          publish() {
+            name="$1"; apk="$2"; digit="$3"
+            if [ ! -f "$apk" ]; then
+              echo "::error::No signed APK at $apk. An unsigned build produces *-release-unsigned.apk."
+              ls -l "$(dirname "$apk")" || true
+              exit 1
+            fi
+            "$build_tools/apksigner" verify --verbose "$apk"
+            badging="$("$build_tools/aapt2" dump badging "$apk")"
+            echo "$badging" | grep -E "^package"
+            version="$(echo "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
+            code="$(echo "$badging" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")"
+            case "$code" in
+              *"$digit") ;;
+              *) echo "::error::$name has versionCode $code; it must end in $digit."; exit 1 ;;
+            esac
+            cp "$apk" "${GITHUB_WORKSPACE}/apk/${name}_${version}.apk"
+          }
+
+          publish cueseek      app/build/outputs/apk/release/app-release.apk           0
+          publish cueseek-wear ../wear/app/build/outputs/apk/release/wear-release.apk 1
+
+          # One certificate, checked. The Wearable Data Layer only connects a phone and a
+          # watch app that share an applicationId AND a signing key; a watch signed with
+          # anything else installs, runs, and never receives the address handoff. That
+          # failure is silent on a wrist, so it is made loud here.
+          cert() { "$build_tools/apksigner" verify --print-certs "$1" | grep -m1 "SHA-256 digest"; }
+          phone_cert="$(cert app/build/outputs/apk/release/app-release.apk)"
+          watch_cert="$(cert ../wear/app/build/outputs/apk/release/wear-release.apk)"
+          if [ "$phone_cert" != "$watch_cert" ]; then
+            echo "::error::The phone and watch APKs are signed with different keys."
             exit 1
           fi
 
-          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
-          "$build_tools/apksigner" verify --verbose "$apk"
-          "$build_tools/aapt2" dump badging "$apk" | grep -E "^package"
-
-          mkdir -p "${GITHUB_WORKSPACE}/apk"
-          version="$("$build_tools/aapt2" dump badging "$apk" \
-            | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")"
-          cp "$apk" "${GITHUB_WORKSPACE}/apk/cueseek_${version}.apk"
           ( cd "${GITHUB_WORKSPACE}/apk" && sha256sum ./*.apk > SHA256SUMS-apk )
           ls -l "${GITHUB_WORKSPACE}/apk"
 
@@ -310,7 +343,7 @@ jobs:
         if: steps.signing.outputs.available == 'true' && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: cueseek-apk
+          name: cueseek-apks
           path: apk/
 
       - name: Attach the APK to the release
