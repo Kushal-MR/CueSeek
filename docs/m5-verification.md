@@ -123,3 +123,23 @@ its own confirming tap, so it took two deliberate activations rather than one st
 
 TalkBack was turned off over ADB afterwards, at Kushal's request
 (`enabled_accessibility_services` cleared; nothing left bound).
+
+### The complication's age, on real watch faces
+
+M5.12 left one question open: whether a face draws the complication's **title**, where the
+age lived. The answer, on the Watch 2R: **no face tried did.** The OnePlus "Arcs" face takes
+CueSeek in its round slot as a `RANGED_VALUE` — an arc and the main text — and nothing else.
+
+It mattered immediately. After the TalkBack test the slot read **`2/4`**: the last reading
+the app had taken, while `cron` was stopped, shown with nothing to say it was old after
+`cron` was running again. That was the documented cost of M5.12's design, seen on a wrist.
+
+Kushal chose to **put the age into the main text**, which every face draws:
+`TimeDifferenceComplicationText` with a `^1` template, so the slot reads **`3/4 1m`** and the
+face ticks the age forward by itself — no fetch, no wake. Observed on the face: `3/4 1m`,
+then `3/4 2m` a minute later with nothing from CueSeek in between. The title was dropped, so
+a face that does draw titles does not show the age twice. The one-hour expiry stays as a
+backstop on how long a visibly old reading can sit there.
+
+Considered and not chosen: a 15-minute expiry with the bare count (honest only by being
+blank most of the day), and keeping it as it was.

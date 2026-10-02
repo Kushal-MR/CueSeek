@@ -3,6 +3,7 @@ package dev.cueseek.wear.complication
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.wear.watchface.complications.data.ComplicationData
+import androidx.wear.watchface.complications.data.ComplicationText
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.CountUpTimeReference
 import androidx.wear.watchface.complications.data.LongTextComplicationData
@@ -52,21 +53,21 @@ import java.util.concurrent.TimeUnit
  * There is no dynamic expression here and no chance to recompute — the face renders whatever
  * was last supplied. Two mechanisms carry the honesty instead:
  *
- *  1. **A live age**, offered as the title — a [TimeDifferenceComplicationText] counting up
- *     from the reading, which the *watch face* ticks by itself.
+ *  1. **A live age**, inside the main text — a [TimeDifferenceComplicationText] counting
+ *     up from the reading, which the *watch face* ticks by itself: "3/4 5m".
  *  2. **An expiry.** [ComplicationData.validTimeRange] ends an hour on, so the slot empties
  *     rather than sitting on a watch face looking current.
  *
- * **The first mechanism is offered, not guaranteed, and that was learned the hard way.** The
- * face owns whether a title is drawn, and the first one this was added to did not draw it —
- * so `3/4` appeared with nothing qualifying it. The expiry is therefore doing the work the
- * age was meant to do, which is why it is an hour rather than the twelve it started at.
+ * **The age was a title first, and two watch faces declined to draw it.** A title is the
+ * face's to show or not, and on the Watch 2R neither face tried drew it — so `3/4` sat on
+ * the wrist with nothing qualifying it, and in M5.17 it showed `2/4` for a service that had
+ * already been started again. The age therefore moved into the main text, which every face
+ * draws. The expiry stays at an hour as the backstop: past it, the slot empties rather than
+ * showing an age nobody should still be reading.
  *
- * **The honest cost, stated rather than hidden:** between 90 seconds and that expiry, the
- * slot may show a number the rest of the app would label `Unverified`, with no age beside it
- * if the face declines to draw one. Blanking at 90 seconds was the alternative, and it was
- * rejected because a complication that is empty most of the day teaches its owner to ignore
- * it — and a slot nobody reads is worse than one that is an hour behind.
+ * Blanking at 90 seconds was the alternative, and it was rejected because a complication
+ * that is empty most of the day teaches its owner to ignore it. A number with its age on it
+ * is honest at any age; that is what makes the hour safe.
  */
 class CueSeekComplicationService : SuspendingComplicationDataSourceService() {
 
@@ -107,16 +108,28 @@ class CueSeekComplicationService : SuspendingComplicationDataSourceService() {
             "CueSeek: ${reading.verdict}. ${reading.healthy} of ${reading.total} services healthy.",
         ).build()
 
-        // Ticked by the watch face, not by this service. A preview has no real age, so it
-        // gets a fixed word instead of a counter that would read "0m" forever in a picker.
-        val age = if (preview) {
-            PlainComplicationText.Builder("now").build()
+        // The count and its age as one text: "3/4 now", "3/4 5m", "3/4 2h". `^1` is where
+        // the watch face puts the time difference, which it ticks by itself — no fetch, no
+        // wake, nothing from this service after the one write.
+        //
+        // **This was a title until M5.17, and the wrist proved a title is not enough.** The
+        // face owns whether a title is drawn, and both faces tried on the Watch 2R drew
+        // only the count. During the TalkBack test the slot read `2/4` — a reading taken
+        // while cron was stopped — after cron was running again, with nothing to say it was
+        // old. The main text is the one field every face draws, so the age lives there.
+        //
+        // A preview has no real age, so it gets a fixed word rather than a counter that
+        // would read "0m" forever in a picker.
+        fun counted(template: String): ComplicationText = if (preview) {
+            PlainComplicationText.Builder(template.replace("^1", "now")).build()
         } else {
             TimeDifferenceComplicationText.Builder(
                 TimeDifferenceStyle.SHORT_SINGLE_UNIT,
                 CountUpTimeReference(reading.observedAt),
             )
                 .setMinimumTimeUnit(TimeUnit.MINUTES)
+                .setDisplayAsNow(true)
+                .setText(template)
                 .build()
         }
 
@@ -127,10 +140,9 @@ class CueSeekComplicationService : SuspendingComplicationDataSourceService() {
 
         return when (type) {
             ComplicationType.SHORT_TEXT -> ShortTextComplicationData.Builder(
-                text = PlainComplicationText.Builder(count).build(),
+                text = counted("$count ^1"),
                 contentDescription = description,
             )
-                .setTitle(age)
                 .setTapAction(openApp())
                 .setValidTimeRange(validity)
                 .build()
@@ -144,20 +156,16 @@ class CueSeekComplicationService : SuspendingComplicationDataSourceService() {
                 max = reading.total.coerceAtLeast(1).toFloat(),
                 contentDescription = description,
             )
-                .setText(PlainComplicationText.Builder(count).build())
-                .setTitle(age)
+                .setText(counted("$count ^1"))
                 .setTapAction(openApp())
                 .setValidTimeRange(validity)
                 .build()
 
             // Room for the sentence, so it gets the sentence.
             ComplicationType.LONG_TEXT -> LongTextComplicationData.Builder(
-                text = PlainComplicationText.Builder(
-                    "$count healthy",
-                ).build(),
+                text = counted("$count healthy · ^1"),
                 contentDescription = description,
             )
-                .setTitle(age)
                 .setTapAction(openApp())
                 .setValidTimeRange(validity)
                 .build()
@@ -223,6 +231,10 @@ class CueSeekComplicationService : SuspendingComplicationDataSourceService() {
          * It is still not the 90-second staleness threshold, and deliberately not — a slot
          * that blanked every 90 seconds would be empty most of the day, and a complication
          * its owner has learned to ignore is worse than one that is an hour behind.
+         *
+         * **Since M5.17 it is a backstop again.** The age moved into the main text, which
+         * every face draws, so the number is never unqualified; the hour now only bounds how
+         * long a visibly old reading stays on the face.
          */
         val EXPIRES_AFTER: Duration = Duration.ofHours(1)
     }
