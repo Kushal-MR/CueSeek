@@ -84,8 +84,12 @@ fun rememberCueSeekHaptics(): CueSeekHaptics {
 @Composable
 fun ActionOutcomeHaptics(action: ActionUi) {
     val haptics = rememberCueSeekHaptics()
-    LaunchedEffect(action) {
-        when (action) {
+    // Keyed on the outcome with `settling` erased: an acceptance moves from settling to
+    // settled once the screen has re-read the agent, and that second state is the same
+    // outcome. Keyed on the raw state, the wrist would have felt every acceptance twice.
+    val outcome = if (action is ActionUi.Accepted) action.copy(settling = false) else action
+    LaunchedEffect(outcome) {
+        when (outcome) {
             is ActionUi.Accepted -> haptics.accepted()
             is ActionUi.Failed -> haptics.refused()
             // Working and Idle are not outcomes. The wrist stays quiet until there is

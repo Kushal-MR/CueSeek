@@ -36,7 +36,7 @@ sealed interface ActionUi {
     data class Working(val label: String) : ActionUi
 
     /** The agent took the request. Not the same as it having finished — see [DashboardViewModel.invoke]. */
-    data class Accepted(val label: String) : ActionUi
+    data class Accepted(val label: String, val settling: Boolean = false) : ActionUi
     data class Failed(val label: String, val message: String) : ActionUi
 }
 
@@ -143,9 +143,16 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     // Give systemd a moment, then look. The delay is the honest part: the
                     // watch is observing a result rather than being told one, so it has to
                     // wait long enough for there to be something to see.
-                    _action.value = ActionUi.Accepted(label)
+                    //
+                    // The controls stay disabled until that look has come back (M5.17). They
+                    // were re-enabled the moment the agent accepted, so for two seconds the
+                    // screen still offered "Stop Cron — hold" for a service already stopping
+                    // — and a second hold on the wrist sent a second stop four seconds after
+                    // the first. Harmless for stop; not a thing a control panel should allow.
+                    _action.value = ActionUi.Accepted(label, settling = true)
                     kotlinx.coroutines.delay(2_000)
-                    refresh()
+                    load()
+                    _action.value = ActionUi.Accepted(label, settling = false)
                 }
             }
         }
@@ -225,11 +232,16 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refresh() {
-        viewModelScope.launch {
+        viewModelScope.launch { load() }
+    }
+
+    /** One read of the agent, awaitable — so [invoke] can wait for the reading it asked for. */
+    private suspend fun load() {
+        run {
             val host: PairedHost? = hosts.selectedHost.first()
             if (host == null) {
                 _ui.value = DashboardUi.Unpaired
-                return@launch
+                return
             }
 
             when (val result = services.snapshot(host)) {

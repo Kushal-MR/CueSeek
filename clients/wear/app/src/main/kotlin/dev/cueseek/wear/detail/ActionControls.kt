@@ -45,9 +45,9 @@ import kotlinx.coroutines.launch
 /**
  * How long a destructive action must be held.
  *
- * **Not yet measured, and that is the honest state of it.** The M5 plan says this value is
- * measured rather than inherited; it currently *is* the phone's 1200ms, and M5.17 is where a
- * wrist decides whether that is right.
+ * **Measured on a wrist in M5.17, and kept.** It started as the phone's 1200ms, inherited
+ * rather than chosen; held on a raised arm on the Watch 2R it felt right, with the threshold
+ * haptic arriving where a finger expects it (docs/m5-verification.md).
  *
  * The reasoning for starting there rather than lengthening it: the risk a watch adds is not
  * longer accidental contact — a sleeve brush does not sustain 1.2 seconds any more than a
@@ -55,9 +55,6 @@ import kotlinx.coroutines.launch
  * Making the duration longer would trade a safety margin that is already sufficient for
  * ergonomics that are already worse. The watch-specific answer is a bigger target, which is
  * below, and haptics, which are M5.8.
- *
- * If M5.17 finds 1200ms unholdable on a raised wrist, the number moves and this comment
- * becomes the record of why it started here.
  */
 internal const val HOLD_MILLIS = 1200
 

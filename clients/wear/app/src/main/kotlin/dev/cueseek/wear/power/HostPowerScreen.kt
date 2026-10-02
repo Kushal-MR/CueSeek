@@ -25,6 +25,7 @@ import dev.cueseek.core.model.Service
 import dev.cueseek.wear.dashboard.ActionUi
 import dev.cueseek.wear.detail.ActionButton
 import dev.cueseek.wear.feedback.ActionOutcomeHaptics
+import dev.cueseek.wear.theme.withRoomToCentre
 
 /**
  * The machine itself: reboot, and shut down.
@@ -78,7 +79,7 @@ fun HostPowerScreen(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding,
+            contentPadding = contentPadding.withRoomToCentre(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
