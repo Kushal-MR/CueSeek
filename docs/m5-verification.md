@@ -104,3 +104,22 @@ A ping answered at 192.168.1.250 while the guest was frozen before networking, w
 like an address conflict. Duplicate-address detection from inside the VM (`arping -D`)
 received no response, so nothing else holds the address; the earlier reply is most likely
 VirtualBox's Wi-Fi bridge.
+
+### TalkBack, driven by a person
+
+M5.14 could only read the accessibility tree with `uiautomator`; whether TalkBack actually
+reaches the hold button's long-press action needed a finger. Kushal turned TalkBack on and
+drove it:
+
+- **The hold button announced itself as intended:** "Stop Cron. Press and hold to confirm."
+- **Double-tap-and-hold stopped the service.** `action accepted service=cron action=stop …
+  risk=destructive` at 14:21:32, from the watch.
+- **A plain double-tap did not.** Exactly one stop appears in the journal for the session.
+  This is the half that matters most: a screen-reader user's ordinary activation must not
+  fire a destructive action any more than a sighted user's tap does.
+
+A restart was also accepted at 14:21:13, while navigating; restart is `disruptive` and needs
+its own confirming tap, so it took two deliberate activations rather than one stray one.
+
+TalkBack was turned off over ADB afterwards, at Kushal's request
+(`enabled_accessibility_services` cleared; nothing left bound).
