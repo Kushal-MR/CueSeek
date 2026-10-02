@@ -143,3 +143,70 @@ backstop on how long a visibly old reading can sit there.
 
 Considered and not chosen: a 15-minute expiry with the bare count (honest only by being
 blank most of the day), and keeping it as it was.
+
+---
+
+## Session 2 — the watch on the real server (2026-10-02)
+
+Until now the watch had only ever talked to the VM. The HP server is the machine CueSeek
+exists for, and it is always on, which makes it the honest target for the day-long checks
+in session 3.
+
+### Reaching it from the wrist
+
+The HP's agent listened only on its Tailscale address, and the watch has no Tailscale.
+Kushal needs the watch at home only — his phone covers away-from-home over Tailscale — so
+the agent had to become reachable on the home network as well.
+
+**The agent binds exactly one address**, so "also on the LAN" was not a config line. Three
+ways were weighed: teach the agent a list of addresses (code, a release, an install), bind
+every interface (two lines), or LAN only (breaks the phone). **Kushal chose to bind every
+interface**: `address: "0.0.0.0:7777"` with `allow_unrestricted: true`. The agent logged
+its own warning on start, which is the guard working as designed — widening is visible,
+never accidental.
+
+**The cost, stated:** on the home network the watch speaks plain HTTP. ADR-0001 delegates
+transport security to the VPN, and the LAN is not the VPN; a compromised device on the home
+network could in principle observe a token. Every request still needs one (`401` without),
+and the watch was paired without `host.power`, so a stolen watch token cannot power the
+machine off. This is a choice about one operator's server, not a change to the product's
+default, so ADR-0001 is not amended; `config.example.yaml` still says leave it false.
+
+| Check | Result |
+| --- | --- |
+| Agent | `LISTEN *:7777`, `api listening address=[::]:7777 agent_version=v0.1.0` |
+| LAN, from the laptop | `192.168.1.12:7777` → `401` |
+| Tailscale, from the HP | `100.92.18.125:7777` → `401` |
+| The phone's release app | "kushal-HP-paviliong6 — Operational", live, over Tailscale — undisturbed |
+
+The configuration was backed up first as `config.yaml.pre-m517`; one `cp` and a restart
+undoes it.
+
+**Two things went wrong on the way, neither CueSeek's.** The HP's LAN address had moved
+from `.9` to `.12` while it was off for two weeks — the same DHCP drift that cost the VM a
+re-pairing in M5.9 — so SSH timed out until the address was found. The host key was
+compared before trusting the new address: identical at both. And Windows PowerShell strips
+inner double quotes from arguments to native programs, so a quoted `grep` pattern arrived
+on the HP with its `|` read as shell pipes; commands for PowerShell are now written with no
+inner quotes at all.
+
+**Not done, and worth doing:** a DHCP reservation for the HP on the router. The watch stores
+`192.168.1.12`, and another drift would cut it off until it is re-paired.
+
+### The watch paired to the HP
+
+The watch's VM pairing was cleared (`pm clear`) — and the phone's debug app, still paired to
+the VM, immediately handed the watch the VM's address. That is ADR-0014's handoff working as
+designed, pointed at the wrong server; **Change address** took the HP's instead.
+
+Kushal generated the code with `cueseekd pair` and entered it himself. The agent recorded
+`device paired … name=OPWWE234 scopes="read, service.control"` — the documented default,
+**without `host.power`**: reboot and shut down were proven on the VM, and nothing in a
+day-long wear test needs the power to switch off the real server.
+
+What the watch then showed, all of it a first on real hardware:
+
+- "kushal-HP-paviliong6 — Operational, 2/2 healthy", Jellyfin and qBittorrent both Running
+- **a real thermal sensor**, `acpitz 46°C` — the VM exposes none, so this line of the vitals
+  had never rendered outside a test
+- **no Machine button**, correctly, for a watch without `host.power`
