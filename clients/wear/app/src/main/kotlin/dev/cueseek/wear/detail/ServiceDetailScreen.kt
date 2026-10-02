@@ -26,6 +26,7 @@ import dev.cueseek.core.model.Service
 import dev.cueseek.wear.dashboard.ActionUi
 import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 import dev.cueseek.wear.theme.WearType
+import dev.cueseek.wear.theme.withRoomToCentre
 
 /**
  * One service, full height.
@@ -67,7 +68,7 @@ fun ServiceDetailScreen(
     ScreenScaffold(scrollState = listState) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding,
+            contentPadding = contentPadding.withRoomToCentre(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             item {
@@ -164,7 +165,10 @@ fun ServiceDetailScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp)
+                            // Room only when there is an outcome to show. It reserved 10dp
+                            // while idle, which with the item spacing left a visible empty band
+                            // between the header and the buttons on every service (M5.17).
+                            .padding(top = if (action is ActionUi.Idle) 0.dp else 6.dp)
                             // Announced when it changes, because the outcome arrives while
                             // focus is still on the button that asked. Haptics tell a wrist;
                             // this tells a screen reader. The container is always present
@@ -214,7 +218,10 @@ fun ServiceDetailScreen(
                     val a = service.actions[index]
                     ActionButton(
                         action = a,
-                        enabled = action !is ActionUi.Working,
+                        // Not while a request is in flight, and not while the screen is still
+                        // showing the state from before it was accepted.
+                        enabled = action !is ActionUi.Working &&
+                            !(action is ActionUi.Accepted && action.settling),
                         onConfirmed = { onInvoke(a.id, a.label) },
                     )
                 }
