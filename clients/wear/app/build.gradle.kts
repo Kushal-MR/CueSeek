@@ -113,6 +113,19 @@ android {
             // Off, as on the phone: this project does not ship a build it has not run.
             isMinifyEnabled = false
         }
+
+        // Release code, debug identity: optimised exactly as the release is, but signed with
+        // the debug key and given the debug application id, so it installs over a paired
+        // debug build and keeps its pairing. For measuring performance — a debug build runs
+        // Compose several times slower, so smoothness judged on one is judged on the wrong
+        // app (M5.17). Never published.
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-benchmark"
+            matchingFallbacks += listOf("release")
+        }
     }
 
     // Matches every other module in this build. Not a toolchain declaration: the phone

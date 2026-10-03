@@ -311,3 +311,31 @@ own. Driven by scroll position, so the reduced-motion preference has nothing to 
 **A small finding:** a reading seconds old shows as "1m", not "now". This face rounds the
 age up to the minute, so `setDisplayAsNow` never shows. Harmless — it is never younger than
 it says.
+
+### Scrolling felt laggy — and it was the build, not the code
+
+Kushal felt a stutter scrolling the dashboard and asked for it to be as smooth as the system
+launcher. Measured with `dumpsys gfxinfo` over twelve swipes on the watch, before changing
+anything:
+
+| build | janky frames | 50th | 90th | 99th | slow UI-thread frames |
+| --- | --- | --- | --- | --- | --- |
+| debug — what he was wearing | **9.6%** | 14 ms | 44 ms | 150 ms | 53 |
+| release code, just installed | 1.2% | — | 17 ms | 30 ms | 9 |
+| release code, profile-compiled | **0.6%** | 9 ms | **14 ms** | **17 ms** | 4 |
+
+GPU time stayed at 6–10 ms throughout; the jank was all on the UI thread, which is exactly
+where a debug build is slowest — no optimisation, extra runtime checks, nothing
+ahead-of-time compiled. With release code and the hot paths compiled, 99% of frames land
+within one 60 Hz frame (16.7 ms): launcher-smooth. Two runs agreed.
+
+**Nothing in the app was changed for it.** The edge morph and pull-to-refresh added in this
+session cost nothing visible once compiled. The release APK already carries Compose's
+baseline profiles (`assets/dexopt/baseline.prof`, with `profileinstaller`), so a sideloaded
+install reaches the compiled state on its own, typically after the watch's first idle charge;
+the "just installed" row is the first day.
+
+**The lesson, and the tool for it:** smoothness judged on a debug build is judged on the wrong
+app. The watch module now has a `benchmark` build type — release code, debug key, debug
+application id — which installs over a paired debug build without losing the pairing. It is
+what was measured above, and what the watch was left running.
