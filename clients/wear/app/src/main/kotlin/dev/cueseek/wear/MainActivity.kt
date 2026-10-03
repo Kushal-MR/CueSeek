@@ -151,6 +151,7 @@ private fun PairedApp(ambient: Boolean, dashboard: DashboardViewModel = viewMode
     // receiving a hardcoded `false` since M5.5 — see [rememberStaleness] for why that was
     // worse on the screen you act from than on the one you read.
     val stale by rememberStaleness((ui as? DashboardUi.Loaded)?.observedAt)
+    val refreshing by dashboard.refreshing.collectAsStateWithLifecycle()
 
     // Ambient replaces the whole navigation graph rather than dimming whatever screen
     // happened to be open. Two reasons, and the second is the one that matters:
@@ -233,6 +234,8 @@ private fun PairedApp(ambient: Boolean, dashboard: DashboardViewModel = viewMode
                     onInvoke = { actionId, label ->
                         dashboard.invoke(service.id, actionId, label)
                     },
+                    refreshing = refreshing,
+                    onRefresh = dashboard::refresh,
                 )
             }
         }

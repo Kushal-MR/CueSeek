@@ -26,6 +26,8 @@ import dev.cueseek.wear.dashboard.ActionUi
 import dev.cueseek.wear.detail.ActionButton
 import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 import dev.cueseek.wear.theme.withRoomToCentre
+import dev.cueseek.wear.theme.morphAtEdges
+import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 
 /**
  * The machine itself: reboot, and shut down.
@@ -70,6 +72,7 @@ fun HostPowerScreen(
     onInvoke: (actionId: String, label: String) -> Unit,
 ) {
     val listState = rememberTransformingLazyColumnState()
+    val spec = rememberTransformationSpec()
 
     // Felt, not read — and this is the screen where that matters most. A power action's
     // success is silence by design, so the *refusal* is the only thing there is to report,
@@ -88,6 +91,7 @@ fun HostPowerScreen(
                     style = MaterialTheme.typography.titleMedium,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
+                        .morphAtEdges(this, spec)
                         .padding(bottom = 4.dp)
                         .semantics { heading() },
                 )
@@ -156,7 +160,7 @@ fun HostPowerScreen(
                         // composable, and emitting two put the button and its description in
                         // the same place — which rendered as the description alone and cost a
                         // watch to find, because every unit test still passed.
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.morphAtEdges(this, spec).fillMaxWidth()) {
                             ActionButton(
                                 action = power,
                                 enabled = action !is ActionUi.Working,
