@@ -87,7 +87,7 @@ for.
 | M5.14 | Accessibility pass | M5.8, M5.9 | ✅ |
 | M5.15 | Golden tests at real Wear geometries | M5.4–M5.13 | ✅ |
 | M5.16 | Release: signing, versioning, artefacts | M5.15 | ✅ |
-| M5.17 | Verification on the OnePlus Watch 2R | all | ⬜ |
+| M5.17 | Verification on the OnePlus Watch 2R | all | ✅ |
 
 ---
 
@@ -1333,7 +1333,7 @@ is the check.
 
 ---
 
-### M5.17 — Verification on the OnePlus Watch 2R
+### M5.17 — Verification on the OnePlus Watch 2R ✅
 
 **This phase is why the milestone is credible or is not.**
 
@@ -1344,27 +1344,45 @@ tile went stale because the radio slept, or that the app costs 15% of the batter
 M4's lesson, from its closing note: the defects that mattered were only visible on a machine
 that had never run the software. The watch equivalent is a watch on a wrist for a day.
 
-Checklist, recorded in `docs/m5-verification.md` in the shape of `m4-verification.md`:
+Checklist, recorded in [`docs/m5-verification.md`](m5-verification.md) in the shape of
+`m4-verification.md`. Done over three sessions, 2026-10-02 and 2026-10-03:
 
-- Paired against the VM **and** the HP host
-- A service restarted, confirmed by `MainPID` on the host
-- ~~No `Machine` button without `host.power`, and a reboot from the wrist with it~~ — both
-  done 2026-09-18, recorded under M5.7
-- ~~Swipe dismisses; haptics fire~~ — done 2026-09-20, recorded under M5.8. **Rotary is
-  not checkable on this watch at all** — it has no encoder
-- Tile and complication both installed and updating — **including the tile's own 15-minute
-  refresh**, which every test so far triggered by hand
-- **Whether a `SHORT_TEXT` or `LONG_TEXT` face draws the complication's title**, since the
-  first face tried did not, and the staleness argument turns on it
-- **Whether ambient engages at all on this device**, on a wrist rather than on a desk — it
-  never fired while cabled and off-wrist, and M5.10 records two hypotheses for why
-- Ambient behaves for a full hour without the screen burning
-- **The empty state** — an agent with `services: []`, which is what every new operator sees
-- Battery cost over a working day, measured
-- Readable outdoors
-- TalkBack pass, by a person — including double-tap-and-hold on a destructive action
-- The phone's hold button with "Remove animations" on: a short press must not confirm
-  (fixed in M5.14, verified only on the watch)
+| Item | Result |
+| --- | --- |
+| Paired against the VM **and** the HP host | ✅ the VM through session 1; the HP from session 2, over the home network |
+| A service restarted, confirmed by `MainPID` | ✅ 689 → 1378 |
+| No `Machine` without `host.power`; a reboot from the wrist with it | ✅ M5.7 — and again on the HP, which was paired without it |
+| Swipe dismisses; haptics fire | ✅ M5.8 |
+| Rotary | ⚠️ **not checkable** — the Watch 2R has no rotary encoder |
+| Tile and complication updating, incl. the tile's own 15-minute refresh | ✅ tile ran 65 times in 13½ h, about 4.8 an hour |
+| Does a face draw the complication's title | ❌ **no face did** — so the age moved into the main text: `3/4 2m` |
+| Ambient engages on a wrist | ✅ `onEnterAmbient` within seconds of putting it on |
+| Ambient for a full hour without burning | ⚠️ **not measured** — the watch reverted its log buffer mid-day |
+| The empty state | ✅ an instruction, not a fault |
+| Battery over a working day | ✅ **3.64 mAh** in 13½ h, about 2.4% of the day's drain |
+| Readable outdoors | ✅ |
+| TalkBack, by a person | ✅ a plain double-tap does not fire a destructive action |
+| The phone's hold with animations off | ✅ 300 ms ignored, 1.6 s confirms |
+
+The wrist found what the desk could not, which is what this phase was for: a last button
+that could not be seen whole, a held button that could be held twice, a complication whose
+age no face drew, an indicator on top of the clock, and a stutter that turned out to be the
+debug build rather than the code. Each was fixed or explained in the record.
+
+#### Known gaps, closed with rather than hidden
+
+- **Ambient over an hour.** Ambient engaging is proven; how often it engaged across a day,
+  and whether an hour of it marks the panel, is not. The ambient screen has no colour and
+  three short lines of text, which keeps the burn-in risk low, but low is not measured.
+  Measuring it on this watch needs the app to keep its own small record of ambient entry and
+  exit, because the system log does not survive the day.
+- **Rotary input.** Unverifiable on this hardware; it relies on Wear Compose's built-in
+  rotary handling, untested on a device with a crown.
+- **The phone's debug app still hands the watch the VM's address** if the watch is ever
+  cleared. Correct behaviour for a test setup that outlived its purpose; it ends when the VM
+  and the debug builds are removed.
+
+**M5 is complete.**
 
 ---
 

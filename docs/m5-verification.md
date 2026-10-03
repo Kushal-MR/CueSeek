@@ -339,3 +339,12 @@ the "just installed" row is the first day.
 app. The watch module now has a `benchmark` build type — release code, debug key, debug
 application id — which installs over a paired debug build without losing the pairing. It is
 what was measured above, and what the watch was left running.
+
+---
+
+## M5 closed — 2026-10-03
+
+Every item on M5.17's checklist was either verified on the wrist or is recorded in
+[`m5-plan.md`](m5-plan.md) as a known gap with its reason: an hour of ambient (not
+measurable from the system log on this watch) and rotary input (no encoder). Nothing
+was marked done that was not seen.

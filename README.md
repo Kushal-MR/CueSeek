@@ -17,12 +17,14 @@ is not, and how to install it, on one page.
 > in full; any other systemd unit is supported for health and lifecycle control. The phone
 > can read the machine's own vitals and reboot or shut it down.
 >
-> **M5 is building the Wear OS client** — 19 of 20 phases, running on a real OnePlus Watch
-> 2R: it pairs without the phone holding its token, shows the verdict and the roster,
-> restarts services, can power the machine off when the operator grants it, and has a tile,
-> a complication, an ambient mode, its own icon and an accessibility pass
-> ([plan](docs/m5-plan.md)). The release workflow now builds and signs a Wear APK; the
-> first one ships with the next release tag.
+> **M5 built the Wear OS client, and it is complete** — verified for a day on a real
+> OnePlus Watch 2R against the real server: it pairs without the phone holding its token,
+> shows the verdict and the roster, restarts services, can power the machine off when the
+> operator grants it, and has a tile, a complication, an ambient mode, pull-to-refresh, its
+> own icon and an accessibility pass. Over a 13½-hour day it used 3.64 mAh — about 2% of
+> the watch's drain ([plan](docs/m5-plan.md), [verification](docs/m5-verification.md)).
+> The release workflow builds and signs the Wear APK; the first one ships with the next
+> release tag.
 
 ---
 
