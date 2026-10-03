@@ -210,3 +210,132 @@ What the watch then showed, all of it a first on real hardware:
 - **a real thermal sensor**, `acpitz 46°C` — the VM exposes none, so this line of the vitals
   had never rendered outside a test
 - **no Machine button**, correctly, for a watch without `host.power`
+
+---
+
+## Session 3 — a day on the wrist, against the HP (2026-10-03)
+
+Worn from **08:34 to 22:01**, paired to the HP over the home network. Battery statistics
+reset at 100% at the start; wireless debugging **off all day**, so the radio cost is the
+watch's own and CueSeek's.
+
+### Battery
+
+| | |
+| --- | --- |
+| On battery | 13h 27m |
+| Drain | 100% → 70%, **145–150 mAh** of 500 |
+| Screen on | 35m, across 401 wake-ups |
+| **CueSeek, all causes** | **3.64 mAh** — about **2.4%** of the day's drain, **0.7%** of the battery |
+
+CueSeek's share, from `batterystats` for its UID:
+
+| | mAh | what it is |
+| --- | --- | --- |
+| screen | 1.45 | 5m 53s with CueSeek on screen — the operator looking at it |
+| cpu | 1.63 | almost all while open; **4.5 seconds** in the background for the whole day |
+| wifi | 0.56 | 611 KB received, 221 KB sent; the radio asleep 99.8% of the day |
+
+Opened 24 times, 7m 22s in the foreground. For scale, the watch face's always-on display
+cost **42 mAh** — more than ten times CueSeek's total. The cost of not holding a stream
+(ADR-0004) is visible here as its absence.
+
+### The tile and the complication
+
+| | runs over the day | |
+| --- | --- | --- |
+| Tile | **65**, about 4.8 an hour | consistent with its own 15-minute refresh (4 an hour) plus glances |
+| Complication | 28 | reads only, never fetches |
+
+The split between the tile's self-refreshes and glances could not be read, because the logs
+that would show it were lost (below). The rate is what a working 15-minute refresh predicts,
+and a tile that only ran on glances could not have reached it.
+
+**The complication's expiry is ignored by this face.** At 08:35 the slot read **"2/2 12h"**
+— last night's reading, twelve hours past its one-hour `validTimeRange`. The OnePlus Arcs
+face does not honour the range. The age moved into the main text in session 1 is therefore
+the only thing keeping the slot honest on this watch, and it did: the number said exactly
+how old it was.
+
+### Ambient
+
+**Ambient engages on a wrist.** `onEnterAmbient burnIn=false lowBit=false` at 08:34:27,
+seconds after the watch went on — the first time ambient ever fired for CueSeek, after
+M5.10 never saw it on a desk or a dock. How often it engaged during the day, and whether an
+hour of it left any mark, could not be measured.
+
+**Why, recorded so it is not repeated:** the watch keeps a 64 KB log buffer by default,
+which a day overwrites in minutes. It was raised to 64 MB at 08:34 — and was back at 64 KB
+by evening **without a reboot** (up since 06:00). The system reverts the setting on its own.
+A future measurement of ambient on this watch needs the app to keep its own small record,
+not the system log.
+
+### Readable outdoors
+
+Yes — the verdict read at a glance in daylight.
+
+### Now playing and transfers, from a real server
+
+Kushal played media on Jellyfin and ran a torrent; both appeared on the watch, on the
+service screens that had only ever rendered fixtures and goldens. **They took a while to
+appear**, and the reason is a design decision meeting a real use: the watch reads the agent
+when it opens and on returning from ambient, and holds no stream — so anything started while
+CueSeek is on screen stays invisible until it is left and reopened.
+
+### What the day changed
+
+**Pull to refresh**, which Kushal asked for by name from the phone. Wear Compose has none and
+the phone's lives in phone Material 3, which this module cannot see (ADR-0010), so it is
+written for the watch: a nested-scroll connection that collects the downward drag a list at
+its top cannot use, a threshold felt as the app's commitment haptic, a small ring at the top
+while pulled and while reading, and a "Refresh" accessibility action as its non-gesture
+equivalent. **The first version drew its ring on top of the clock**, which Kushal caught on
+the wrist; the list now slides down while pulled, and the ring sits in that gap, below the
+time. The ring's line is set thin explicitly — the default stroke, sized for full-screen
+indicators, filled a 24dp circle and read as a solid dot. On the dashboard and the service screens. Verified on the watch: with the reading
+aged to "2m" on the complication, a pull brought it to "1m" — an age can only fall if a new
+reading was taken.
+
+**The dashboard's last row reaches the middle.** Kushal found qBittorrent clipped by the
+round screen. Session 1 gave the action screens room to centre their last item and left the
+dashboard out, assuming it always ends in the Machine button — but a watch without
+`host.power`, which the HP pairing deliberately is, has no Machine button. It now gets the same
+room. On the watch: qBittorrent sits whole in the middle of the screen.
+
+**Items morph at the edges.** Wear's own list treatment (`rememberTransformationSpec`,
+`transformedHeight`) had never been applied, so a row at the top or bottom kept its full
+width and the circle cut it. Rows now narrow and fade into the curve and return to full
+width in the middle; the vitals were split into one item per row so each does this on its
+own. Driven by scroll position, so the reduced-motion preference has nothing to turn off.
+
+**A small finding:** a reading seconds old shows as "1m", not "now". This face rounds the
+age up to the minute, so `setDisplayAsNow` never shows. Harmless — it is never younger than
+it says.
+
+### Scrolling felt laggy — and it was the build, not the code
+
+Kushal felt a stutter scrolling the dashboard and asked for it to be as smooth as the system
+launcher. Measured with `dumpsys gfxinfo` over twelve swipes on the watch, before changing
+anything:
+
+| build | janky frames | 50th | 90th | 99th | slow UI-thread frames |
+| --- | --- | --- | --- | --- | --- |
+| debug — what he was wearing | **9.6%** | 14 ms | 44 ms | 150 ms | 53 |
+| release code, just installed | 1.2% | — | 17 ms | 30 ms | 9 |
+| release code, profile-compiled | **0.6%** | 9 ms | **14 ms** | **17 ms** | 4 |
+
+GPU time stayed at 6–10 ms throughout; the jank was all on the UI thread, which is exactly
+where a debug build is slowest — no optimisation, extra runtime checks, nothing
+ahead-of-time compiled. With release code and the hot paths compiled, 99% of frames land
+within one 60 Hz frame (16.7 ms): launcher-smooth. Two runs agreed.
+
+**Nothing in the app was changed for it.** The edge morph and pull-to-refresh added in this
+session cost nothing visible once compiled. The release APK already carries Compose's
+baseline profiles (`assets/dexopt/baseline.prof`, with `profileinstaller`), so a sideloaded
+install reaches the compiled state on its own, typically after the watch's first idle charge;
+the "just installed" row is the first day.
+
+**The lesson, and the tool for it:** smoothness judged on a debug build is judged on the wrong
+app. The watch module now has a `benchmark` build type — release code, debug key, debug
+application id — which installs over a paired debug build without losing the pairing. It is
+what was measured above, and what the watch was left running.

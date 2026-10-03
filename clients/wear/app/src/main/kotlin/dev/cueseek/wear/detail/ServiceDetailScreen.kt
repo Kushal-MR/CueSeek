@@ -27,6 +27,12 @@ import dev.cueseek.wear.dashboard.ActionUi
 import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 import dev.cueseek.wear.theme.WearType
 import dev.cueseek.wear.theme.withRoomToCentre
+import dev.cueseek.wear.theme.morphAtEdges
+import dev.cueseek.wear.feedback.PullIndicator
+import dev.cueseek.wear.feedback.pullToRefresh
+import dev.cueseek.wear.feedback.rememberPullToRefresh
+import androidx.wear.compose.material3.lazy.rememberTransformationSpec
+import androidx.compose.foundation.layout.Box
 
 /**
  * One service, full height.
@@ -56,8 +62,12 @@ fun ServiceDetailScreen(
     stale: Boolean,
     action: ActionUi = ActionUi.Idle,
     onInvoke: (actionId: String, label: String) -> Unit = { _, _ -> },
+    refreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
 ) {
     val listState = rememberTransformingLazyColumnState()
+    val spec = rememberTransformationSpec()
+    val pull = rememberPullToRefresh(onRefresh)
     val style = statusStyle(service.health.status, stale)
 
     // The outcome, felt rather than read. A restart asked for while the wrist is down is the
@@ -70,6 +80,9 @@ fun ServiceDetailScreen(
             state = listState,
             contentPadding = contentPadding.withRoomToCentre(),
             horizontalAlignment = Alignment.CenterHorizontally,
+            // Pull down to re-read, for the case that found it missing: playback started
+            // while this screen was open, and the screen kept showing the moment it opened.
+            modifier = Modifier.pullToRefresh(pull, refreshing, onRefresh),
         ) {
             item {
                 Column(
@@ -77,6 +90,7 @@ fun ServiceDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                     // Name, status and the agent's word are one answer: one heading.
                     modifier = Modifier
+                        .morphAtEdges(this, spec)
                         .padding(bottom = 6.dp)
                         .semantics(mergeDescendants = true) { heading() },
                 ) {
@@ -119,6 +133,7 @@ fun ServiceDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
+                        .morphAtEdges(this, spec)
                         .fillMaxWidth()
                         .padding(bottom = 4.dp),
                 )
@@ -129,6 +144,7 @@ fun ServiceDetailScreen(
                     Section(
                         label = "Playing",
                         count = service.nowPlaying?.sessions ?: 0,
+                        modifier = Modifier.morphAtEdges(this, spec),
                     ) {
                         Text(
                             text = session.title,
@@ -164,6 +180,7 @@ fun ServiceDetailScreen(
                 item {
                     Column(
                         modifier = Modifier
+                            .morphAtEdges(this, spec)
                             .fillMaxWidth()
                             // Room only when there is an outcome to show. It reserved 10dp
                             // while idle, which with the item spacing left a visible empty band
@@ -216,14 +233,16 @@ fun ServiceDetailScreen(
                     key = { service.actions[it].id },
                 ) { index ->
                     val a = service.actions[index]
-                    ActionButton(
-                        action = a,
-                        // Not while a request is in flight, and not while the screen is still
-                        // showing the state from before it was accepted.
-                        enabled = action !is ActionUi.Working &&
-                            !(action is ActionUi.Accepted && action.settling),
-                        onConfirmed = { onInvoke(a.id, a.label) },
-                    )
+                    Box(modifier = Modifier.morphAtEdges(this, spec)) {
+                        ActionButton(
+                            action = a,
+                            // Not while a request is in flight, and not while the screen is still
+                            // showing the state from before it was accepted.
+                            enabled = action !is ActionUi.Working &&
+                                !(action is ActionUi.Accepted && action.settling),
+                            onConfirmed = { onInvoke(a.id, a.label) },
+                        )
+                    }
                 }
             }
 
@@ -232,6 +251,7 @@ fun ServiceDetailScreen(
                     Section(
                         label = "Transferring",
                         count = service.transfers?.active ?: 0,
+                        modifier = Modifier.morphAtEdges(this, spec),
                     ) {
                         Text(
                             text = transfer.name,
@@ -252,6 +272,7 @@ fun ServiceDetailScreen(
                 }
             }
         }
+        PullIndicator(pull, refreshing)
     }
 }
 
@@ -261,9 +282,14 @@ fun ServiceDetailScreen(
  *   that silently hid four sessions would be lying by omission.
  */
 @Composable
-private fun Section(label: String, count: Int, content: @Composable () -> Unit) {
+private fun Section(
+    label: String,
+    count: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(top = 6.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

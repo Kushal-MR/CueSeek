@@ -46,13 +46,19 @@ import androidx.wear.compose.material3.Text
 import dev.cueseek.core.design.CueSeekStatus
 import dev.cueseek.core.design.status.statusStyle
 import dev.cueseek.core.model.CRITICAL
-import dev.cueseek.core.model.HostMetrics
+import dev.cueseek.core.model.ThermalMetrics
 import dev.cueseek.core.model.Service
 import dev.cueseek.core.model.PRESSURE
 import dev.cueseek.core.model.fullest
 import dev.cueseek.wear.power.PowerAccess
 import dev.cueseek.wear.power.powerAccess
+import androidx.wear.compose.material3.lazy.rememberTransformationSpec
+import dev.cueseek.wear.feedback.PullIndicator
+import dev.cueseek.wear.feedback.pullToRefresh
+import dev.cueseek.wear.feedback.rememberPullToRefresh
 import dev.cueseek.wear.theme.WearType
+import dev.cueseek.wear.theme.morphAtEdges
+import dev.cueseek.wear.theme.withRoomToCentre
 
 /**
  * The watch's dashboard: the verdict, then the machine's vitals.
@@ -80,9 +86,11 @@ fun DashboardScreen(
     onPowerClick: () -> Unit = {},
 ) {
     val ui by model.ui.collectAsStateWithLifecycle()
+    val refreshing by model.refreshing.collectAsStateWithLifecycle()
     DashboardContent(
         ui = ui,
         stale = stale,
+        refreshing = refreshing,
         onRetry = model::refresh,
         onServiceClick = onServiceClick,
         onPowerClick = onPowerClick,
@@ -97,11 +105,14 @@ fun DashboardScreen(
 internal fun DashboardContent(
     ui: DashboardUi,
     stale: Boolean,
+    refreshing: Boolean = false,
     onRetry: () -> Unit = {},
     onServiceClick: (String) -> Unit = {},
     onPowerClick: () -> Unit = {},
 ) {
     val listState = rememberTransformingLazyColumnState()
+    val spec = rememberTransformationSpec()
+    val pull = rememberPullToRefresh(onRetry)
 
     // The poll is *not* triggered here. It was until M5.10, and then ambient gave the app
     // a second way to become visible — leaving this in would have meant two fetches on
@@ -127,8 +138,17 @@ internal fun DashboardContent(
     val body: @Composable BoxScope.(PaddingValues) -> Unit = { contentPadding ->
         TransformingLazyColumn(
             state = listState,
-            contentPadding = contentPadding,
+            // With the Machine button, the scaffold already lifts the roster's end clear of
+            // the bezel. Without it - every watch not granted `host.power`, including the
+            // HP pairing - the last row stopped on the lower curve, half off the glass
+            // (M5.17), so it gets the same room the action screens have.
+            contentPadding = if (access is PowerAccess.Ungranted) {
+                contentPadding.withRoomToCentre()
+            } else {
+                contentPadding
+            },
             horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.pullToRefresh(pull, refreshing, onRetry),
         ) {
             when (val state = ui) {
                 // Never a blank screen, and never a bare spinner either: a spinner alone
@@ -198,8 +218,61 @@ internal fun DashboardContent(
                 }
 
                 is DashboardUi.Loaded -> {
-                    item { Verdict(state.copy(stale = stale)) }
-                    item { Vitals(state.metrics) }
+                    item {
+                        Verdict(
+                            state = state.copy(stale = stale),
+                            modifier = Modifier.morphAtEdges(this, spec),
+                        )
+                    }
+
+                    // One item per vital rather than one for the block, so each row narrows
+                    // into the curve on its own instead of the whole block being clipped.
+                    //
+                    // Absent values are omitted rather than zeroed, which is the rule the
+                    // whole project turns on: a VM exposes no thermal sensors, and `0°C`
+                    // would claim a cold machine that never answered.
+                    state.metrics?.let { metrics ->
+                        // usagePercent, not a fraction: CPU is the one metric the agent
+                        // reports as 0..100. Null on the first collection after a restart.
+                        metrics.cpu?.usagePercent?.let { cpu ->
+                            item {
+                                Vital(
+                                    label = "CPU",
+                                    spoken = "CPU",
+                                    fraction = cpu / 100f,
+                                    judge = false,
+                                    modifier = Modifier.morphAtEdges(this, spec),
+                                )
+                            }
+                        }
+                        metrics.memory?.usedFraction?.let { memory ->
+                            item {
+                                Vital(
+                                    label = "MEM",
+                                    spoken = "Memory",
+                                    fraction = memory,
+                                    judge = true,
+                                    modifier = Modifier.morphAtEdges(this, spec),
+                                )
+                            }
+                        }
+                        fullest(metrics.storage)?.let { disk ->
+                            disk.usedFraction?.let { used ->
+                                item {
+                                    Vital(
+                                        label = disk.mount,
+                                        spoken = "Disk ${disk.mount}",
+                                        fraction = used,
+                                        judge = true,
+                                        modifier = Modifier.morphAtEdges(this, spec),
+                                    )
+                                }
+                            }
+                        }
+                        metrics.thermal?.firstOrNull()?.let { sensor ->
+                            item { Thermal(sensor, Modifier.morphAtEdges(this, spec)) }
+                        }
+                    }
 
                     // Configured nothing, which is a working install rather than a fault:
                     // `services: []` is what ships, and the machine's own vitals above need
@@ -232,11 +305,13 @@ internal fun DashboardContent(
                             service = state.services[index],
                             stale = stale,
                             onClick = onServiceClick,
+                            modifier = Modifier.morphAtEdges(this, spec),
                         )
                     }
                 }
             }
         }
+        PullIndicator(pull, refreshing)
     }
 
     if (access is PowerAccess.Ungranted) {
@@ -258,13 +333,13 @@ internal fun DashboardContent(
 }
 
 @Composable
-private fun Verdict(state: DashboardUi.Loaded) {
+private fun Verdict(state: DashboardUi.Loaded, modifier: Modifier = Modifier) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
         // One heading rather than three fragments: host, verdict and count are one answer,
         // and a heading is what TalkBack's navigation jumps between.
-        modifier = Modifier
+        modifier = modifier
             .padding(bottom = 8.dp)
             .semantics(mergeDescendants = true) { heading() },
     ) {
@@ -306,57 +381,34 @@ private fun Verdict(state: DashboardUi.Loaded) {
     }
 }
 
-/**
- * The machine's own vitals.
- *
- * Absent values are omitted rather than zeroed, which is the rule the whole project turns
- * on and which M4.10 watched work on a phone: a VM exposes no thermal sensors, and rendering
- * `0°C` would claim a cold machine that never answered.
- */
+/** The first sensor, said in words when it is hot - colour never reaches TalkBack. */
 @Composable
-private fun Vitals(metrics: HostMetrics?) {
-    if (metrics == null) return
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+private fun Thermal(sensor: ThermalMetrics, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clearAndSetSemantics {
+                contentDescription = buildString {
+                    append("${sensor.label}, ${sensor.celsius.toInt()} degrees Celsius")
+                    if (sensor.isHot) append(", hot")
+                }
+            },
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        // usagePercent, not a fraction: CPU is the one metric the agent reports as 0..100.
-        // Null on the agent's first collection after a restart, and absent rather than zero
-        // for exactly the reason the whole vitals strip exists.
-        metrics.cpu?.usagePercent?.let { Vital("CPU", "CPU", it / 100f, judge = false) }
-        metrics.memory?.usedFraction?.let { Vital("MEM", "Memory", it, judge = true) }
-        fullest(metrics.storage)?.let { disk ->
-            disk.usedFraction?.let { Vital(disk.mount, "Disk ${disk.mount}", it, judge = true) }
-        }
-        metrics.thermal?.firstOrNull()?.let { sensor ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clearAndSetSemantics {
-                        contentDescription = buildString {
-                            append("${sensor.label}, ${sensor.celsius.toInt()} degrees Celsius")
-                            if (sensor.isHot) append(", hot")
-                        }
-                    },
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    sensor.label,
-                    style = MaterialTheme.typography.bodyExtraSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "${sensor.celsius.toInt()}°C",
-                    style = WearType.DataSmall,
-                    color = if (sensor.isHot) {
-                        CueSeekStatus.colors.unreachable
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                )
-            }
-        }
+        Text(
+            sensor.label,
+            style = MaterialTheme.typography.bodyExtraSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "${sensor.celsius.toInt()}°C",
+            style = WearType.DataSmall,
+            color = if (sensor.isHot) {
+                CueSeekStatus.colors.unreachable
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        )
     }
 }
 
@@ -369,7 +421,13 @@ private fun Vitals(metrics: HostMetrics?) {
  *   the eye and a syllable to a speech engine, and a mount point read aloud is "slash".
  */
 @Composable
-private fun Vital(label: String, spoken: String, fraction: Float, judge: Boolean) {
+private fun Vital(
+    label: String,
+    spoken: String,
+    fraction: Float,
+    judge: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val percent = (fraction * 100).toInt()
     val pressure = when {
         !judge -> null
@@ -382,7 +440,7 @@ private fun Vital(label: String, spoken: String, fraction: Float, judge: Boolean
     // bar's colour carries is said in words, because colour never reaches a screen reader.
     // Cleared rather than merged is safe here only because nothing in a vital is clickable.
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clearAndSetSemantics {
                 contentDescription = listOfNotNull(spoken, "$percent percent", pressure)
@@ -437,12 +495,13 @@ private fun ServiceRow(
     service: Service,
     stale: Boolean,
     onClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val style = statusStyle(service.health.status, stale)
     val activity = wearActivityLine(service)
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             // The id is passed along, never inspected. The row does not know or care which

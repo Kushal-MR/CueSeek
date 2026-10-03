@@ -231,8 +231,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val _refreshing = MutableStateFlow(false)
+
+    /** A read of the agent is in flight. Drives the pull-to-refresh ring (M5.17). */
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
     fun refresh() {
-        viewModelScope.launch { load() }
+        viewModelScope.launch {
+            _refreshing.value = true
+            try {
+                load()
+            } finally {
+                _refreshing.value = false
+            }
+        }
     }
 
     /** One read of the agent, awaitable — so [invoke] can wait for the reading it asked for. */
