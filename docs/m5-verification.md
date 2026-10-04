@@ -407,8 +407,11 @@ the attestation covering the watch APK — are both proven.
 
 - **Stale pairings revoked on the HP** with a single-use `devices.manage` credential, which
   then revoked itself (`DELETE` 204, then `GET` with it → 401): the old watch pairing without
-  power and the debug watch app's. Twelve older rows from earlier milestones — test probes and
-  superseded phone pairings, one holding `host.power` — were left for Kushal to decide on.
+  power and the debug watch app's. Then, at Kushal's word, the **eleven** older rows from
+  earlier milestones — test probes (`m35-check`, `m36-probe`, `RebootTest`, `web-ui-check`)
+  and superseded phone pairings, one of them still holding `host.power` — with a second
+  single-use credential that also revoked itself (→ 401). The HP's device list is now exactly
+  the phone and the watch.
 - **Both `.debug` apps uninstalled.** Each device now runs only `dev.cueseek.android` v0.1.2.
   The tile and complication belonged to the debug app and have to be added again from the
   release one.
