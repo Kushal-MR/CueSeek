@@ -10,8 +10,8 @@ control they cannot provide themselves.
 **[kushal-mr.github.io/CueSeek](https://kushal-mr.github.io/CueSeek/)** — what it is, what it
 is not, and how to install it, on one page.
 
-> **Status: `v0.1.1` released, and installable by a stranger.** The agent and a signed
-> Android APK both ship from the release page; the whole path — phone → Tailscale →
+> **Status: `v0.1.3` released, and installable by a stranger.** The agent and signed
+> Android and Wear OS APKs ship from the release page; the whole path — phone → Tailscale →
 > `cueseekd` → polkit → systemd — is verified end to end on real hardware, and on a
 > fresh virtual machine that had never seen CueSeek. Jellyfin and qBittorrent are supported
 > in full; any other systemd unit is supported for health and lifecycle control. The phone
@@ -23,8 +23,8 @@ is not, and how to install it, on one page.
 > operator grants it, and has a tile, a complication, an ambient mode, pull-to-refresh, its
 > own icon and an accessibility pass. Over a 13½-hour day it used 3.64 mAh — about 2% of
 > the watch's drain ([plan](docs/m5-plan.md), [verification](docs/m5-verification.md)).
-> The release workflow builds and signs the Wear APK; the first one ships with the next
-> release tag.
+> The Wear APK has shipped from the release page since `v0.1.2`, signed with the phone's
+> key.
 
 ---
 
@@ -94,13 +94,13 @@ the one you rely on. Android 8.0 or later.
 
 ### The watch
 
-**Ships from the next release.** From then on the release page carries
-`cueseek-wear_<version>.apk` beside the phone's APK, signed with the same key, checksummed and
-attested the same way. Until a release is tagged, building from source is the only way to run
-it. There is no Play listing, so it installs over ADB: enable wireless debugging on the
-watch, `adb connect` to it, then `adb install`. It pairs with a code of its own; the phone
-app, if installed and paired, hands the watch the host's address so it does not have to be
-typed on a wrist. Wear OS 3 or later.
+The release page carries `cueseek-wear_<version>.apk` beside the phone's APK, signed with the
+same key, checksummed and attested the same way. There is no Play listing, so it installs over
+ADB: enable wireless debugging on the watch, `adb connect` to it, then `adb install`. It pairs
+with a code of its own; the phone app, if installed and paired, hands the watch the host's
+address so it does not have to be typed on a wrist. That address is the one the phone uses —
+if the phone reaches the host over Tailscale and the watch cannot, change it on the watch to
+the host's home-network address. Wear OS 3 or later.
 
 ## Documentation
 
