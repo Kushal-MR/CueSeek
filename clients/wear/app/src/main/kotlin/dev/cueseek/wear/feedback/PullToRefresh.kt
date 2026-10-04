@@ -25,7 +25,17 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material3.CircularProgressIndicator
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.wear.compose.material3.MaterialTheme
+import dev.cueseek.wear.detail.animationsEnabled
 
 /**
  * Pull down at the top of a list to read the agent again.
@@ -154,26 +164,51 @@ fun Modifier.pullToRefresh(
 }
 
 /**
- * A small ring under the clock: filling while pulled, spinning while the agent is being
- * read. Nothing at all otherwise. It sits in the gap [pullToRefresh] opens by drawing the
- * list down, below the time rather than on it.
+ * A small ring under the clock: filling while pulled, turning while the agent is being read.
+ * Nothing at all otherwise. It sits in the gap [pullToRefresh] opens by drawing the list down,
+ * below the time rather than on it.
+ *
+ * **Drawn here, not borrowed.** It was Wear Material's `CircularProgressIndicator`, which is
+ * built to trace the round edge of the display — given a 24dp box it still drew a screen-sized
+ * ring, so all that showed was a sliver of arc at the top-left of the glass (found on the
+ * wrist after M5). A circle and an arc have nothing to reinterpret.
  */
 @Composable
 fun BoxScope.PullIndicator(state: PullToRefreshState, refreshing: Boolean) {
     if (!refreshing && state.progress == 0f) return
-    Box(
+    PullRing(
+        progress = if (refreshing) null else state.progress,
         modifier = Modifier
             .align(Alignment.TopCenter)
             // Below the time text, which owns roughly the top 30dp of a round screen.
-            .padding(top = 34.dp)
-            .size(24.dp),
-    ) {
-        // A thin line, set explicitly: the default stroke is sized for full-screen
-        // indicators, and at 24dp it filled the whole circle and read as a solid dot.
-        if (refreshing) {
-            CircularProgressIndicator(strokeWidth = 3.dp)
-        } else {
-            CircularProgressIndicator(progress = { state.progress }, strokeWidth = 3.dp)
-        }
+            .padding(top = 34.dp),
+    )
+}
+
+/** @param progress 0..1 while pulled; null while reading, when it turns instead. */
+@Composable
+internal fun PullRing(progress: Float?, modifier: Modifier = Modifier) {
+    val track = MaterialTheme.colorScheme.surfaceContainerHigh
+    val arc = MaterialTheme.colorScheme.primary
+    val turning = if (progress == null && animationsEnabled()) {
+        val spin = rememberInfiniteTransition(label = "pull ring")
+        spin.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+            label = "pull ring angle",
+        ).value
+    } else {
+        0f
+    }
+    Canvas(modifier = modifier.size(24.dp)) {
+        val stroke = 3.dp.toPx()
+        val inset = stroke / 2
+        val box = Size(size.width - stroke, size.height - stroke)
+        val origin = Offset(inset, inset)
+        drawArc(track, 0f, 360f, false, origin, box, style = Stroke(stroke))
+        val sweep = progress?.let { 360f * it } ?: 100f
+        val start = if (progress == null) turning - 90f else -90f
+        drawArc(arc, start, sweep, false, origin, box, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }

@@ -1,6 +1,13 @@
 package dev.cueseek.wear
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import dev.cueseek.wear.feedback.PullRing
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import app.cash.paparazzi.DeviceConfig
@@ -137,6 +144,23 @@ abstract class WearGoldenTest(device: DeviceConfig) {
 
     @Test
     fun ambient() = shot { AmbientScreen(ui = loaded(), stale = false) }
+
+    /**
+     * The pull-to-refresh ring, part-pulled, where the dashboard puts it: under the clock and
+     * centred. Pinned because the first version drew off-screen at the top-left and every
+     * other test still passed (found on the wrist after M5).
+     */
+    @Test
+    fun pull_ring() = shot {
+        Box(modifier = Modifier.fillMaxSize()) {
+            PullRing(
+                progress = 0.6f,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 34.dp),
+            )
+        }
+    }
 }
 
 class SmallRoundGoldenTest : WearGoldenTest(DeviceConfig.WEAR_OS_SMALL_ROUND)

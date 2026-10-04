@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import dev.cueseek.core.design.CueSeekStatus
@@ -86,10 +85,11 @@ internal fun HostPowerConfirmation(
                         color = CueSeekStatus.colors.degraded,
                     )
                 }
-                HoldToConfirmButton(label = action.label, onConfirmed = onConfirmed)
+                HoldWithCancel(label = action.label, onConfirmed = onConfirmed, onDismiss = onDismiss)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        // Empty: Cancel sits under the hold bar, centred, rather than alone at the row's end.
+        confirmButton = {},
         dismissButton = null,
     )
 }
