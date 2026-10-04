@@ -369,3 +369,48 @@ power over Tailscale.
 
 The previous watch pairing (`491e1c8c87e5d350`, without power) has no token left anywhere —
 `pm clear` destroyed it — but its row remains in the HP's device list until revoked.
+
+### Kushal restarted the HP from the watch (2026-10-04)
+
+With the power-granted pairing, he held "Restart machine — hold" on his wrist. The HP went
+down and came back; the phone's vitals then read "up 11m" — the first power action ever
+taken against the real server from a watch.
+
+---
+
+## v0.1.2 — the first release with a watch APK (2026-10-04)
+
+Tagged at Kushal's request after M5 closed. The release workflow passed both jobs, and the
+artefacts were checked from the release page, not from CI's own report:
+
+| Check | Result |
+| --- | --- |
+| Assets | agent tarball, `cueseek_0.1.2.apk`, `cueseek-wear_0.1.2.apk`, both checksum files |
+| Checksums | all three `OK` |
+| versionCode | phone **1020**, watch **1021** — M5.16's scheme |
+| One key | both APKs **and** the installed v0.1.1 signed by the same certificate (`5c2be404…1a11`) |
+| Attestation | `gh attestation verify` passes for all three artefacts |
+
+The two things M5.16 could only prove with a real tag — the real keystore signing both, and
+the attestation covering the watch APK — are both proven.
+
+**Installed from the release:**
+
+- **Phone:** v0.1.1 → v0.1.2 in place (`101` → `1020`); still paired, still live on the HP.
+- **Watch:** the release app installed alongside the debug one. On first launch it showed the
+  HP's Tailscale address "from your phone" — **the phone→watch handoff working between the
+  two real-key release apps**, which is exactly what the matching-key check protects. The
+  watch cannot reach Tailscale, so the LAN address was entered instead and it paired with
+  `host.power`.
+
+### Cleanup
+
+- **Stale pairings revoked on the HP** with a single-use `devices.manage` credential, which
+  then revoked itself (`DELETE` 204, then `GET` with it → 401): the old watch pairing without
+  power and the debug watch app's. Twelve older rows from earlier milestones — test probes and
+  superseded phone pairings, one holding `host.power` — were left for Kushal to decide on.
+- **Both `.debug` apps uninstalled.** Each device now runs only `dev.cueseek.android` v0.1.2.
+  The tile and complication belonged to the debug app and have to be added again from the
+  release one.
+- **The test VM deleted**: unregistered with its disk, its 9.8 GB folder removed, and its SSH
+  entry and host key dropped from the laptop.
