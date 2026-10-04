@@ -53,7 +53,7 @@ import dev.cueseek.core.model.fullest
 import dev.cueseek.wear.power.PowerAccess
 import dev.cueseek.wear.power.powerAccess
 import androidx.wear.compose.material3.lazy.rememberTransformationSpec
-import dev.cueseek.wear.feedback.PullIndicator
+import dev.cueseek.wear.feedback.PullRefreshFrame
 import dev.cueseek.wear.feedback.pullToRefresh
 import dev.cueseek.wear.feedback.rememberPullToRefresh
 import dev.cueseek.wear.theme.WearType
@@ -311,24 +311,25 @@ internal fun DashboardContent(
                 }
             }
         }
-        PullIndicator(pull, refreshing)
     }
 
-    if (access is PowerAccess.Ungranted) {
-        ScreenScaffold(scrollState = listState, content = body)
-    } else {
-        ScreenScaffold(
-            scrollState = listState,
-            edgeButton = {
-                EdgeButton(
-                    onClick = onPowerClick,
-                    colors = ButtonDefaults.filledTonalButtonColors(),
-                ) {
-                    Text("Machine", maxLines = 1)
-                }
-            },
-            content = body,
-        )
+    PullRefreshFrame(pull, refreshing) {
+        if (access is PowerAccess.Ungranted) {
+            ScreenScaffold(scrollState = listState, content = body)
+        } else {
+            ScreenScaffold(
+                scrollState = listState,
+                edgeButton = {
+                    EdgeButton(
+                        onClick = onPowerClick,
+                        colors = ButtonDefaults.filledTonalButtonColors(),
+                    ) {
+                        Text("Machine", maxLines = 1)
+                    }
+                },
+                content = body,
+            )
+        }
     }
 }
 
