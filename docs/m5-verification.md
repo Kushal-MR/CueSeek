@@ -348,3 +348,24 @@ Every item on M5.17's checklist was either verified on the wrist or is recorded 
 [`m5-plan.md`](m5-plan.md) as a known gap with its reason: an hour of ambient (not
 measurable from the system log on this watch) and rotary input (no encoder). Nothing
 was marked done that was not seen.
+
+### After closing: the watch given power over the HP (2026-10-04)
+
+Session 2 paired the watch to the HP without `host.power`, deliberately. Kushal asked for the
+phone's shut-down control on the watch too. No code was needed — the Machine screen has
+existed since M5.7 and the watch hides it from a token that cannot use it — but a token
+carries what it was granted and nothing widens it afterwards, so the watch paired again:
+`cueseekd pair -scopes read,service.control,host.power`, code entered by Kushal.
+
+The agent recorded `device paired device_id=99efb6bebac7ab61 name=OPWWE234
+scopes="read, service.control, host.power"`. The dashboard now ends in **Machine**, and the
+Machine screen offers the HP's own two actions — "Restart machine — hold" and "Shut down
+machine — hold" — each under the agent's sentence about what follows. Neither was pressed:
+it is the real server, and reboot from the wrist was proven on the VM in M5.7.
+
+**The trade-off, accepted knowingly:** the watch reaches the HP over plain HTTP on the home
+network, so its token is now one that can switch the server off. The phone holds the same
+power over Tailscale.
+
+The previous watch pairing (`491e1c8c87e5d350`, without power) has no token left anywhere —
+`pm clear` destroyed it — but its row remains in the HP's device list until revoked.
