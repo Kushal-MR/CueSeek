@@ -202,14 +202,13 @@ private fun ActionConfirmation(
                 // dialog's full width. A gesture control squeezed to the size of a text
                 // button would be a target people miss while trying to be careful.
                 if (style.emphatic) {
-                    HoldToConfirmButton(label = action.label, onConfirmed = onConfirmed)
+                    HoldWithCancel(label = action.label, onConfirmed = onConfirmed, onDismiss = onDismiss)
                 }
             }
         },
+        // Empty for a hold: its Cancel sits under the hold bar instead (see [HoldWithCancel]).
         confirmButton = {
-            if (style.emphatic) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            } else {
+            if (!style.emphatic) {
                 TextButton(onClick = onConfirmed) { Text(action.label) }
             }
         },
@@ -293,6 +292,22 @@ internal fun HoldToConfirmButton(label: String, onConfirmed: () -> Unit) {
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onErrorContainer,
         )
+    }
+}
+
+/**
+ * The hold bar with its way out directly beneath it, the same width and centred.
+ *
+ * Cancel used to sit in the dialog's own button row, which Material aligns to the end — so
+ * under a full-width hold bar it hung off the right edge on its own, and read as an
+ * afterthought on the one dialog where backing out matters most. Found on the phone after
+ * M5 (2026-10-04).
+ */
+@Composable
+internal fun HoldWithCancel(label: String, onConfirmed: () -> Unit, onDismiss: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        HoldToConfirmButton(label = label, onConfirmed = onConfirmed)
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
     }
 }
 
