@@ -10,7 +10,7 @@ control they cannot provide themselves.
 **[kushal-mr.github.io/CueSeek](https://kushal-mr.github.io/CueSeek/)** — what it is, what it
 is not, and how to install it, on one page.
 
-> **Status: `v0.1.3` released, and installable by a stranger.** The agent and signed
+> **Status: `v0.1.4` released, and installable by a stranger.** The agent and signed
 > Android and Wear OS APKs ship from the release page; the whole path — phone → Tailscale →
 > `cueseekd` → polkit → systemd — is verified end to end on real hardware, and on a
 > fresh virtual machine that had never seen CueSeek. Jellyfin and qBittorrent are supported
