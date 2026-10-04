@@ -7,7 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import dev.cueseek.wear.feedback.PullRing
+import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
+import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.material3.EdgeButton
+import androidx.wear.compose.material3.ScreenScaffold
+import androidx.wear.compose.material3.Text
+import dev.cueseek.wear.feedback.PullRefreshFrame
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import app.cash.paparazzi.DeviceConfig
@@ -146,19 +151,35 @@ abstract class WearGoldenTest(device: DeviceConfig) {
     fun ambient() = shot { AmbientScreen(ui = loaded(), stale = false) }
 
     /**
-     * The pull-to-refresh ring, part-pulled, where the dashboard puts it: under the clock and
-     * centred. Pinned because the first version drew off-screen at the top-left and every
-     * other test still passed (found on the wrist after M5).
+     * The pull-to-refresh ring, part-pulled, over both scaffold layouts the app uses. It must
+     * sit centred under the clock in each. The first fix was checked over one layout only and
+     * shipped in v0.1.3 drawing a sliver on the left edge of the other — the one with the
+     * Machine button, i.e. every watch granted host.power.
      */
     @Test
-    fun pull_ring() = shot {
-        Box(modifier = Modifier.fillMaxSize()) {
-            PullRing(
-                progress = 0.6f,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 34.dp),
-            )
+    fun pull_ring_plain_scaffold() = shot {
+        PullRefreshFrame(showRing = true, progress = 0.6f) {
+            val list = rememberTransformingLazyColumnState()
+            ScreenScaffold(scrollState = list) { padding ->
+                TransformingLazyColumn(state = list, contentPadding = padding) {
+                    item { Text("HomeServer") }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun pull_ring_edge_button_scaffold() = shot {
+        PullRefreshFrame(showRing = true, progress = 0.6f) {
+            val list = rememberTransformingLazyColumnState()
+            ScreenScaffold(
+                scrollState = list,
+                edgeButton = { EdgeButton(onClick = {}) { Text("Machine") } },
+            ) { padding ->
+                TransformingLazyColumn(state = list, contentPadding = padding) {
+                    item { Text("HomeServer") }
+                }
+            }
         }
     }
 }

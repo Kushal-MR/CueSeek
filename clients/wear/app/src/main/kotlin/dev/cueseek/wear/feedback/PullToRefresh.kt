@@ -2,7 +2,7 @@ package dev.cueseek.wear.feedback
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -164,25 +164,44 @@ fun Modifier.pullToRefresh(
 }
 
 /**
- * A small ring under the clock: filling while pulled, turning while the agent is being read.
- * Nothing at all otherwise. It sits in the gap [pullToRefresh] opens by drawing the list down,
- * below the time rather than on it.
+ * A screen with the pull ring layered over it: filling while pulled, turning while the agent is
+ * being read, nothing otherwise. Under the clock, in the gap [pullToRefresh] opens by drawing
+ * the list down.
  *
- * **Drawn here, not borrowed.** It was Wear Material's `CircularProgressIndicator`, which is
- * built to trace the round edge of the display — given a 24dp box it still drew a screen-sized
- * ring, so all that showed was a sliver of arc at the top-left of the glass (found on the
- * wrist after M5). A circle and an arc have nothing to reinterpret.
+ * **Over the scaffold, not inside it.** The ring was first drawn inside `ScreenScaffold`'s
+ * content box, aligned top-centre — which is the screen's top centre only for the scaffold
+ * without an edge button. The one *with* an edge button (the dashboard of any watch granted
+ * `host.power`) does not span the screen, so the ring landed as a sliver on the left edge. It
+ * passed on a debug watch paired without power and failed on the release watch paired with it
+ * (after v0.1.3). A full-screen layer has one centre whatever the scaffold.
  */
 @Composable
-fun BoxScope.PullIndicator(state: PullToRefreshState, refreshing: Boolean) {
-    if (!refreshing && state.progress == 0f) return
-    PullRing(
+fun PullRefreshFrame(
+    state: PullToRefreshState,
+    refreshing: Boolean,
+    content: @Composable () -> Unit,
+) {
+    PullRefreshFrame(
+        showRing = refreshing || state.progress > 0f,
         progress = if (refreshing) null else state.progress,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            // Below the time text, which owns roughly the top 30dp of a round screen.
-            .padding(top = 34.dp),
+        content = content,
     )
+}
+
+@Composable
+internal fun PullRefreshFrame(showRing: Boolean, progress: Float?, content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        content()
+        if (showRing) {
+            PullRing(
+                progress = progress,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    // Below the time text, which owns roughly the top 30dp of a round screen.
+                    .padding(top = 34.dp),
+            )
+        }
+    }
 }
 
 /** @param progress 0..1 while pulled; null while reading, when it turns instead. */

@@ -28,7 +28,7 @@ import dev.cueseek.wear.feedback.ActionOutcomeHaptics
 import dev.cueseek.wear.theme.WearType
 import dev.cueseek.wear.theme.withRoomToCentre
 import dev.cueseek.wear.theme.morphAtEdges
-import dev.cueseek.wear.feedback.PullIndicator
+import dev.cueseek.wear.feedback.PullRefreshFrame
 import dev.cueseek.wear.feedback.pullToRefresh
 import dev.cueseek.wear.feedback.rememberPullToRefresh
 import androidx.wear.compose.material3.lazy.rememberTransformationSpec
@@ -75,99 +75,197 @@ fun ServiceDetailScreen(
     // somebody looks (M5.8).
     ActionOutcomeHaptics(action)
 
-    ScreenScaffold(scrollState = listState) { contentPadding ->
-        TransformingLazyColumn(
-            state = listState,
-            contentPadding = contentPadding.withRoomToCentre(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            // Pull down to re-read, for the case that found it missing: playback started
-            // while this screen was open, and the screen kept showing the moment it opened.
-            modifier = Modifier.pullToRefresh(pull, refreshing, onRefresh),
-        ) {
-            item {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                    // Name, status and the agent's word are one answer: one heading.
-                    modifier = Modifier
-                        .morphAtEdges(this, spec)
-                        .padding(bottom = 6.dp)
-                        .semantics(mergeDescendants = true) { heading() },
-                ) {
-                    Text(
-                        text = service.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = style.label,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = style.content,
-                        textAlign = TextAlign.Center,
-                    )
-                    // The agent's own word, when it has one. Verbatim and unmapped: a
-                    // client showing "firewalled" is showing qBittorrent's word, not a
-                    // paraphrase of it.
-                    service.health.reportedStatus?.takeIf { it.isNotBlank() }?.let {
-                        Text(
-                            text = it,
-                            style = WearType.DataSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-            }
-
-            // Reasons. A reason is not necessarily a problem — a healthy service can carry
-            // `pending_restart` — so these are not styled as errors.
-            items(
-                count = service.health.reasons.size,
-                key = { service.health.reasons[it].code },
-            ) { index ->
-                Text(
-                    text = service.health.reasons[index].message,
-                    style = MaterialTheme.typography.bodyExtraSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .morphAtEdges(this, spec)
-                        .fillMaxWidth()
-                        .padding(bottom = 4.dp),
-                )
-            }
-
-            focusedSession(service.nowPlaying)?.let { session ->
+    PullRefreshFrame(pull, refreshing) {
+        ScreenScaffold(scrollState = listState) { contentPadding ->
+            TransformingLazyColumn(
+                state = listState,
+                contentPadding = contentPadding.withRoomToCentre(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                // Pull down to re-read, for the case that found it missing: playback started
+                // while this screen was open, and the screen kept showing the moment it opened.
+                modifier = Modifier.pullToRefresh(pull, refreshing, onRefresh),
+            ) {
                 item {
-                    Section(
-                        label = "Playing",
-                        count = service.nowPlaying?.sessions ?: 0,
-                        modifier = Modifier.morphAtEdges(this, spec),
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        // Name, status and the agent's word are one answer: one heading.
+                        modifier = Modifier
+                            .morphAtEdges(this, spec)
+                            .padding(bottom = 6.dp)
+                            .semantics(mergeDescendants = true) { heading() },
                     ) {
                         Text(
-                            text = session.title,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = service.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        // Subtitle, user and client are each absent whenever the service did
-                        // not supply them — never synthesised into something plausible.
-                        listOfNotNull(session.subtitle, session.user, session.client)
-                            .takeIf { it.isNotEmpty() }
-                            ?.let {
+                        Text(
+                            text = style.label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = style.content,
+                            textAlign = TextAlign.Center,
+                        )
+                        // The agent's own word, when it has one. Verbatim and unmapped: a
+                        // client showing "firewalled" is showing qBittorrent's word, not a
+                        // paraphrase of it.
+                        service.health.reportedStatus?.takeIf { it.isNotBlank() }?.let {
+                            Text(
+                                text = it,
+                                style = WearType.DataSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+
+                // Reasons. A reason is not necessarily a problem — a healthy service can carry
+                // `pending_restart` — so these are not styled as errors.
+                items(
+                    count = service.health.reasons.size,
+                    key = { service.health.reasons[it].code },
+                ) { index ->
+                    Text(
+                        text = service.health.reasons[index].message,
+                        style = MaterialTheme.typography.bodyExtraSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .morphAtEdges(this, spec)
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
+                    )
+                }
+
+                focusedSession(service.nowPlaying)?.let { session ->
+                    item {
+                        Section(
+                            label = "Playing",
+                            count = service.nowPlaying?.sessions ?: 0,
+                            modifier = Modifier.morphAtEdges(this, spec),
+                        ) {
+                            Text(
+                                text = session.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            // Subtitle, user and client are each absent whenever the service did
+                            // not supply them — never synthesised into something plausible.
+                            listOfNotNull(session.subtitle, session.user, session.client)
+                                .takeIf { it.isNotEmpty() }
+                                ?.let {
+                                    Text(
+                                        text = it.joinToString(" · "),
+                                        style = MaterialTheme.typography.bodyExtraSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            playbackClock(session.positionSeconds, session.durationSeconds)?.let {
                                 Text(
-                                    text = it.joinToString(" · "),
-                                    style = MaterialTheme.typography.bodyExtraSmall,
+                                    text = if (session.paused) "$it · paused" else it,
+                                    style = WearType.DataSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                        playbackClock(session.positionSeconds, session.durationSeconds)?.let {
+                        }
+                    }
+                }
+
+                if (service.actions.isNotEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .morphAtEdges(this, spec)
+                                .fillMaxWidth()
+                                // Room only when there is an outcome to show. It reserved 10dp
+                                // while idle, which with the item spacing left a visible empty band
+                                // between the header and the buttons on every service (M5.17).
+                                .padding(top = if (action is ActionUi.Idle) 0.dp else 6.dp)
+                                // Announced when it changes, because the outcome arrives while
+                                // focus is still on the button that asked. Haptics tell a wrist;
+                                // this tells a screen reader. The container is always present
+                                // and merged, so a change of its text is what TalkBack hears —
+                                // a node that merely appears is not reliably announced.
+                                .semantics(mergeDescendants = true) {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                        ) {
+                            when (action) {
+                                is ActionUi.Working -> Text(
+                                    "asking the agent…",
+                                    style = MaterialTheme.typography.bodyExtraSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+
+                                // "Asked", not "Done". The agent returns an acceptance and the
+                                // terminal outcome arrives on a stream this client does not hold,
+                                // so claiming success would assert something nobody observed.
+                                is ActionUi.Accepted -> Text(
+                                    "${action.label} — asked",
+                                    style = MaterialTheme.typography.bodyExtraSmall,
+                                    color = CueSeekStatus.colors.beat,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+
+                                is ActionUi.Failed -> Text(
+                                    action.message,
+                                    style = MaterialTheme.typography.bodyExtraSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+
+                                ActionUi.Idle -> Unit
+                            }
+                        }
+                    }
+
+                    items(
+                        count = service.actions.size,
+                        key = { service.actions[it].id },
+                    ) { index ->
+                        val a = service.actions[index]
+                        Box(modifier = Modifier.morphAtEdges(this, spec)) {
+                            ActionButton(
+                                action = a,
+                                // Not while a request is in flight, and not while the screen is still
+                                // showing the state from before it was accepted.
+                                enabled = action !is ActionUi.Working &&
+                                    !(action is ActionUi.Accepted && action.settling),
+                                onConfirmed = { onInvoke(a.id, a.label) },
+                            )
+                        }
+                    }
+                }
+
+                focusedTransfer(service.transfers)?.let { transfer ->
+                    item {
+                        Section(
+                            label = "Transferring",
+                            count = service.transfers?.active ?: 0,
+                            modifier = Modifier.morphAtEdges(this, spec),
+                        ) {
                             Text(
-                                text = if (session.paused) "$it · paused" else it,
+                                text = transfer.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            LinearProgressIndicator(
+                                progress = { transfer.progress.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Text(
+                                text = "${(transfer.progress * 100).toInt()}% · ${transfer.state}",
                                 style = WearType.DataSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -175,104 +273,7 @@ fun ServiceDetailScreen(
                     }
                 }
             }
-
-            if (service.actions.isNotEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .morphAtEdges(this, spec)
-                            .fillMaxWidth()
-                            // Room only when there is an outcome to show. It reserved 10dp
-                            // while idle, which with the item spacing left a visible empty band
-                            // between the header and the buttons on every service (M5.17).
-                            .padding(top = if (action is ActionUi.Idle) 0.dp else 6.dp)
-                            // Announced when it changes, because the outcome arrives while
-                            // focus is still on the button that asked. Haptics tell a wrist;
-                            // this tells a screen reader. The container is always present
-                            // and merged, so a change of its text is what TalkBack hears —
-                            // a node that merely appears is not reliably announced.
-                            .semantics(mergeDescendants = true) {
-                                liveRegion = LiveRegionMode.Polite
-                            },
-                    ) {
-                        when (action) {
-                            is ActionUi.Working -> Text(
-                                "asking the agent…",
-                                style = MaterialTheme.typography.bodyExtraSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-
-                            // "Asked", not "Done". The agent returns an acceptance and the
-                            // terminal outcome arrives on a stream this client does not hold,
-                            // so claiming success would assert something nobody observed.
-                            is ActionUi.Accepted -> Text(
-                                "${action.label} — asked",
-                                style = MaterialTheme.typography.bodyExtraSmall,
-                                color = CueSeekStatus.colors.beat,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-
-                            is ActionUi.Failed -> Text(
-                                action.message,
-                                style = MaterialTheme.typography.bodyExtraSmall,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-
-                            ActionUi.Idle -> Unit
-                        }
-                    }
-                }
-
-                items(
-                    count = service.actions.size,
-                    key = { service.actions[it].id },
-                ) { index ->
-                    val a = service.actions[index]
-                    Box(modifier = Modifier.morphAtEdges(this, spec)) {
-                        ActionButton(
-                            action = a,
-                            // Not while a request is in flight, and not while the screen is still
-                            // showing the state from before it was accepted.
-                            enabled = action !is ActionUi.Working &&
-                                !(action is ActionUi.Accepted && action.settling),
-                            onConfirmed = { onInvoke(a.id, a.label) },
-                        )
-                    }
-                }
-            }
-
-            focusedTransfer(service.transfers)?.let { transfer ->
-                item {
-                    Section(
-                        label = "Transferring",
-                        count = service.transfers?.active ?: 0,
-                        modifier = Modifier.morphAtEdges(this, spec),
-                    ) {
-                        Text(
-                            text = transfer.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        LinearProgressIndicator(
-                            progress = { transfer.progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            text = "${(transfer.progress * 100).toInt()}% · ${transfer.state}",
-                            style = WearType.DataSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
         }
-        PullIndicator(pull, refreshing)
     }
 }
 
