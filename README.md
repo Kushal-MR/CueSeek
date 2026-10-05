@@ -145,7 +145,7 @@ agent assigns. The host menu carries reboot and shut down, which name what they 
 interrupt before you hold the button. Outcomes arrive as stream events rather than being
 assumed from the acknowledgement.
 
-**The Wear OS client — in progress, and already the point of the architecture.** It pairs
+**The Wear OS client — shipped, and the point of the architecture.** It pairs
 against the agent *directly* and mints its own token: the phone hands over only the host's
 address over the Wearable Data Layer, because typing `192.168.1.10` on a round screen is
 where people give up. No credential ever passes through the phone, so the watch has its own
@@ -296,7 +296,7 @@ prose — the file a designer, a contributor or a design tool should be handed f
 | **M2** | Android client: pair by entering host address + code, capability-driven dashboard, one action | ✅ Done — verified end to end over Tailscale against the real agent ([record](docs/m2-p6-verification.md)) |
 | **M3** | qBittorrent, `web_ui`, activity, host metrics, power actions | ✅ Done — nine phases, each verified on hardware as it landed ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). A second adapter reached the phone with **zero client changes**, and the reboot was confirmed by a changed kernel boot id |
 | **M4** | Productization: licence, neutral defaults, the `systemd` adapter, `cueseekd check`, released artefacts, documentation | ✅ Done — [plan](docs/m4-plan.md) · [record](docs/m4-verification.md). Proven by installing on a fresh VM that had never seen CueSeek, which found a defect the development host was structurally incapable of showing |
-| **M5** | Wear OS standalone client, tiles and complications | 🔨 In progress — **11 of 20 phases** ([plan](docs/m5-plan.md)). Pairing, dashboard, service detail, lifecycle and host power all run on a real watch; states, tile, complication, accessibility and release remain |
+| **M5** | Wear OS standalone client, tiles and complications | ✅ Done — [plan](docs/m5-plan.md) · [record](docs/m5-verification.md). Verified for a day on a OnePlus Watch 2R against the real server, and released from `v0.1.2`. The wrist found what the desk could not: a button the round screen clipped, a hold that could be held twice, a complication age no face drew |
 | **M6** | The website — the real one, replacing M4.9's deliberately plain placeholder, with a motion reel built from code | ⬜ — [inputs so far](docs/m6-plan.md) |
 | **M7** | A third adapter, used to measure whether the abstraction held | ⬜ |
 
