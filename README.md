@@ -199,7 +199,7 @@ Watch ──────LAN / VPN────┘      │
                                 └─ adapters/ registry, one goroutine per adapter
                                       ├─ jellyfin    ──HTTP───▶ Jellyfin
                                       ├─ qbittorrent ──HTTP───▶ qBittorrent
-                                      └─ systemd     ──D-Bus──▶ any unit
+                                      └─ systemd     ──D-Bus──▶ any units
 ```
 
 ### Two tiers of service support
