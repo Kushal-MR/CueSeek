@@ -1,6 +1,6 @@
 # M3 verification record
 
-What each M3 phase proved, on real hardware, and what it did not. Kept phase by phase as
+What each M3 phase proved, on real hardware. Kept phase by phase as
 they land, the same way [`m2-p6-verification.md`](m2-p6-verification.md) was kept for M2.
 
 Environment throughout: `cueseekd` on `kushal-HP-paviliong6`, bound to its tailnet address,
