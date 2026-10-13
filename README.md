@@ -41,7 +41,7 @@ the machine they run on:
 - **Activity** — what is happening right now: playback sessions, transfers, jobs.
 - **Control** — restart a service, reboot the host, shut it down.
 
-## What CueSeek is not
+## What CueSeek is NOT
 
 - **Not a replacement** for Jellyfin, qBittorrent, Sonarr, Immich or Home Assistant.
 - **Not a media client.** CueSeek shows you *that* something is playing, not the library
