@@ -1,6 +1,6 @@
 # CueSeek
 
-**An operations console for self-hosted home servers.**
+**An operations console for self hosted home servers.**
 
 CueSeek gives you one consistent way to reach every service running on your home server.
 
