@@ -2,8 +2,8 @@
  * The wordmark, drawn by a shader so it can move like a liquid.
  *
  * The text is rasterised once into a texture with the page's own font, then a fragment
- * shader does three things to it: a wave that rolls through the letters left to right, a
- * green smear that trails down-right behind the wave and decays, and — once it has settled
+ * shader does three things to it: a ripple that spreads out from the dot and writes the
+ * letters as it passes, a green smear streaming off them back toward the dot that decays, and — once it has settled
  * — a faint ripple wherever the pointer moves. When none of those are happening it draws a
  * still frame and stops, so an idle page costs nothing.
  *
@@ -21,10 +21,11 @@ precision highp float;
 uniform sampler2D uText;
 uniform vec2 uRes;
 uniform float uTime;
-uniform float uFront;   // the wave's position across the canvas, in uv.x
-uniform float uWave;    // how strongly the wave displaces, 0..1
+uniform vec2 uOrigin;   // where the ripple starts — the dot — in uv
+uniform float uFront;   // the ripple's radius, in canvas heights
+uniform float uWave;    // how strongly it displaces, 0..1
 uniform float uSmear;   // how much trail is left, 0..1
-uniform float uReveal;  // 1 while the wave is writing the word: nothing ahead of the front
+uniform float uReveal;  // 1 while the ripple is writing the word: nothing beyond the front
 uniform vec2 uPtr;
 uniform float uPtrAmt;
 uniform vec3 uHi;
@@ -38,51 +39,68 @@ void main() {
   vec2 uv = vUv;
   float aspect = uRes.x / uRes.y;
 
-  // The wave: a band around the front, displacing the letters like water.
-  float dx = uv.x - uFront;
-  float band = exp(-dx * dx * 60.0) * uWave;
-  vec2 disp = vec2(sin(uv.y * 34.0 + uTime * 10.0), cos(uv.x * 26.0 - uTime * 8.0)) * band * 0.016;
+  // Distance from the dot, in canvas heights, and how far that is from the ripple's front.
+  vec2 q = (uv - uOrigin) * vec2(aspect, 1.0);
+  float d = length(q);
+  vec2 n = q / max(d, 1e-4);
+  float x = d - uFront;
 
-  // The pointer's ripple, at a tenth of the wave's strength.
+  // The liquid: at the front, letters are pushed along the ripple and wobbled across it.
+  float band = exp(-x * x * 70.0) * uWave;
+  vec2 disp = (n * sin(d * 48.0 - uTime * 12.0) + vec2(-n.y, n.x) * 0.6 * cos(d * 29.0 + uTime * 7.0)) * band * 0.022;
+  disp.x /= aspect;
+
+  // The pointer's ripple, at a tenth of the strength.
   vec2 pd = (uv - uPtr) * vec2(aspect, 1.0);
   float pr = length(pd);
-  disp += (pd / max(pr, 1e-4)) * sin(pr * 80.0 - uTime * 14.0) * exp(-pr * 10.0) * 0.003 * uPtrAmt;
+  vec2 pdisp = (pd / max(pr, 1e-4)) * sin(pr * 70.0 - uTime * 14.0) * exp(-pr * 7.0) * 0.003 * uPtrAmt;
+  pdisp.x /= aspect;
 
-  vec2 suv = uv + disp;
-  float ahead = mix(1.0, smoothstep(0.04, -0.04, uv.x - uFront), uReveal);
+  vec2 suv = uv + disp + pdisp;
+  float ahead = mix(1.0, smoothstep(0.03, -0.03, x), uReveal);
   float core = ink(suv) * ahead;
 
-  // The smear: behind the front, ink is dragged down and to the right. Sampling up-left of
-  // this pixel finds the letters that would have been dragged onto it.
-  float behind = clamp(uFront - uv.x + 0.08, 0.0, 1.0);
-  float s = uSmear * exp(-behind * 2.2) * smoothstep(0.0, 0.08, behind);
-  vec2 dir = vec2(-1.0 / aspect, 0.55) * 0.010 * (0.4 + s * 1.6);
+  // The smear: just behind the front, ink streams back toward the dot and down, then decays.
+  float behind = max(-x, 0.0);
+  float s = uSmear * exp(-behind * 1.6) * smoothstep(0.0, 0.06, behind);
+  vec2 dir = normalize(-n + vec2(0.0, 0.45));
+  dir.x /= aspect;
+  dir *= 0.012 * (0.5 + s * 2.0);
   float trail = 0.0;
-  for (int i = 1; i <= 22; i++) {
+  for (int i = 1; i <= 24; i++) {
     float f = float(i);
-    trail += ink(suv + dir * f + vec2(sin(f * 1.7 + uTime * 3.0), 0.0) * 0.0015 * s) * (1.0 - f / 23.0);
+    trail += ink(suv + dir * f + vec2(0.0, sin(f * 1.3 + uTime * 4.0) * 0.002 * s)) * (1.0 - f / 25.0);
   }
-  trail = trail / 11.0 * s;
+  trail = trail / 12.0 * s;
 
-  // A soft halo, always — the same glow the mark carries.
+  // A soft halo on the letters, always.
   float halo = 0.0;
   for (int i = 0; i < 8; i++) {
     float a = float(i) * 0.785398;
-    halo += ink(suv + vec2(cos(a) / aspect, sin(a)) * 0.022);
+    halo += ink(suv + vec2(cos(a) / aspect, sin(a)) * 0.03);
   }
-  float g = clamp(halo / 8.0 * 0.22 * ahead + trail * 0.9, 0.0, 1.0);
+  halo /= 8.0;
 
-  vec3 col = uHi * core + uGlow * g * (1.0 - core);
+  // The ripple itself, faintly visible in the air: a bright ring and a softer echo inside it.
+  float ring = exp(-x * x * 900.0) * 0.30 + exp(-pow(d - uFront * 0.62, 2.0) * 1600.0) * 0.14;
+  ring *= uWave * smoothstep(0.0, 0.15, d);
+
+  // Nothing in the air may reach the canvas's edge, or its rectangle would show.
+  float edge = smoothstep(0.0, 0.14, uv.x) * smoothstep(1.0, 0.86, uv.x)
+             * smoothstep(0.0, 0.2, uv.y) * smoothstep(1.0, 0.8, uv.y);
+  float g = clamp((halo * 0.24 * ahead + trail * 1.15 + ring) * edge, 0.0, 1.0);
+  vec3 lit = uHi * (1.0 + band * 0.6);   // letters flare as the front passes through them
+  vec3 col = lit * core + uGlow * g * (1.0 - core);
   float alpha = core + g * (1.0 - core);
-  o = vec4(col, alpha);
+  o = vec4(min(col, vec3(alpha)), alpha);
 }`
 
 export interface Wordmark {
   /**
-   * Rolls the wave through once; resolves when the smear has decayed. With `reveal`, the
-   * word does not exist ahead of the wave — the wave writes it.
+   * Sends a ripple out from a point on screen (the dot); resolves when the smear has
+   * decayed. With `reveal`, the word does not exist beyond the ripple — the ripple writes it.
    */
-  play(reveal?: boolean): Promise<void>
+  play(from: { x: number; y: number }, reveal?: boolean): Promise<void>
   /** Hidden until the first play, for an arrival that has not started yet. */
   hide(): void
   /** Re-reads the theme's colours and redraws. */
@@ -112,6 +130,7 @@ export function createWordmark(
   const u = (name: string) => gl.getUniformLocation(program, name)
   const U = {
     res: u('uRes'), time: u('uTime'), front: u('uFront'), wave: u('uWave'), smear: u('uSmear'), reveal: u('uReveal'),
+    origin: u('uOrigin'),
     ptr: u('uPtr'), ptrAmt: u('uPtrAmt'), hi: u('uHi'), glow: u('uGlow'),
   }
 
@@ -123,7 +142,7 @@ export function createWordmark(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
 
-  const state = { front: -0.3, wave: 0, smear: 0, reveal: 0, ptr: [-1, -1], ptrAmt: 0, ptrTarget: 0 }
+  const state = { front: -1, wave: 0, smear: 0, reveal: 0, origin: [0, 0.5], ptr: [-1, -1], ptrAmt: 0, ptrTarget: 0 }
   let colors = { hi: [1, 1, 1], glow: [0, 1, 0] }
   let raf = 0
   let animating = false
@@ -169,6 +188,7 @@ export function createWordmark(
     gl!.uniform2f(U.res, canvas.width, canvas.height)
     gl!.uniform1f(U.time, (now - t0) / 1000)
     gl!.uniform1f(U.front, state.front)
+    gl!.uniform2f(U.origin, state.origin[0], state.origin[1])
     gl!.uniform1f(U.wave, state.wave)
     gl!.uniform1f(U.smear, state.smear)
     gl!.uniform1f(U.reveal, state.reveal)
@@ -210,27 +230,33 @@ export function createWordmark(
   return {
     hide() {
       state.reveal = 1
-      state.front = -0.3
+      state.front = -1
       if (!raf) draw(performance.now())
     },
-    play(reveal = false) {
+    play(from, reveal = false) {
       return new Promise((resolve) => {
+        const box = canvas.getBoundingClientRect()
+        state.origin = [(from.x - box.left) / box.width, 1 - (from.y - box.top) / box.height]
+        // Far enough to clear the farthest corner of the canvas.
+        const aspect = box.width / box.height
+        const reach = Math.hypot(Math.max(state.origin[0], 1 - state.origin[0]) * aspect, 1) + 0.1
         animating = true
         state.reveal = reveal ? 1 : 0
         const start = performance.now()
-        const WAVE = 1300 // ms for the front to cross
-        const DECAY = 1100 // ms for the smear to fade after it has
+        const SPREAD = 1500 // ms for the ripple to cross everything
+        const DECAY = 1200 // ms for the smear to fade after it has
         const tick = (now: number) => {
           const t = now - start
-          const k = Math.min(t / WAVE, 1)
-          state.front = -0.25 + 1.6 * easeInOut(k)
-          state.wave = Math.sin(Math.PI * Math.min(k * 1.1, 1))
-          const fade = Math.max(0, (t - WAVE * 0.6) / DECAY)
-          state.smear = Math.min(1, k * 3) * (1 - Math.min(fade, 1)) ** 2
-          if (t < WAVE + DECAY) {
+          const k = Math.min(t / SPREAD, 1)
+          state.front = reach * (1 - (1 - k) ** 2.4)
+          state.wave = Math.min(1, k * 6) * (1 - Math.max(0, (t - SPREAD * 0.7) / (DECAY * 0.8))) ** 2
+          state.wave = Math.max(0, state.wave)
+          const fade = Math.max(0, (t - SPREAD * 0.55) / DECAY)
+          state.smear = Math.min(1, k * 4) * (1 - Math.min(fade, 1)) ** 2
+          if (t < SPREAD + DECAY) {
             requestAnimationFrame(tick)
           } else {
-            Object.assign(state, { front: -0.3, wave: 0, smear: 0, reveal: 0 })
+            Object.assign(state, { front: -1, wave: 0, smear: 0, reveal: 0 })
             animating = false
             resolve()
           }
@@ -287,4 +313,3 @@ function rgb(value: string): number[] {
   return parts.map((n) => n / 255)
 }
 
-const easeInOut = (k: number) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2)
