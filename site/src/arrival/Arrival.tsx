@@ -3,6 +3,7 @@ import { arriving } from './arriving.ts'
 import { HANDLE_CENTRE } from './geometry.ts'
 import { SwellParts } from './SwellParts.tsx'
 import { createWordmark, type Wordmark } from './wordmark.ts'
+import { createBlob, type Blob } from './blob.ts'
 import './Arrival.css'
 
 /** When each beat starts, in ms. */
@@ -26,20 +27,24 @@ const along = (sx: number, sy: number, dx = 0, dy = 0) =>
  * it lands, a glowing liquid ripple spreads out from it across the lockup and writes the word,
  * leaving a green smear that decays (the Sixfold reference), and the frames draw on.
  *
- * Afterwards nothing moves but the dot, which now and then gives a small hop — enough to make
- * the mark feel alive, not enough to compete with the page.
+ * Afterwards the dot is alive: it follows the pointer on a spring, stretching as it moves and
+ * squashing as it stops, jumps when poked, and now and then hops on its own. Dragging the
+ * pointer through the word smears the letters after it, and they flow back.
  */
 export function Arrival() {
   const swell = useRef<SVGSVGElement>(null)
   const title = useRef<HTMLHeadingElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const wordmark = useRef<Wordmark | null>(null)
+  const blob = useRef<Blob | null>(null)
   const [shader, setShader] = useState(false)
 
   useEffect(() => {
     let alive = true
     const root = document.documentElement
     const svg = swell.current
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (svg && !still) blob.current = createBlob(svg)
 
     if (arriving && svg) {
       const pen = { easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'backwards' } as const
@@ -99,13 +104,10 @@ export function Arrival() {
           // The ripple leaves from the dot's real position on screen.
           const box = svg.getBoundingClientRect()
           const scale = box.width / 60
-          wm.play(
-            {
-              x: box.left + (HANDLE_CENTRE.x - 24) * scale,
-              y: box.top + (HANDLE_CENTRE.y - 26) * scale,
-            },
-            true,
-          )
+          wm.play({
+            x: box.left + (HANDLE_CENTRE.x - 24) * scale,
+            y: box.top + (HANDLE_CENTRE.y - 26) * scale,
+          })
         }, BEAT.ripple)
       }
     }, plainText)
@@ -119,6 +121,8 @@ export function Arrival() {
       theme.disconnect()
       wordmark.current?.destroy()
       wordmark.current = null
+      blob.current?.destroy()
+      blob.current = null
     }
   }, [])
 
@@ -126,11 +130,20 @@ export function Arrival() {
     <section
       className="hero"
       aria-labelledby="hero-title"
-      onPointerMove={(e) => wordmark.current?.pointer(e.clientX, e.clientY)}
+      onPointerMove={(e) => {
+        wordmark.current?.pointer(e.clientX, e.clientY)
+        blob.current?.follow(e.clientX, e.clientY)
+      }}
+      onPointerLeave={() => blob.current?.release()}
     >
       <div className="lockup">
         <canvas ref={canvas} className="word-canvas" aria-hidden="true" />
-        <SwellParts ref={swell} size={112} className="hero-mark" />
+        <SwellParts
+          ref={swell}
+          size={112}
+          className="hero-mark"
+          onPointerDown={() => blob.current?.poke()}
+        />
         <h1 id="hero-title" ref={title} data-shader={shader || undefined}>
           CueSeek
         </h1>

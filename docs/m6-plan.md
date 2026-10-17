@@ -94,7 +94,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.12 | The download page | M6.2 | ⬜ |
 | M6.13 | Phones, reduced motion, accessibility, weight | all above | ⬜ |
 | M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ⬜ |
-| M6.15 | Launch: the placeholder points to the new site; README links | all | ⬜ |
+| M6.15 | Launch: the placeholder points to the new site; README links; the arrival back to once per visit (`ONCE_PER_VISIT` in `site/src/arrival/arriving.ts`) | all | ⬜ |
 
 ### M6.1 — Storyboard
 

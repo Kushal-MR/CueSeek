@@ -39,6 +39,7 @@
   stroke-dashoffset: 0;
 }
 .hero-mark .handle,
+.hero-mark .handle-follow,
 .hero-mark .burst {
   transform-box: fill-box;
   transform-origin: center;
@@ -193,6 +194,12 @@
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
 @keyframes fade { from { opacity: 0; } }
 @keyframes drop { from { opacity: 0; transform: translateY(-100%); } }
+
+/* The dot can be poked. */
+.hero-mark {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .hero-mark .handle { animation: none; }

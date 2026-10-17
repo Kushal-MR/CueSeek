@@ -27,8 +27,11 @@ const LONG_TRACK = `M ${at(128)} A ${C.r} ${C.r} 0 0 1 ${at(290)}` // 7:30, up t
 const TAIL_TRACK = `M ${at(52)} A ${C.r} ${C.r} 0 0 0 ${at(-20)}` // 4:30, up the right
 
 
-export const SwellParts = forwardRef<SVGSVGElement, { size: number; className?: string }>(
-  function SwellParts({ size, className }, ref) {
+export const SwellParts = forwardRef<
+  SVGSVGElement,
+  { size: number; className?: string; onPointerDown?: () => void }
+>(
+  function SwellParts({ size, className, onPointerDown }, ref) {
     return (
       <svg
         ref={ref}
@@ -38,6 +41,7 @@ export const SwellParts = forwardRef<SVGSVGElement, { size: number; className?: 
         height={size * (56 / 60)}
         aria-hidden="true"
         overflow="visible"
+        onPointerDown={onPointerDown}
       >
         <defs>
           <mask id="swell-long" maskUnits="userSpaceOnUse" x="0" y="0" width="108" height="108">
@@ -51,8 +55,10 @@ export const SwellParts = forwardRef<SVGSVGElement, { size: number; className?: 
         <path className="part tail" d={TAIL} mask="url(#swell-tail)" />
         <circle className="burst" cx={HANDLE_CENTRE.x} cy={HANDLE_CENTRE.y} r={7.5} />
         <circle className="burst burst-2" cx={HANDLE_CENTRE.x} cy={HANDLE_CENTRE.y} r={7.5} />
-        <g className="handle">
-          <path className="part" d={HANDLE} />
+        <g className="handle-follow">
+          <g className="handle">
+            <path className="part" d={HANDLE} />
+          </g>
         </g>
       </svg>
     )

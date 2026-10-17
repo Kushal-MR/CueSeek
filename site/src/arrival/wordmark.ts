@@ -1,14 +1,17 @@
 /**
- * The wordmark, drawn by a shader so it can move like a liquid.
+ * The wordmark, drawn by a shader so it can behave like a liquid.
  *
- * The text is rasterised once into a texture with the page's own font, then a fragment
- * shader does three things to it: a ripple that spreads out from the dot and writes the
- * letters as it passes, a green smear streaming off them back toward the dot that decays, and — once it has settled
- * — a faint ripple wherever the pointer moves. When none of those are happening it draws a
- * still frame and stops, so an idle page costs nothing.
+ * The text is rasterised once into a texture with the page's own font. A fragment shader
+ * then does three things with it (the Sixfold reference):
  *
- * Plain WebGL 2, no library: it is one quad and one shader. If WebGL is unavailable the
- * caller keeps the ordinary text instead.
+ * - **the ripple** — spreads out from the dot, writing the letters as it passes;
+ * - **the extrusion** — the whole word smeared out into long glowing streaks, then pulled
+ *   back into the letters;
+ * - **the pointer** — the letters under a moving pointer are dragged and smeared in the
+ *   direction it moves, and flow back when it stops.
+ *
+ * Frames are drawn only while something is moving, so an idle page costs nothing. Plain
+ * WebGL 2, no library: one quad, one shader. Without WebGL the caller keeps the plain text.
  */
 
 const VERT = `#version 300 es
@@ -21,13 +24,14 @@ precision highp float;
 uniform sampler2D uText;
 uniform vec2 uRes;
 uniform float uTime;
-uniform vec2 uOrigin;   // where the ripple starts — the dot — in uv
-uniform float uFront;   // the ripple's radius, in canvas heights
-uniform float uWave;    // how strongly it displaces, 0..1
-uniform float uSmear;   // how much trail is left, 0..1
-uniform float uReveal;  // 1 while the ripple is writing the word: nothing beyond the front
-uniform vec2 uPtr;
-uniform float uPtrAmt;
+uniform vec2 uOrigin;    // where the ripple starts — the dot — in uv
+uniform float uFront;    // the ripple's radius, in canvas heights
+uniform float uWave;     // how strongly the ripple displaces, 0..1
+uniform float uReveal;   // 1 while the ripple is writing: nothing beyond its front
+uniform float uExtrude;  // how far the whole word is smeared out, 0..1
+uniform vec2 uPtr;       // pointer, uv
+uniform vec2 uPtrVel;    // pointer velocity, canvas heights per second
+uniform float uPtrAmt;   // 0..1, fades when the pointer stops
 uniform vec3 uHi;
 uniform vec3 uGlow;
 in vec2 vUv;
@@ -35,43 +39,63 @@ out vec4 o;
 
 float ink(vec2 uv) { return texture(uText, uv).a; }
 
+// Streaks: brightness varies across the direction of a smear, so it reads as many strands
+// of light rather than one blur.
+float strands(vec2 uv, vec2 dir, float aspect) {
+  vec2 perp = vec2(-dir.y, dir.x);
+  float x = dot(uv * vec2(aspect, 1.0), perp) * 160.0;
+  return 0.45 + 0.55 * (0.5 + 0.5 * sin(x + sin(x * 0.37) * 2.0));
+}
+
+// Ink found by looking back along a smear: what would have been dragged onto this pixel.
+// Returns (near, far) so the light can run from the letters' colour into the glow.
+vec2 smear(vec2 uv, vec2 dir, float len, float aspect) {
+  vec2 stp = vec2(dir.x / aspect, dir.y) * len / 32.0;
+  float nearSum = 0.0, farSum = 0.0;
+  for (int i = 1; i <= 32; i++) {
+    float f = float(i) / 32.0;
+    float k = ink(uv - stp * float(i)) * pow(1.0 - f, 1.4);
+    nearSum += k * (1.0 - f);
+    farSum += k * f;
+  }
+  float s = strands(uv, dir, aspect);
+  return vec2(nearSum, farSum) / 9.0 * s;
+}
+
 void main() {
   vec2 uv = vUv;
   float aspect = uRes.x / uRes.y;
 
-  // Distance from the dot, in canvas heights, and how far that is from the ripple's front.
+  // ---- The ripple from the dot.
   vec2 q = (uv - uOrigin) * vec2(aspect, 1.0);
   float d = length(q);
   vec2 n = q / max(d, 1e-4);
   float x = d - uFront;
-
-  // The liquid: at the front, letters are pushed along the ripple and wobbled across it.
   float band = exp(-x * x * 70.0) * uWave;
   vec2 disp = (n * sin(d * 48.0 - uTime * 12.0) + vec2(-n.y, n.x) * 0.6 * cos(d * 29.0 + uTime * 7.0)) * band * 0.022;
   disp.x /= aspect;
 
-  // The pointer's ripple, at a tenth of the strength.
-  vec2 pd = (uv - uPtr) * vec2(aspect, 1.0);
-  float pr = length(pd);
-  vec2 pdisp = (pd / max(pr, 1e-4)) * sin(pr * 70.0 - uTime * 14.0) * exp(-pr * 7.0) * 0.003 * uPtrAmt;
-  pdisp.x /= aspect;
+  // ---- The pointer drags the letters along with it, like a finger through paint.
+  vec2 pq = (uv - uPtr) * vec2(aspect, 1.0);
+  float pr = length(pq);
+  float speed = length(uPtrVel);
+  float local = uPtrAmt * exp(-pr * pr * 5.0);
+  vec2 drag = uPtrVel * local * 0.02;
+  drag.x /= aspect;
 
-  vec2 suv = uv + disp + pdisp;
+  vec2 suv = uv + disp - drag;
   float ahead = mix(1.0, smoothstep(0.03, -0.03, x), uReveal);
   float core = ink(suv) * ahead;
 
-  // The smear: just behind the front, ink streams back toward the dot and down, then decays.
-  float behind = max(-x, 0.0);
-  float s = uSmear * exp(-behind * 1.6) * smoothstep(0.0, 0.06, behind);
-  vec2 dir = normalize(-n + vec2(0.0, 0.45));
-  dir.x /= aspect;
-  dir *= 0.012 * (0.5 + s * 2.0);
-  float trail = 0.0;
-  for (int i = 1; i <= 24; i++) {
-    float f = float(i);
-    trail += ink(suv + dir * f + vec2(0.0, sin(f * 1.3 + uTime * 4.0) * 0.002 * s)) * (1.0 - f / 25.0);
+  vec2 light = vec2(0.0);
+  // ---- The extrusion: the whole word streams out down and to the right.
+  if (uExtrude > 0.001) {
+    light += smear(suv, normalize(vec2(1.0, -0.62)), 0.55 * uExtrude, aspect) * 1.3;
   }
-  trail = trail / 12.0 * s;
+  // ---- The pointer's smear, opposite to where it is heading.
+  if (local > 0.01 && speed > 0.01) {
+    light += smear(suv, -uPtrVel / speed, min(speed * 0.10, 0.32) * local, aspect) * 1.2 * min(1.0, local * 2.0);
+  }
 
   // A soft halo on the letters, always.
   float halo = 0.0;
@@ -81,41 +105,43 @@ void main() {
   }
   halo /= 8.0;
 
-  // The ripple itself, faintly visible in the air: a bright ring and a softer echo inside it.
+  // The ripple, faintly visible in the air.
   float ring = exp(-x * x * 900.0) * 0.30 + exp(-pow(d - uFront * 0.62, 2.0) * 1600.0) * 0.14;
   ring *= uWave * smoothstep(0.0, 0.15, d);
 
-  // Nothing in the air may reach the canvas's edge, or its rectangle would show.
-  float edge = smoothstep(0.0, 0.14, uv.x) * smoothstep(1.0, 0.86, uv.x)
-             * smoothstep(0.0, 0.2, uv.y) * smoothstep(1.0, 0.8, uv.y);
-  float g = clamp((halo * 0.24 * ahead + trail * 1.15 + ring) * edge, 0.0, 1.0);
-  vec3 lit = uHi * (1.0 + band * 0.6);   // letters flare as the front passes through them
-  vec3 col = lit * core + uGlow * g * (1.0 - core);
-  float alpha = core + g * (1.0 - core);
+  // Nothing in the air may reach the canvas edge, or its rectangle would show.
+  float edge = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.88, uv.x)
+             * smoothstep(0.0, 0.18, uv.y) * smoothstep(1.0, 0.82, uv.y);
+
+  float near = clamp(light.x, 0.0, 1.0) * edge;
+  float far = clamp(light.y + halo * 0.24 * ahead + ring, 0.0, 1.0) * edge;
+
+  vec3 lit = uHi * (1.0 + band * 0.6);
+  vec3 col = lit * core;
+  float alpha = core;
+  // Near the letters the light is the letters' own colour; further out, the glow.
+  col += (uHi * near + uGlow * far) * (1.0 - alpha);
+  alpha += clamp(near + far, 0.0, 1.0) * (1.0 - alpha);
   o = vec4(min(col, vec3(alpha)), alpha);
 }`
 
 export interface Wordmark {
-  /**
-   * Sends a ripple out from a point on screen (the dot); resolves when the smear has
-   * decayed. With `reveal`, the word does not exist beyond the ripple — the ripple writes it.
-   */
-  play(from: { x: number; y: number }, reveal?: boolean): Promise<void>
-  /** Hidden until the first play, for an arrival that has not started yet. */
+  /** Hidden until the ripple writes it, for an arrival that has not started yet. */
   hide(): void
+  /**
+   * Sends a ripple out from a point on screen (the dot) that writes the word, then smears
+   * the whole word out and pulls it back in. Resolves when everything has settled.
+   */
+  play(from: { x: number; y: number }): Promise<void>
   /** Re-reads the theme's colours and redraws. */
   repaint(): void
   pointer(clientX: number, clientY: number): void
   destroy(): void
 }
 
-export function createWordmark(
-  canvas: HTMLCanvasElement,
-  text: HTMLElement,
-): Wordmark | null {
+export function createWordmark(canvas: HTMLCanvasElement, text: HTMLElement): Wordmark | null {
   const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, antialias: false })
   if (!gl) return null
-
   const program = link(gl)
   if (!program) return null
   gl.useProgram(program)
@@ -129,9 +155,9 @@ export function createWordmark(
 
   const u = (name: string) => gl.getUniformLocation(program, name)
   const U = {
-    res: u('uRes'), time: u('uTime'), front: u('uFront'), wave: u('uWave'), smear: u('uSmear'), reveal: u('uReveal'),
-    origin: u('uOrigin'),
-    ptr: u('uPtr'), ptrAmt: u('uPtrAmt'), hi: u('uHi'), glow: u('uGlow'),
+    res: u('uRes'), time: u('uTime'), origin: u('uOrigin'), front: u('uFront'), wave: u('uWave'),
+    reveal: u('uReveal'), extrude: u('uExtrude'), ptr: u('uPtr'), ptrVel: u('uPtrVel'),
+    ptrAmt: u('uPtrAmt'), hi: u('uHi'), glow: u('uGlow'),
   }
 
   const texture = gl.createTexture()
@@ -142,14 +168,19 @@ export function createWordmark(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
 
-  const state = { front: -1, wave: 0, smear: 0, reveal: 0, origin: [0, 0.5], ptr: [-1, -1], ptrAmt: 0, ptrTarget: 0 }
+  const s = {
+    origin: [0, 0.5], front: -1, wave: 0, reveal: 0, extrude: 0,
+    ptr: [-1, -1], vel: [0, 0], amt: 0, lastMove: 0,
+    last: null as null | { x: number; y: number; t: number },
+  }
   let colors = { hi: [1, 1, 1], glow: [0, 1, 0] }
   let raf = 0
-  let animating = false
+  let playing = false
   const t0 = performance.now()
 
   function rasterise() {
-    const dpr = Math.min(devicePixelRatio || 1, 2)
+    // The smear loops are the costly part; 1.5x is sharp enough for a glow.
+    const dpr = Math.min(devicePixelRatio || 1, 1.5)
     const box = canvas.getBoundingClientRect()
     canvas.width = Math.round(box.width * dpr)
     canvas.height = Math.round(box.height * dpr)
@@ -165,35 +196,31 @@ export function createWordmark(
     ctx.scale(dpr, dpr)
     ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
     ctx.letterSpacing = style.letterSpacing === 'normal' ? '0px' : style.letterSpacing
-    ctx.textBaseline = 'middle'
     ctx.fillStyle = '#fff'
-    const m = ctx.measureText(text.textContent ?? '')
-    const glyphMiddle = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2
-    ctx.textBaseline = 'alphabetic'
-    ctx.fillText(
-      text.textContent ?? '',
-      r.left - box.left,
-      r.top - box.top + r.height / 2 + glyphMiddle,
-    )
+    const word = text.textContent ?? ''
+    const m = ctx.measureText(word)
+    const middle = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2
+    ctx.fillText(word, r.left - box.left, r.top - box.top + r.height / 2 + middle)
     gl!.bindTexture(gl!.TEXTURE_2D, texture)
     gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, off)
   }
 
   function readColors() {
-    const s = getComputedStyle(document.documentElement)
-    colors = { hi: rgb(s.getPropertyValue('--hi')), glow: rgb(s.getPropertyValue('--glow')) }
+    const cs = getComputedStyle(document.documentElement)
+    colors = { hi: rgb(cs.getPropertyValue('--hi')), glow: rgb(cs.getPropertyValue('--glow')) }
   }
 
   function draw(now: number) {
     gl!.uniform2f(U.res, canvas.width, canvas.height)
     gl!.uniform1f(U.time, (now - t0) / 1000)
-    gl!.uniform1f(U.front, state.front)
-    gl!.uniform2f(U.origin, state.origin[0], state.origin[1])
-    gl!.uniform1f(U.wave, state.wave)
-    gl!.uniform1f(U.smear, state.smear)
-    gl!.uniform1f(U.reveal, state.reveal)
-    gl!.uniform2f(U.ptr, state.ptr[0], state.ptr[1])
-    gl!.uniform1f(U.ptrAmt, state.ptrAmt)
+    gl!.uniform2f(U.origin, s.origin[0], s.origin[1])
+    gl!.uniform1f(U.front, s.front)
+    gl!.uniform1f(U.wave, s.wave)
+    gl!.uniform1f(U.reveal, s.reveal)
+    gl!.uniform1f(U.extrude, s.extrude)
+    gl!.uniform2f(U.ptr, s.ptr[0], s.ptr[1])
+    gl!.uniform2f(U.ptrVel, s.vel[0], s.vel[1])
+    gl!.uniform1f(U.ptrAmt, s.amt)
     gl!.uniform3fv(U.hi, colors.hi)
     gl!.uniform3fv(U.glow, colors.glow)
     gl!.clearColor(0, 0, 0, 0)
@@ -201,15 +228,19 @@ export function createWordmark(
     gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
   }
 
-  /** Runs frames only while something is moving. */
+  /** Runs frames only while something moves. The pointer's smear relaxes on its own. */
   function loop(now: number) {
-    state.ptrAmt += (state.ptrTarget - state.ptrAmt) * 0.08
-    state.ptrTarget *= 0.97
+    if (now - s.lastMove > 60) {
+      s.vel = s.vel.map((v) => v * 0.88)
+      s.amt *= 0.95
+    }
     draw(now)
-    const moving = animating || state.ptrAmt > 0.01 || state.ptrTarget > 0.01
-    raf = moving ? requestAnimationFrame(loop) : 0
-    if (!moving) {
-      state.ptrAmt = 0
+    if (playing || s.amt > 0.01) {
+      raf = requestAnimationFrame(loop)
+    } else {
+      raf = 0
+      s.amt = 0
+      s.vel = [0, 0]
       draw(now)
     }
   }
@@ -220,7 +251,6 @@ export function createWordmark(
   rasterise()
   readColors()
   draw(performance.now())
-
   const resize = new ResizeObserver(() => {
     rasterise()
     draw(performance.now())
@@ -229,35 +259,37 @@ export function createWordmark(
 
   return {
     hide() {
-      state.reveal = 1
-      state.front = -1
+      s.reveal = 1
+      s.front = -1
       if (!raf) draw(performance.now())
     },
-    play(from, reveal = false) {
+    play(from) {
       return new Promise((resolve) => {
         const box = canvas.getBoundingClientRect()
-        state.origin = [(from.x - box.left) / box.width, 1 - (from.y - box.top) / box.height]
-        // Far enough to clear the farthest corner of the canvas.
+        s.origin = [(from.x - box.left) / box.width, 1 - (from.y - box.top) / box.height]
         const aspect = box.width / box.height
-        const reach = Math.hypot(Math.max(state.origin[0], 1 - state.origin[0]) * aspect, 1) + 0.1
-        animating = true
-        state.reveal = reveal ? 1 : 0
+        const reach = Math.hypot(Math.max(s.origin[0], 1 - s.origin[0]) * aspect, 1) + 0.1
+        playing = true
+        s.reveal = 1
         const start = performance.now()
-        const SPREAD = 1500 // ms for the ripple to cross everything
-        const DECAY = 1200 // ms for the smear to fade after it has
+        const SPREAD = 1500 // the ripple crosses everything
+        const EXTRUDE_AT = 750 // while it is still travelling, the written word…
+        const OUT = 1000 // …streams out…
+        const BACK = 1300 // …and is pulled back in
+        const END = EXTRUDE_AT + OUT + BACK
         const tick = (now: number) => {
           const t = now - start
           const k = Math.min(t / SPREAD, 1)
-          state.front = reach * (1 - (1 - k) ** 2.4)
-          state.wave = Math.min(1, k * 6) * (1 - Math.max(0, (t - SPREAD * 0.7) / (DECAY * 0.8))) ** 2
-          state.wave = Math.max(0, state.wave)
-          const fade = Math.max(0, (t - SPREAD * 0.55) / DECAY)
-          state.smear = Math.min(1, k * 4) * (1 - Math.min(fade, 1)) ** 2
-          if (t < SPREAD + DECAY) {
+          s.front = reach * (1 - (1 - k) ** 2.4)
+          s.wave = Math.max(0, Math.min(1, k * 6) * (1 - Math.max(0, (t - SPREAD * 0.7) / 900)) ** 2)
+          const e = t - EXTRUDE_AT
+          s.extrude =
+            e < 0 ? 0 : e < OUT ? 1 - (1 - e / OUT) ** 3 : Math.max(0, 1 - ((e - OUT) / BACK) ** 0.8)
+          if (t < END) {
             requestAnimationFrame(tick)
           } else {
-            Object.assign(state, { front: -1, wave: 0, smear: 0, reveal: 0 })
-            animating = false
+            Object.assign(s, { front: -1, wave: 0, reveal: 0, extrude: 0 })
+            playing = false
             resolve()
           }
         }
@@ -270,9 +302,19 @@ export function createWordmark(
       if (!raf) draw(performance.now())
     },
     pointer(x, y) {
+      const now = performance.now()
       const box = canvas.getBoundingClientRect()
-      state.ptr = [(x - box.left) / box.width, 1 - (y - box.top) / box.height]
-      state.ptrTarget = 1
+      s.ptr = [(x - box.left) / box.width, 1 - (y - box.top) / box.height]
+      if (s.last && now - s.last.t < 200) {
+        const dt = Math.max((now - s.last.t) / 1000, 1 / 240)
+        // Canvas heights per second, smoothed so a jittery mouse still gives one direction.
+        const vx = (x - s.last.x) / box.height / dt
+        const vy = -(y - s.last.y) / box.height / dt
+        s.vel = [s.vel[0] * 0.7 + vx * 0.3, s.vel[1] * 0.7 + vy * 0.3]
+        s.amt = Math.min(1, s.amt + 0.25)
+      }
+      s.last = { x, y, t: now }
+      s.lastMove = now
       wake()
     },
     destroy() {
@@ -285,14 +327,14 @@ export function createWordmark(
 
 function link(gl: WebGL2RenderingContext): WebGLProgram | null {
   const shader = (type: number, src: string) => {
-    const s = gl.createShader(type)!
-    gl.shaderSource(s, src)
-    gl.compileShader(s)
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-      console.warn('wordmark shader:', gl.getShaderInfoLog(s))
+    const sh = gl.createShader(type)!
+    gl.shaderSource(sh, src)
+    gl.compileShader(sh)
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      console.warn('wordmark shader:', gl.getShaderInfoLog(sh))
       return null
     }
-    return s
+    return sh
   }
   const v = shader(gl.VERTEX_SHADER, VERT)
   const f = shader(gl.FRAGMENT_SHADER, FRAG)
@@ -312,4 +354,3 @@ function rgb(value: string): number[] {
     : (v.match(/[\d.]+/g) ?? ['0', '0', '0']).slice(0, 3).map(Number)
   return parts.map((n) => n / 255)
 }
-
