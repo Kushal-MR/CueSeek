@@ -1,5 +1,6 @@
 import { Mark } from './Mark.tsx'
 import { Knob } from './theme/Knob.tsx'
+import { Arrival } from './arrival/Arrival.tsx'
 import './App.css'
 
 const REPO = 'https://github.com/Kushal-MR/CueSeek'
@@ -38,17 +39,7 @@ export default function App() {
       </header>
 
       <main id="top">
-        <section className="hero" aria-labelledby="hero-title">
-          <div className="lockup">
-            <Mark size={112} className="hero-mark" />
-            <h1 id="hero-title">CueSeek</h1>
-          </div>
-          <p className="tagline">An operations console for self-hosted home servers.</p>
-          <p className="sub">
-            One glance at your phone or your watch tells you whether everything on your home
-            server is fine — and lets you fix it when it isn't.
-          </p>
-        </section>
+        <Arrival />
 
         {SECTIONS.map((s) => (
           <section key={s.id} id={s.id} className="stub" aria-labelledby={`${s.id}-title`}>

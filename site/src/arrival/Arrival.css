@@ -1,0 +1,211 @@
+.hero {
+  position: relative;
+  min-height: calc(100svh - 84px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 24px 90px;
+  overflow: hidden;
+}
+
+.lockup {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 22px);
+}
+
+/* ---- The Swell, in three pieces (SwellParts.tsx) ---- */
+
+.hero-mark {
+  position: relative;
+  z-index: 1;
+  color: var(--hi);
+  filter: drop-shadow(0 0 16px var(--glow));
+}
+.hero-mark .part {
+  fill: currentColor;
+  transition: opacity 250ms;
+}
+/* While the shader draws the mark as glass, the SVG's shapes step aside (its rings stay). */
+.hero-mark[data-glass] .part {
+  opacity: 0;
+}
+/* The masks' pens. Fully drawn unless the arrival animates them from 1 to 0. */
+.hero-mark .draw {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 14;
+  /* Flat: a round cap would show as a dot at the pen's start before it has drawn anything. */
+  stroke-linecap: butt;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.hero-mark .handle,
+.hero-mark .handle-follow,
+.hero-mark .burst {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.hero-mark .burst {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 0.8;
+  opacity: 0;
+}
+/* Ghost Blob's secondary motion: now and then the dot gives a small hop — a squash, a
+   stretch up and out of the dial, and back. */
+.hero-mark .handle {
+  animation: hop 7s cubic-bezier(0.3, 0, 0.2, 1) 5s infinite;
+}
+@keyframes hop {
+  0%, 84%, 100% { transform: translate(0, 0) rotate(-45deg) scale(1, 1) rotate(45deg); }
+  87% { transform: translate(0, 0) rotate(-45deg) scale(0.86, 1.1) rotate(45deg); }
+  91% { transform: translate(1.2px, -1.2px) rotate(-45deg) scale(1.14, 0.9) rotate(45deg); }
+  95% { transform: translate(0, 0) rotate(-45deg) scale(0.94, 1.05) rotate(45deg); }
+  98% { transform: translate(0, 0) rotate(-45deg) scale(1.02, 0.99) rotate(45deg); }
+}
+
+/* ---- The word ---- */
+
+.hero h1 {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: clamp(56px, 9vw, 112px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--hi);
+}
+/* Once the shader is drawing the word, the heading stays for screen readers, search and
+   selection, but is no longer what you see. */
+.hero h1[data-shader] {
+  color: transparent;
+}
+/* Behind the whole lockup and well beyond it: the ripple travels through the air around the
+   mark and the word, and the smear streams off down and back toward the dot. */
+.word-canvas {
+  position: absolute;
+  left: -300px;
+  top: -160px;
+  width: calc(100% + 560px);
+  height: calc(100% + 420px);
+  pointer-events: none;
+}
+
+/* ---- The frames and the wire (the Sixfold reference's HUD) ---- */
+
+.hud-box {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid color-mix(in srgb, var(--text) 30%, transparent);
+  font: 500 8px var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  padding: 3px 5px;
+  text-align: left;
+  pointer-events: none;
+}
+/* Each box leaves a band above the letters for its label, so a label never sits on a glyph. */
+.hud-box.b1 { left: -14px; top: -30px; width: 25%; height: calc(100% + 44px); }
+.hud-box.b2 { left: 27%; top: -22px; width: 31%; height: calc(100% + 30px); }
+.hud-box.b3 { left: 60%; top: -28px; width: 41%; height: calc(100% + 40px); }
+
+.wire {
+  position: absolute;
+  z-index: 2;
+  left: 14%;
+  right: 2%;
+  top: 56%;
+  height: 1px;
+  background: color-mix(in srgb, var(--hi) 55%, transparent);
+  transform-origin: left;
+  pointer-events: none;
+}
+.wire i {
+  position: absolute;
+  top: -2px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--hi);
+  box-shadow: 0 0 6px var(--glow);
+}
+
+/* ---- Copy ---- */
+
+.tagline {
+  margin: 32px 0 0;
+  font-size: clamp(18px, 2vw, 22px);
+}
+.sub {
+  margin: 10px 0 0;
+  max-width: 520px;
+  color: var(--muted);
+}
+
+.track {
+  position: absolute;
+  left: clamp(20px, 4vw, 44px);
+  right: clamp(20px, 4vw, 44px);
+  bottom: 64px;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 3px, transparent 3px 8px);
+  transform-origin: left;
+}
+.scrollcue {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 500 10px var(--mono);
+  letter-spacing: 0.2em;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .lockup {
+    flex-direction: column;
+  }
+  .hud-box,
+  .wire {
+    display: none;
+  }
+}
+
+/* ---- The entrance. Only when main.tsx set data-arrival on <html>. ---- */
+
+[data-arrival] .track { animation: draw 700ms cubic-bezier(0.2, 0, 0, 1) both; }
+[data-arrival] .hud-box { animation: frame 520ms cubic-bezier(0.2, 0, 0, 1) 2600ms both; }
+[data-arrival] .hud-box.b2 { animation-delay: 2700ms; }
+[data-arrival] .hud-box.b3 { animation-delay: 2800ms; }
+[data-arrival] .wire { animation: draw 700ms cubic-bezier(0.65, 0, 0.35, 1) 2900ms both; }
+[data-arrival] .wire i { animation: fade 200ms 3200ms both; }
+[data-arrival] .tagline { animation: rise 600ms cubic-bezier(0.2, 0, 0, 1) 3400ms both; }
+[data-arrival] .sub { animation: rise 600ms cubic-bezier(0.2, 0, 0, 1) 3550ms both; }
+[data-arrival] .nav { animation: drop 600ms cubic-bezier(0.2, 0, 0, 1) 3750ms both; }
+[data-arrival] .scrollcue { animation: fade 600ms 4000ms both; }
+/* Until the shader has the word, the heading waits unseen — it must not show and then
+   vanish. Without a shader, it fades in on the ripple's beat instead. */
+[data-arrival] .hero h1:not([data-shader]) { opacity: 0; }
+[data-arrival][data-arrival-wave='none'] .hero h1 { opacity: 1; animation: fade 700ms 1850ms both; }
+
+@keyframes draw { from { transform: scaleX(0); } }
+@keyframes frame { from { clip-path: inset(0 100% 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes drop { from { opacity: 0; transform: translateY(-100%); } }
+
+/* The dot can be poked. */
+.hero-mark {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-mark .handle { animation: none; }
+}
