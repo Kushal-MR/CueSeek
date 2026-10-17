@@ -1,0 +1,69 @@
+import { Mark } from './Mark.tsx'
+import './App.css'
+
+const REPO = 'https://github.com/Kushal-MR/CueSeek'
+
+/**
+ * The page's bones: every section from the approved storyboard, in order, each saying which
+ * phase fills it. Deliberately plain — M6.2 proves the site builds, deploys and keeps its
+ * promise to load nothing but itself; the showpieces arrive one phase at a time.
+ */
+const SECTIONS = [
+  { id: 'problem', n: '01', title: 'Your home server runs a dozen things.', phase: 'M6.5' },
+  { id: 'answer', n: '02', title: 'CueSeek answers for you.', phase: 'M6.5' },
+  { id: 'works-with', n: '03', title: 'Works with what you already run.', phase: 'M6.7' },
+  { id: 'wrist', n: '04', title: 'Same answer, on your wrist.', phase: 'M6.8' },
+  { id: 'reel', n: '05', title: 'This video is not a video.', phase: 'M6.9' },
+  { id: 'why', n: '06', title: "Why it's built this way.", phase: 'M6.10' },
+  { id: 'try', n: '07', title: 'Break a server. Nothing will happen.', phase: 'M6.11' },
+  { id: 'download', n: '08', title: 'Install it.', phase: 'M6.12' },
+] as const
+
+export default function App() {
+  return (
+    <>
+      <header className="nav">
+        <a className="brand" href="#top">
+          <Mark size={20} />
+          CueSeek
+        </a>
+        <nav aria-label="Sections">
+          <a href="#answer">How it works</a>
+          <a href="#works-with">Works with</a>
+          <a href="#download">Download</a>
+          <a href={REPO}>GitHub</a>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section className="hero" aria-labelledby="hero-title">
+          <div className="lockup">
+            <Mark size={112} className="hero-mark" />
+            <h1 id="hero-title">CueSeek</h1>
+          </div>
+          <p className="tagline">An operations console for self-hosted home servers.</p>
+          <p className="sub">
+            One glance at your phone or your watch tells you whether everything on your home
+            server is fine — and lets you fix it when it isn't.
+          </p>
+        </section>
+
+        {SECTIONS.map((s) => (
+          <section key={s.id} id={s.id} className="stub" aria-labelledby={`${s.id}-title`}>
+            <span className="hud">
+              Section {s.n} — arrives in {s.phase}
+            </span>
+            <h2 id={`${s.id}-title`}>{s.title}</h2>
+          </section>
+        ))}
+      </main>
+
+      <footer className="foot">
+        <span>
+          <Mark size={14} /> CueSeek · Apache-2.0 · this page loads nothing but itself
+        </span>
+        <a href={REPO}>Source on GitHub</a>
+      </footer>
+    </>
+  )
+}
