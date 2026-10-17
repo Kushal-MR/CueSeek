@@ -33,7 +33,7 @@ Settled with Kushal on 2026-10-17, from references he collected on a design gall
 | Demo | A **separate page**, reached after a short intro. Not the whole site — the product's surface is deliberately small, and a whole-site demo would run out of things to do |
 | The reel | Plays **in the page, as code** — the renderer and synthesiser ported to the browser, with a "view source" toggle. Sound **off** until asked for. Exported to MP4 separately, for sharing |
 | "Why" notes | The site explains why things are built the way they are, linking to the ADRs and verification records. It does not discuss how the project was built |
-| Stack | React + Three.js (React Three Fiber) + TypeScript, built with Vite to **static files** |
+| Stack | React + TypeScript, built with Vite to **static files**. Effects are plain WebGL where one shader is the whole job — the arrival's wordmark is one quad and one fragment shader, and Three.js would have added ~150 KB to the first thing a visitor loads. Three.js comes in only for a phase that is genuinely 3D |
 | Hosting | **Vercel**, free `*.vercel.app` domain for now; a preview link per pull request. Kushal connects the account |
 | Self-contained | Everything — fonts, scripts, shaders, images — is bundled and served by the site itself. No analytics, no CDNs, no third-party requests. The placeholder's promise survives |
 
@@ -83,7 +83,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.1 | Storyboard: every section as stills, the knob's stops — **approval gate** | M6.0 | ✅ |
 | M6.2 | `site/` builds; Vercel preview per PR; CI builds it | M6.1 | ✅ |
 | M6.3 | The knob and its palettes | M6.2 | ✅ |
-| M6.4 | Arrival: the fly-in and the wave | M6.3 | ⬜ |
+| M6.4 | Arrival: the fly-in and the wave | M6.3 | ✅ |
 | M6.5 | Problem and answer, with triggered camera moves | M6.4 | ⬜ |
 | M6.6 | Staging on the HP, and every capture | M6.1 | ⬜ |
 | M6.7 | What it works with | M6.5, M6.6 | ⬜ |
