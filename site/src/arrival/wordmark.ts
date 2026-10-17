@@ -89,15 +89,29 @@ void main() {
   float band = exp(-x * x * 70.0) * uWave;
   vec2 disp = (n * sin(d * 40.0 - uTime * 10.0) + vec2(-n.y, n.x) * 0.5 * cos(d * 23.0 + uTime * 6.0)) * band * 0.02;
 
-  // ---- The pointer: along the path it actually took. Each point of the path affects only
-  // what is close to it, in the direction the pointer was travelling there, fading as it ages.
+  // ---- The pointer: along the path it actually took. The path is a chain of segments, so
+  // a fast stroke stays one continuous trail; each pixel blends the directions of every part
+  // of it nearby, weighted by closeness, so the direction never jumps between neighbouring
+  // pixels — a jump there tears the letters into seams.
   float local = 0.0;
-  vec2 along = vec2(1.0, 0.0);
+  vec2 dirSum = vec2(0.0);
+  vec2 p = uv * vec2(aspect, 1.0);
   for (int i = 0; i < 10; i++) {
-    vec2 dq = (uv - uTrail[i].xy) * vec2(aspect, 1.0);
-    float g = uTrailLife[i] * exp(-dot(dq, dq) * 18.0);
-    if (g > local) { local = g; along = uTrail[i].zw; }
+    float la = uTrailLife[i];
+    if (la <= 0.0) continue;
+    vec4 A = uTrail[i];
+    vec4 B = A;
+    float lb = la;
+    if (i < 9 && uTrailLife[i + 1] > 0.0) { B = uTrail[i + 1]; lb = uTrailLife[i + 1]; }
+    vec2 a = A.xy * vec2(aspect, 1.0);
+    vec2 ab = B.xy * vec2(aspect, 1.0) - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+    vec2 dq = p - (a + ab * t);
+    float g = mix(la, lb, t) * exp(-dot(dq, dq) * 18.0);
+    dirSum += mix(A.zw, B.zw, t) * g;
+    local = 1.0 - (1.0 - local) * (1.0 - g);
   }
+  vec2 along = length(dirSum) > 1e-5 ? normalize(dirSum) : vec2(1.0, 0.0);
 
   // Glass is wherever the arrival says, or wherever the pointer is.
   float glass = clamp(uGlass + local * 1.3, 0.0, 1.0);
