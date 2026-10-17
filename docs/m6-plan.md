@@ -1,59 +1,126 @@
 # M6 — the website
 
-**Not started.** This file collects what has already been decided or asked for, so the
-milestone opens with its inputs written down rather than remembered. The phase plan itself is
-written when M6 begins, in the shape of `m5-plan.md`.
+M5 finished the product. **M6 explains it** — to someone who has never run a home server,
+in the time it takes to scroll a page, and without claiming anything the product does not
+do.
 
 The page shipped in M4.9 (`docs/index.html`, live at
 [kushal-mr.github.io/CueSeek](https://kushal-mr.github.io/CueSeek/)) is a deliberate
 placeholder: plain, no framework, no analytics, no third-party requests. M6 replaces it.
 
-## Asked for so far
+## The rule
 
-### A motion reel, as the site's video preview
+**The site claims nothing the README does not.** Every service named, every feature shown,
+every screen captured is something a stranger could install today — or is labelled, in
+words, as planned. A promotional page is the easiest place in a project to lie by accident,
+and this one is read by people deciding whether to trust an agent with root on their
+machine.
 
-Decided 2026-10-04, after a proof of concept built at the end of M5.
+**M6 changes nothing in `agent/`, `api/` or `clients/`.** The site is a new top-level
+`site/` directory. If showing something requires changing the product, that is a product
+milestone, not a website phase.
 
-**What the proof showed.** A 20-second reel made **entirely from code** — every frame drawn by
-a program, the soundtrack synthesised by another, no editing software, no stock assets, no
-services. It used only CueSeek's own identity: the near-black page, the greens, the status
-palette, IBM Plex, and the Swell mark regenerated from `docs/brand/icon.py`'s geometry. Ten
-scenes at 120 BPM: the question ("is everything fine?"), the verdict, vitals, a service
-needing attention, a restart that says "asked", the hold-to-confirm, phone and watch agreeing,
-and the end card. Kushal's verdict: *"this is exactly what I'm looking for"* — it needs polish,
-not a new direction.
+## Decided before the plan
 
-**What M6's version adds:**
+Settled with Kushal on 2026-10-17, from references he collected on a design gallery:
 
-- **Real screenshots of the services it works with** — the Jellyfin and qBittorrent web UIs,
-  shown alongside CueSeek's view of them, so the reel shows *how it works with them* and not
-  only what CueSeek looks like.
-- **More polished text** and **more imagery** — the phone and watch shown with real captures
-  rather than drawn stand-ins.
-- **Audio, decided in M6** — the proof's synthesised track was a placeholder for this.
-- The proof's renderer and synth are the starting point; they are code, so every scene,
-  colour, timing and note is editable.
+| | Decision |
+| --- | --- |
+| Arrival | The Swell **flies in** with squash and stretch, lands, then a glowing wave rolls through the wordmark — a liquid, smeared distortion in CueSeek greens, with small HUD labels. Plays once, settles, idles with a slight breath |
+| Scroll | Each section **triggers** a camera move — zooming in on what it is about. Never scroll-*scrubbed*: a scroll starts a transition, which then plays at its own pace |
+| Theme | A **knob** instead of a dark/light switch, turning the page from Night to Day through **detented stops**. Each stop is a palette checked for contrast, status colours included; blending happens only mid-turn. Starts at the visitor's system preference; arrow keys turn it |
+| The watch | Hangs **on its strap** with real physics — grab it, swing it. Its face shows the live verdict and the complication. A generic round watch drawn in code, not any manufacturer's design |
+| Demo | A **separate page**, reached after a short intro. Not the whole site — the product's surface is deliberately small, and a whole-site demo would run out of things to do |
+| The reel | Plays **in the page, as code** — the renderer and synthesiser ported to the browser, with a "view source" toggle. Sound **off** until asked for. Exported to MP4 separately, for sharing |
+| "Why" notes | The site explains why things are built the way they are, linking to the ADRs and verification records. It does not discuss how the project was built |
+| Stack | React + Three.js (React Three Fiber) + TypeScript, built with Vite to **static files** |
+| Hosting | **Vercel**, free `*.vercel.app` domain for now; a preview link per pull request. Kushal connects the account |
+| Self-contained | Everything — fonts, scripts, shaders, images — is bundled and served by the site itself. No analytics, no CDNs, no third-party requests. The placeholder's promise survives |
 
-**One constraint to settle first: Plex.** Kushal asked for Plex screenshots. **CueSeek has no
-Plex adapter** — Jellyfin and qBittorrent are supported in full, and any systemd unit for
-health and lifecycle. A reel that showed Plex would advertise support that does not exist.
-Either an adapter lands before the reel is made, or Plex stays out of it. Showing a Plex
-server as a plain `systemd` unit — health, restart, nothing more — is honest, and is an option.
+### Which services the site shows
 
-**Practical notes from the proof:** frames render in under a minute on the laptop with the
-JDK Android Studio already bundles; the last step, muxing picture and sound into MP4, needs an
-encoder (ffmpeg), which is not installed and should be chosen deliberately when M6 starts.
+Three tiers, labelled as such, because all three are true:
 
-### The site itself
+| Tier | Services | What CueSeek gives you |
+| --- | --- | --- |
+| Full support | Jellyfin, qBittorrent | health from the service's own API, plus what is playing or what is moving |
+| Works today, basic | anything run as a systemd unit — Plex, Sonarr, Radarr, Immich, Syncthing, Vaultwarden, Samba, … | running or not, and start, stop, restart |
+| Planned | full Plex support | labelled "coming later" |
 
-- **Ambition:** animation, a 3D logo — "professional, looks like a complete project."
-- **Hosting:** Vercel if the site becomes React/Next (preview deploys per PR match how this
-  project verifies everything before merge); GitHub Pages if it stays hand-written.
-- **A question to answer before choosing references:** the placeholder promises *"This page
-  loads nothing but itself"*, and its security section leans on the same idea. A WebGL hero is
-  several hundred KB of script and breaks that promise; a video is heavier still. Decide which
-  story the site tells — and whether a self-hosted video counts as "itself" — before design
-  starts.
-- **The download page** carries both signed APKs and the agent, with checksums and attestation
-  instructions, and states plainly that installing the Wear app means ADB over Wi-Fi
-  (see `m5-plan.md`, "Distribution").
+Services are named in text. Other projects' logos are not used.
+
+### Screenshots of the services themselves
+
+Captured from the HP against a **staged library**, never the real one: legally free films in
+Jellyfin (Big Buck Bunny, Sintel, Tears of Steel) and Linux ISOs in qBittorrent. Staged,
+captured, then removed. Phone and watch captures come from the real devices over adb.
+
+## The page
+
+One showpiece per section. Doubling up is how a page like this turns into noise.
+
+| # | Section | Showpiece |
+| --- | --- | --- |
+| 0 | Arrival | the Swell flies in; the wave through the wordmark; the knob in a corner |
+| 1 | The problem — rewritten | kinetic type |
+| 2 | The answer | zoom into the phone's dashboard |
+| 3 | What it works with | the three tiers |
+| 4 | On your wrist | the watch on its strap |
+| 5 | The reel | playing as code, with "view source" |
+| 6 | Why it is built this way | notes linking to the ADRs |
+| 7 | Try it → | the entry to the demo page |
+| 8 | Download | both APKs and the agent, checksums, attestation, and the plain statement that the Wear app installs over ADB |
+
+**Most visitors arrive on a phone** — a link opened from a feed. So everything works by
+touch (drag the watch, swipe the knob), and the camera moves stay light. Anyone with reduced
+motion set gets a still version of every section, not a broken one.
+
+## Phases
+
+| Phase | Deliverable | Depends on | Status |
+| --- | --- | --- | --- |
+| M6.0 | This plan | — | ✅ |
+| M6.1 | Storyboard: every section as stills, the knob's stops — **approval gate** | M6.0 | ⬜ |
+| M6.2 | `site/` builds; Vercel preview per PR; CI builds it | M6.1 | ⬜ |
+| M6.3 | The knob and its palettes | M6.2 | ⬜ |
+| M6.4 | Arrival: the fly-in and the wave | M6.3 | ⬜ |
+| M6.5 | Problem and answer, with triggered camera moves | M6.4 | ⬜ |
+| M6.6 | Staging on the HP, and every capture | M6.1 | ⬜ |
+| M6.7 | What it works with | M6.5, M6.6 | ⬜ |
+| M6.8 | The watch on its strap | M6.5 | ⬜ |
+| M6.9 | The reel, ported to the browser | M6.6 | ⬜ |
+| M6.10 | Why it is built this way | M6.5 | ⬜ |
+| M6.11 | The demo page | M6.5 | ⬜ |
+| M6.12 | The download page | M6.2 | ⬜ |
+| M6.13 | Phones, reduced motion, accessibility, weight | all above | ⬜ |
+| M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ⬜ |
+| M6.15 | Launch: the placeholder points to the new site; README links | all | ⬜ |
+
+### M6.1 — Storyboard
+
+The same rule as the identity and the reel: **show, get an OK, then build.** Every section
+as a still in CueSeek's identity, at desktop and phone widths, plus the knob at each stop.
+Nothing in `site/` is written until this is approved.
+
+### M6.14 — Sharing
+
+The MP4 needs an encoder (ffmpeg, via `imageio-ffmpeg`). Approved in principle; installed
+only when this phase starts. The 4:5 cut has captions burned in, because feeds autoplay
+muted.
+
+### Still to come from Kushal
+
+- The links for the footer credit (GitHub, LinkedIn) — during the build.
+
+## Background: the motion reel proof
+
+Built at the end of M5 (2026-10-04): a 20-second reel made **entirely from code** — every
+frame drawn by a program, the soundtrack synthesised by another, no editing software, no
+stock assets. CueSeek's own identity only: the near-black page, the greens, the status
+palette, IBM Plex, and the Swell regenerated from `docs/brand/icon.py`. Ten scenes at 120
+BPM: the question, the verdict, vitals, a service needing attention, a restart that says
+"asked", the hold-to-confirm, phone and watch agreeing, the end card. Kushal's verdict:
+*"this is exactly what I'm looking for"* — it needs polish, not a new direction.
+
+M6's version adds real captures of the services and of both devices, more polished text, and
+more imagery. The proof's renderer and synth are the starting point.
