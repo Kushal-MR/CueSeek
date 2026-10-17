@@ -1,6 +1,5 @@
 import { forwardRef } from 'react'
-import mark from '@brand/cueseek-mark.svg?raw'
-import { HANDLE_CENTRE } from './geometry.ts'
+import { HANDLE, HANDLE_CENTRE, LONG, TAIL } from './geometry.ts'
 
 /**
  * The Swell taken apart into its three pieces, so each can perform on its own: the long arc,
@@ -12,9 +11,6 @@ import { HANDLE_CENTRE } from './geometry.ts'
  * that draws on like a pen, uncovering the tapered shape beneath it.
  */
 
-const d = mark.match(/ d="([^"]+)"/)![1]
-// Three subpaths, each starting with its own `M`.
-const [LONG, TAIL, HANDLE] = d.split(/ (?=M )/)
 
 const C = { x: 55, y: 57.5, r: 24 }
 const at = (deg: number) => {

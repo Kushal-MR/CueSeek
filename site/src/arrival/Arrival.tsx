@@ -11,7 +11,7 @@ const BEAT = {
   long: 250, // the long arc draws itself up the left
   tail: 520, // the tail draws up the right, overlapping
   pop: 1050, // the dot pops
-  ripple: 1420, // a ripple leaves the dot and writes the word
+  ripple: 1850, // once the dot has landed, a ripple leaves it and writes everything as glass
 } as const
 
 /** Stretch along the dot's own direction — up and to the right, out of the dial. */
@@ -93,9 +93,11 @@ export function Arrival() {
     // The shader needs the real font in hand before it can rasterise the word.
     document.fonts.load(`500 112px "IBM Plex Sans"`).then(() => {
       if (!alive || !canvas.current || !title.current) return
-      const wm = createWordmark(canvas.current, title.current)
+      const wm = createWordmark(canvas.current, title.current, svg!)
       if (!wm) return plainText()
       wordmark.current = wm
+      // For tuning the shader from the console with ?tune; it only freezes a picture.
+      if (location.search.includes('tune')) Object.assign(window, { __wordmark: wm })
       setShader(true)
       if (arriving) {
         wm.hide()
@@ -104,10 +106,14 @@ export function Arrival() {
           // The ripple leaves from the dot's real position on screen.
           const box = svg.getBoundingClientRect()
           const scale = box.width / 60
-          wm.play({
-            x: box.left + (HANDLE_CENTRE.x - 24) * scale,
-            y: box.top + (HANDLE_CENTRE.y - 26) * scale,
-          })
+          wm.play(
+            {
+              x: box.left + (HANDLE_CENTRE.x - 24) * scale,
+              y: box.top + (HANDLE_CENTRE.y - 26) * scale,
+            },
+            // While the mark is glass the shader draws it, so the SVG steps aside.
+            (on) => svg.toggleAttribute('data-glass', on),
+          )
         }, BEAT.ripple)
       }
     }, plainText)

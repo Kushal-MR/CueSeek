@@ -27,6 +27,11 @@
 }
 .hero-mark .part {
   fill: currentColor;
+  transition: opacity 250ms;
+}
+/* While the shader draws the mark as glass, the SVG's shapes step aside (its rings stay). */
+.hero-mark[data-glass] .part {
+  opacity: 0;
 }
 /* The masks' pens. Fully drawn unless the arrival animates them from 1 to 0. */
 .hero-mark .draw {
@@ -84,10 +89,10 @@
    mark and the word, and the smear streams off down and back toward the dot. */
 .word-canvas {
   position: absolute;
-  left: -120px;
-  top: -110px;
-  width: calc(100% + 280px);
-  height: calc(100% + 240px);
+  left: -300px;
+  top: -160px;
+  width: calc(100% + 560px);
+  height: calc(100% + 420px);
   pointer-events: none;
 }
 
@@ -175,19 +180,19 @@
 /* ---- The entrance. Only when main.tsx set data-arrival on <html>. ---- */
 
 [data-arrival] .track { animation: draw 700ms cubic-bezier(0.2, 0, 0, 1) both; }
-[data-arrival] .hud-box { animation: frame 520ms cubic-bezier(0.2, 0, 0, 1) 2050ms both; }
-[data-arrival] .hud-box.b2 { animation-delay: 2150ms; }
-[data-arrival] .hud-box.b3 { animation-delay: 2250ms; }
-[data-arrival] .wire { animation: draw 700ms cubic-bezier(0.65, 0, 0.35, 1) 2300ms both; }
-[data-arrival] .wire i { animation: fade 200ms 2600ms both; }
-[data-arrival] .tagline { animation: rise 600ms cubic-bezier(0.2, 0, 0, 1) 2800ms both; }
-[data-arrival] .sub { animation: rise 600ms cubic-bezier(0.2, 0, 0, 1) 2950ms both; }
-[data-arrival] .nav { animation: drop 600ms cubic-bezier(0.2, 0, 0, 1) 3150ms both; }
-[data-arrival] .scrollcue { animation: fade 600ms 3400ms both; }
+[data-arrival] .hud-box { animation: frame 520ms cubic-bezier(0.2, 0, 0, 1) 2600ms both; }
+[data-arrival] .hud-box.b2 { animation-delay: 2700ms; }
+[data-arrival] .hud-box.b3 { animation-delay: 2800ms; }
+[data-arrival] .wire { animation: draw 700ms cubic-bezier(0.65, 0, 0.35, 1) 2900ms both; }
+[data-arrival] .wire i { animation: fade 200ms 3200ms both; }
+[data-arrival] .tagline { animation: rise 600ms cubic-bezier(0.2, 0, 0, 1) 3400ms both; }
+[data-arrival] .sub { animation: rise 600ms cubic-bezier(0.2, 0, 0, 1) 3550ms both; }
+[data-arrival] .nav { animation: drop 600ms cubic-bezier(0.2, 0, 0, 1) 3750ms both; }
+[data-arrival] .scrollcue { animation: fade 600ms 4000ms both; }
 /* Until the shader has the word, the heading waits unseen — it must not show and then
    vanish. Without a shader, it fades in on the ripple's beat instead. */
 [data-arrival] .hero h1:not([data-shader]) { opacity: 0; }
-[data-arrival][data-arrival-wave='none'] .hero h1 { opacity: 1; animation: fade 700ms 1420ms both; }
+[data-arrival][data-arrival-wave='none'] .hero h1 { opacity: 1; animation: fade 700ms 1850ms both; }
 
 @keyframes draw { from { transform: scaleX(0); } }
 @keyframes frame { from { clip-path: inset(0 100% 100% 0); } to { clip-path: inset(0 0 0 0); } }
