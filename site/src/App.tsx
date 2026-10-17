@@ -1,4 +1,5 @@
 import { Mark } from './Mark.tsx'
+import { Knob } from './theme/Knob.tsx'
 import './App.css'
 
 const REPO = 'https://github.com/Kushal-MR/CueSeek'
@@ -33,6 +34,7 @@ export default function App() {
           <a href="#download">Download</a>
           <a href={REPO}>GitHub</a>
         </nav>
+        <Knob />
       </header>
 
       <main id="top">

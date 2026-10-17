@@ -254,6 +254,11 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+
+      # Every stop of the theme knob, every pair a reader depends on, at WCAG AA or better.
+      - name: Contrast on every theme stop
+        run: npm run check:contrast
+
       - name: Typecheck and build
         run: npm run build
 
