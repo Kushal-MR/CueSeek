@@ -12,12 +12,15 @@ import { HANDLE, LONG, TAIL } from './geometry.ts'
  * - **ribbons** — the shapes swept out along curved, slowly folding paths into long silky
  *   ribbons of light, softening as they go: down and to the left off everything, and up
  *   and to the right off the end of the word;
- * - **the pointer** — moving it through the lockup raises the same glass and ribbons around
- *   it, trailing behind its (smoothed) direction, and they settle when it stops.
+ * - **the pointer** — the path it actually took turns the letters it crossed to glass and
+ *   stretches them the way it was moving, then fades from the oldest end.
  *
  * At rest it draws the plain word and stops, so an idle page costs nothing. The crisp SVG
  * mark sits on top except while the mark itself is glass. Plain WebGL 2: one quad, one shader.
  */
+
+/** How many points of the pointer's recent path the shader sees. */
+const TRAIL = 10
 
 const VERT = `#version 300 es
 in vec2 p;
@@ -36,9 +39,10 @@ uniform float uReveal;  // 1 while the ripple is writing: nothing beyond its fro
 uniform float uRibbon;  // how far the ribbons reach, 0..1
 uniform float uGlass;   // 0 solid letters .. 1 dark glass with neon rims
 uniform float uMarkVis; // whether the shader draws the mark (the SVG hides meanwhile)
-uniform vec2 uPtr;      // smoothed pointer, uv
-uniform vec2 uPtrDir;   // smoothed direction of travel (unit, aspect-corrected)
-uniform float uPtrAmt;  // smoothed energy, 0..1
+// The pointer's recent path, newest first: position (uv) and direction of travel there
+// (unit, aspect-corrected), and how much life that point has left, 0..1.
+uniform vec4 uTrail[10];
+uniform float uTrailLife[10];
 uniform vec3 uHi;
 uniform vec3 uGlow;
 in vec2 vUv;
@@ -50,7 +54,7 @@ float isMark(vec2 uv) { vec4 t = textureLod(uTex, uv, 0.0); return t.a > 0.0 ? s
 
 // A ribbon: the shapes swept back along a curved path that bends and slowly folds, sampled
 // from blurred mips so it reads as smoke or silk rather than copies of letters.
-vec2 ribbon(vec2 uv, vec2 dir, float len, float bend, float phase, float rightOnly) {
+vec2 ribbon(vec2 uv, vec2 dir, float len, float bend, float foldAmt, float phase, float rightOnly) {
   float aspect = uRes.x / uRes.y;
   vec2 perp = vec2(-dir.y, dir.x);
   float total = 0.0;
@@ -58,7 +62,7 @@ vec2 ribbon(vec2 uv, vec2 dir, float len, float bend, float phase, float rightOn
   for (int i = 1; i <= 40; i++) {
     float f = float(i) / 40.0;
     float curve = sin(f * 2.4 + phase + uTime * 0.9) * bend;
-    float fold = sin(f * 7.0 + dot(uv, perp) * 9.0 + uTime * 1.6) * 0.05;
+    float fold = sin(f * 7.0 + dot(uv, perp) * 9.0 + uTime * 1.6) * foldAmt;
     vec2 off = (dir * f + perp * (curve + fold) * f) * len;
     off.x /= aspect;
     vec2 src = uv - off;
@@ -85,16 +89,23 @@ void main() {
   float band = exp(-x * x * 70.0) * uWave;
   vec2 disp = (n * sin(d * 40.0 - uTime * 10.0) + vec2(-n.y, n.x) * 0.5 * cos(d * 23.0 + uTime * 6.0)) * band * 0.02;
 
-  // ---- The pointer: energy around it, smoothed so nothing shivers.
-  vec2 pq = (uv - uPtr) * vec2(aspect, 1.0);
-  float local = uPtrAmt * exp(-dot(pq, pq) * 3.0);
+  // ---- The pointer: along the path it actually took. Each point of the path affects only
+  // what is close to it, in the direction the pointer was travelling there, fading as it ages.
+  float local = 0.0;
+  vec2 along = vec2(1.0, 0.0);
+  for (int i = 0; i < 10; i++) {
+    vec2 dq = (uv - uTrail[i].xy) * vec2(aspect, 1.0);
+    float g = uTrailLife[i] * exp(-dot(dq, dq) * 18.0);
+    if (g > local) { local = g; along = uTrail[i].zw; }
+  }
 
   // Glass is wherever the arrival says, or wherever the pointer is.
-  float glass = clamp(uGlass + local * 1.4, 0.0, 1.0);
+  float glass = clamp(uGlass + local * 1.3, 0.0, 1.0);
 
   // Wavy, liquid edges while glass: a slow, smooth wobble — never per-frame noise.
   disp += vec2(sin(uv.y * 26.0 + uTime * 2.2), cos(uv.x * 19.0 - uTime * 1.8)) * 0.0035 * glass;
-  disp += uPtrDir * local * 0.012;
+  // Letters are pulled along with the pointer, the way it is moving.
+  disp -= along * local * 0.014;
   disp.x /= aspect;
   vec2 suv = uv + disp;
 
@@ -114,11 +125,12 @@ void main() {
   if (uRibbon > 0.001) {
     // Short ribbons fade too, or light would bunch up on the letters as they retract.
     float reach = smoothstep(0.0, 0.35, uRibbon);
-    light += ribbon(suv, normalize(vec2(-1.0, -0.72)), 0.95 * uRibbon, 0.32, 0.0, 0.0) * ahead * reach;
-    light += ribbon(suv, normalize(vec2(1.0, 0.55)), 0.45 * uRibbon, -0.25, 1.7, 1.0) * ahead * 0.8 * reach;
+    light += ribbon(suv, normalize(vec2(-1.0, -0.72)), 0.95 * uRibbon, 0.32, 0.05, 0.0, 0.0) * ahead * reach;
+    light += ribbon(suv, normalize(vec2(1.0, 0.55)), 0.45 * uRibbon, -0.25, 0.05, 1.7, 1.0) * ahead * 0.8 * reach;
   }
   if (local > 0.01) {
-    light += ribbon(suv, -uPtrDir, 0.42 * local, 0.22, 0.6, 0.0) * min(1.0, local * 1.6);
+    // Straight along the pointer's own direction — no wander of its own.
+    light += ribbon(suv, along, 0.34 * local, 0.0, 0.0, 0.0, 0.0) * min(1.0, local * 1.8);
   }
 
   // A soft halo, always; the ripple faintly visible in the air.
@@ -189,7 +201,7 @@ export function createWordmark(
   const U = {
     res: u('uRes'), time: u('uTime'), origin: u('uOrigin'), front: u('uFront'), wave: u('uWave'),
     reveal: u('uReveal'), ribbon: u('uRibbon'), glass: u('uGlass'), markVis: u('uMarkVis'),
-    ptr: u('uPtr'), ptrDir: u('uPtrDir'), ptrAmt: u('uPtrAmt'), hi: u('uHi'), glow: u('uGlow'),
+    trail: u('uTrail'), trailLife: u('uTrailLife'), hi: u('uHi'), glow: u('uGlow'),
   }
 
   const texture = gl.createTexture()
@@ -204,7 +216,10 @@ export function createWordmark(
     origin: [0, 0.5], front: -1, wave: 0, reveal: 0, ribbon: 0, glass: 0, markVis: 0,
     // The pointer as reported, and as drawn: the drawn values chase the reported ones each
     // frame, so a jittery mouse still produces one calm gesture.
-    raw: [-1, -1], ptr: [-1, -1], dir: [1, 0], amt: 0, energy: 0,
+    raw: [-1, -1], ptr: [-1, -1],
+    trail: [] as { x: number; y: number; dx: number; dy: number; life: number }[],
+    // Where the path was last sampled — kept apart from the trail, whose points fade away.
+    anchor: null as null | { x: number; y: number },
   }
   let colors = { hi: [1, 1, 1], glow: [0, 1, 0] }
   let raf = 0
@@ -267,9 +282,14 @@ export function createWordmark(
     gl!.uniform1f(U.ribbon, s.ribbon)
     gl!.uniform1f(U.glass, s.glass)
     gl!.uniform1f(U.markVis, s.markVis)
-    gl!.uniform2f(U.ptr, s.ptr[0], s.ptr[1])
-    gl!.uniform2f(U.ptrDir, s.dir[0], s.dir[1])
-    gl!.uniform1f(U.ptrAmt, s.amt)
+    const path = new Float32Array(TRAIL * 4)
+    const life = new Float32Array(TRAIL)
+    s.trail.forEach((t, i) => {
+      path.set([t.x, t.y, t.dx, t.dy], i * 4)
+      life[i] = t.life
+    })
+    gl!.uniform4fv(U.trail, path)
+    gl!.uniform1fv(U.trailLife, life)
     gl!.uniform3fv(U.hi, colors.hi)
     gl!.uniform3fv(U.glow, colors.glow)
     gl!.clearColor(0, 0, 0, 0)
@@ -291,35 +311,35 @@ export function createWordmark(
 
     if (s.raw[0] >= 0) {
       if (s.ptr[0] < 0) s.ptr = [...s.raw]
-      const follow = 1 - Math.exp(-dt * 14)
+      // The drawn pointer chases the reported one: one calm gesture from a jittery mouse.
+      const follow = 1 - Math.exp(-dt * 18)
       const nx = s.ptr[0] + (s.raw[0] - s.ptr[0]) * follow
       const ny = s.ptr[1] + (s.raw[1] - s.ptr[1]) * follow
-      const vx = ((nx - s.ptr[0]) * aspect) / Math.max(dt, 1e-3)
-      const vy = (ny - s.ptr[1]) / Math.max(dt, 1e-3)
       s.ptr = [nx, ny]
-      const speed = Math.hypot(vx, vy)
-      if (speed > 0.05) {
-        // Direction turns gradually, so the ribbon swings rather than snaps.
-        const turn = 1 - Math.exp(-dt * 6)
-        const dx = s.dir[0] + (vx / speed - s.dir[0]) * turn
-        const dy = s.dir[1] + (vy / speed - s.dir[1]) * turn
-        const len = Math.hypot(dx, dy) || 1
-        s.dir = [dx / len, dy / len]
+      // A new point on the path whenever it has moved far enough to have a direction.
+      if (!s.anchor) s.anchor = { x: nx, y: ny }
+      const mx = (nx - s.anchor.x) * aspect
+      const my = ny - s.anchor.y
+      const moved = Math.hypot(mx, my)
+      if (moved > 0.018) {
+        const speed = moved / dt
+        s.trail.unshift({
+          x: nx, y: ny, dx: mx / moved, dy: my / moved,
+          life: Math.min(1, 0.35 + speed * 0.12),
+        })
+        s.trail.length = Math.min(s.trail.length, TRAIL)
+        s.anchor = { x: nx, y: ny }
       }
-      s.energy = Math.min(1, s.energy + speed * dt * 2.2)
     }
-    // Energy drains away; what is drawn eases toward it.
-    s.energy *= Math.exp(-dt * 1.4)
-    s.amt += (s.energy - s.amt) * (1 - Math.exp(-dt * 9))
+    // Each point fades on its own clock, so the oldest part of the path goes first.
+    for (const t of s.trail) t.life *= Math.exp(-dt * 2.6)
+    s.trail = s.trail.filter((t) => t.life > 0.01)
 
     draw(now)
-    if (playing || s.amt > 0.004 || s.energy > 0.004) {
+    if (playing || s.trail.length > 0 || Math.hypot(s.raw[0] - s.ptr[0], s.raw[1] - s.ptr[1]) > 0.001) {
       raf = requestAnimationFrame(loop)
     } else {
       raf = 0
-      s.amt = 0
-      s.energy = 0
-      draw(now)
     }
   }
   const wake = () => {
