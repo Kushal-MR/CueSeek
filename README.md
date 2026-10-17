@@ -297,7 +297,7 @@ prose — the file a designer, a contributor or a design tool should be handed f
 | **M3** | qBittorrent, `web_ui`, activity, host metrics, power actions | ✅ Done — nine phases, each verified on hardware as it landed ([plan](docs/m3-plan.md) · [record](docs/m3-verification.md)). A second adapter reached the phone with **zero client changes**, and the reboot was confirmed by a changed kernel boot id |
 | **M4** | Productization: licence, neutral defaults, the `systemd` adapter, `cueseekd check`, released artefacts, documentation | ✅ Done — [plan](docs/m4-plan.md) · [record](docs/m4-verification.md). Proven by installing on a fresh VM that had never seen CueSeek, which found a defect the development host was structurally incapable of showing |
 | **M5** | Wear OS standalone client, tiles and complications | ✅ Done — [plan](docs/m5-plan.md) · [record](docs/m5-verification.md). Verified for a day on a OnePlus Watch 2R against the real server, and released from `v0.1.2`. The wrist found what the desk could not: a button the round screen clipped, a hold that could be held twice, a complication age no face drew |
-| **M6** | The website — the real one, replacing M4.9's deliberately plain placeholder, with a motion reel built from code | ⬜ — [inputs so far](docs/m6-plan.md) |
+| **M6** | The website — the real one, replacing M4.9's deliberately plain placeholder, with a motion reel built from code | 🔨 In progress — [plan](docs/m6-plan.md) |
 | **M7** | A third adapter, used to measure whether the abstraction held | ⬜ |
 
 The numbering has moved twice. M4 was once the Wear milestone
