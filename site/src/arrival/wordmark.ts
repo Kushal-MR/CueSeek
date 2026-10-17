@@ -107,11 +107,15 @@ void main() {
     vec2 ab = B.xy * vec2(aspect, 1.0) - a;
     float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
     vec2 dq = p - (a + ab * t);
-    float g = mix(la, lb, t) * exp(-dot(dq, dq) * 18.0);
+    float g = mix(la, lb, t) * exp(-dot(dq, dq) * 26.0);
     dirSum += mix(A.zw, B.zw, t) * g;
     local = 1.0 - (1.0 - local) * (1.0 - g);
   }
-  vec2 along = length(dirSum) > 1e-5 ? normalize(dirSum) : vec2(1.0, 0.0);
+  // Not normalised. Where the path doubles back its directions cancel, and this simply
+  // shrinks to nothing; normalising it instead swung it through 180° across a thin line,
+  // which drew needles and creases.
+  float flowLen = length(dirSum);
+  vec2 flow = dirSum / max(1.0, flowLen);
 
   // Glass is wherever the arrival says, or wherever the pointer is.
   float glass = clamp(uGlass + local * 1.3, 0.0, 1.0);
@@ -119,7 +123,7 @@ void main() {
   // Wavy, liquid edges while glass: a slow, smooth wobble — never per-frame noise.
   disp += vec2(sin(uv.y * 26.0 + uTime * 2.2), cos(uv.x * 19.0 - uTime * 1.8)) * 0.0035 * glass;
   // Letters are pulled along with the pointer, the way it is moving.
-  disp -= along * local * 0.014;
+  disp -= flow * 0.014;
   disp.x /= aspect;
   vec2 suv = uv + disp;
 
@@ -143,8 +147,9 @@ void main() {
     light += ribbon(suv, normalize(vec2(1.0, 0.55)), 0.45 * uRibbon, -0.25, 0.05, 1.7, 1.0) * ahead * 0.8 * reach;
   }
   if (local > 0.01) {
-    // Straight along the pointer's own direction — no wander of its own.
-    light += ribbon(suv, along, 0.34 * local, 0.0, 0.0, 0.0, 0.0) * min(1.0, local * 1.8);
+    // Straight along the pointer's own direction — no wander of its own — and only as
+    // long as the directions around this pixel agree.
+    light += ribbon(suv, flow, 0.34, 0.0, 0.0, 0.0, 0.0) * min(1.0, local * 1.8);
   }
 
   // A soft halo, always; the ripple faintly visible in the air.
