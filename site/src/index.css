@@ -23,26 +23,12 @@
   font-display: swap;
 }
 
-/* Night — the app's own dark theme (docs/DESIGN.md §3). The other four knob stops arrive
-   with the knob in M6.3; until then this is the only one. */
+/* The colours themselves come from src/theme/stops.ts — written into the HTML for the
+   first paint, then turned by the knob. Nothing here names one. */
 :root {
-  --bg: #0e1210;
-  --card: #191e18;
-  --card-text: #e2e7de;
-  --text: #e2e7de;
-  --muted: #b4bcb1;
-  --accent: #a8c4a6;
-  --hi: #cde8cf;
-  --line: #333a32;
-  --ok: #a8c4a6;
-  --warn: #e5be84;
-  --bad: #e0a79e;
-  --glow: #5f8f66;
-
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
 
-  color-scheme: dark;
   background: var(--bg);
   color: var(--text);
   font: 400 16px/1.5 var(--sans);
@@ -67,4 +53,12 @@ a {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
   border-radius: 4px;
+}
+
+/* The knob's ripple: the new colours are revealed by a growing circle (Knob.tsx), so the
+   default cross-fade is switched off. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }

@@ -81,8 +81,8 @@ motion set gets a still version of every section, not a broken one.
 | --- | --- | --- | --- |
 | M6.0 | This plan | — | ✅ |
 | M6.1 | Storyboard: every section as stills, the knob's stops — **approval gate** | M6.0 | ✅ |
-| M6.2 | `site/` builds; Vercel preview per PR; CI builds it | M6.1 | ⬜ |
-| M6.3 | The knob and its palettes | M6.2 | ⬜ |
+| M6.2 | `site/` builds; Vercel preview per PR; CI builds it | M6.1 | ✅ |
+| M6.3 | The knob and its palettes | M6.2 | ✅ |
 | M6.4 | Arrival: the fly-in and the wave | M6.3 | ⬜ |
 | M6.5 | Problem and answer, with triggered camera moves | M6.4 | ⬜ |
 | M6.6 | Staging on the HP, and every capture | M6.1 | ⬜ |
