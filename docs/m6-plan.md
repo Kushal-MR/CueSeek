@@ -80,7 +80,7 @@ motion set gets a still version of every section, not a broken one.
 | Phase | Deliverable | Depends on | Status |
 | --- | --- | --- | --- |
 | M6.0 | This plan | — | ✅ |
-| M6.1 | Storyboard: every section as stills, the knob's stops — **approval gate** | M6.0 | ⬜ |
+| M6.1 | Storyboard: every section as stills, the knob's stops — **approval gate** | M6.0 | ✅ |
 | M6.2 | `site/` builds; Vercel preview per PR; CI builds it | M6.1 | ⬜ |
 | M6.3 | The knob and its palettes | M6.2 | ⬜ |
 | M6.4 | Arrival: the fly-in and the wave | M6.3 | ⬜ |
@@ -101,6 +101,10 @@ motion set gets a still version of every section, not a broken one.
 The same rule as the identity and the reel: **show, get an OK, then build.** Every section
 as a still in CueSeek's identity, at desktop and phone widths, plus the knob at each stop.
 Nothing in `site/` is written until this is approved.
+
+**Approved 2026-10-17, at draft 2.** The one change from draft 1: section 01 now ends on the
+real pain — *"You can't keep an app for every one of them — let alone reach them all from
+outside your home"* — and 02 answers it: *"CueSeek answers for you."*
 
 ### M6.14 — Sharing
 

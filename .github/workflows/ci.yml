@@ -232,3 +232,45 @@ jobs:
       # a failure says which surface moved: the shared status language, or a watch layout.
       - name: Verify the watch's golden images
         run: ./gradlew :wear:verifyPaparazziDebug
+
+  # ---------------------------------------------------------------------------------
+  # The website (M6). Built here as well as by Vercel, so a broken site fails the same
+  # check list as a broken agent instead of only a preview deploy nobody opened.
+  # ---------------------------------------------------------------------------------
+  site:
+    name: Website
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - name: Typecheck and build
+        run: npm run build
+
+      # "This page loads nothing but itself" is a promise the placeholder made and M6 keeps.
+      # The browser enforces it through the Content-Security-Policy in vercel.json; this
+      # makes sure nobody loosens that policy without a red check saying so.
+      - name: The page loads nothing but itself
+        run: |
+          csp=$(node -p "require('./vercel.json').headers.find(h => h.source === '/(.*)').headers.find(h => h.key === 'Content-Security-Policy').value")
+          echo "$csp"
+          for directive in "default-src 'self'" "script-src 'self'" "connect-src 'self'" "font-src 'self'"; do
+            echo "$csp" | grep -qF "$directive;" || { echo "::error::CSP lost: $directive"; exit 1; }
+          done
+          if echo "$csp" | grep -qE 'https?:|\*'; then
+            echo "::error::CSP names another origin"; exit 1
+          fi
+          # Nothing in the built HTML or CSS may point off-site.
+          if grep -rnoE "(src|href|url)\(?=?[\"']?https?://" dist --include=*.html --include=*.css; then
+            echo "::error::The build references another origin"; exit 1
+          fi

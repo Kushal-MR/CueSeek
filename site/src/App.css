@@ -1,0 +1,115 @@
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 18px clamp(20px, 4vw, 44px);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  backdrop-filter: blur(8px);
+  font-size: 14px;
+}
+.nav .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--text);
+}
+.nav .brand span {
+  color: var(--accent);
+}
+.nav nav {
+  display: flex;
+  gap: 22px;
+}
+.nav nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.nav nav a:hover {
+  color: var(--text);
+}
+
+.hero {
+  min-height: calc(100svh - 60px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 24px 60px;
+}
+.lockup {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2vw, 22px);
+}
+.hero-mark {
+  color: var(--hi);
+  filter: drop-shadow(0 0 18px var(--glow));
+}
+.hero h1 {
+  margin: 0;
+  font-size: clamp(56px, 9vw, 112px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--hi);
+}
+.tagline {
+  margin: 32px 0 0;
+  font-size: clamp(18px, 2vw, 22px);
+}
+.sub {
+  margin: 10px 0 0;
+  max-width: 520px;
+  color: var(--muted);
+}
+
+.stub {
+  min-height: 60vh;
+  padding: 80px clamp(20px, 4vw, 44px);
+  border-top: 1px dashed var(--line);
+}
+.stub h2 {
+  margin: 16px 0 0;
+  max-width: 14em;
+  font-size: clamp(32px, 5vw, 56px);
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.hud {
+  font: 500 11px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 24px clamp(20px, 4vw, 44px);
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.foot span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .nav nav a:not(:last-child) {
+    display: none;
+  }
+  .lockup {
+    flex-direction: column;
+  }
+}
