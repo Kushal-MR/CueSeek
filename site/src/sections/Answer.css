@@ -1,0 +1,280 @@
+.answer {
+  position: relative;
+  padding: 120px clamp(20px, 4vw, 44px) 120px;
+  min-height: 100vh;
+}
+.answer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(24px, 4vw, 64px);
+  align-items: center;
+  margin-top: 36px;
+}
+.answer-copy h2 {
+  margin: 0;
+  font-size: clamp(38px, 4.6vw, 64px);
+  line-height: 1.04;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.answer-copy p {
+  margin: 22px 0 0;
+  max-width: 30em;
+  color: var(--muted);
+  font-size: clamp(16px, 1.4vw, 19px);
+}
+.answer-copy .term > button {
+  color: var(--text);
+}
+
+/* ---- The phone, and the camera on it ---- */
+
+.stage {
+  position: relative;
+  justify-self: end;
+  margin-right: clamp(0px, 3vw, 40px);
+}
+.shot {
+  position: relative;
+  width: clamp(250px, 25vw, 340px);
+  border-radius: 38px;
+  border: 9px solid #0b0d0b;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 40px 80px -30px rgb(0 0 0 / 0.75);
+  transition:
+    opacity 600ms ease,
+    transform 1100ms cubic-bezier(0.6, 0, 0.2, 1);
+}
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform-origin: 50% calc(var(--fy) * 100%);
+  transform: scale(var(--zoom));
+  transition:
+    transform 950ms cubic-bezier(0.6, 0, 0.2, 1),
+    transform-origin 950ms cubic-bezier(0.6, 0, 0.2, 1);
+}
+/* Before the section is reached, the phone waits — close on its service rows, the place
+   section 01's single row lands. */
+.shot[data-entry] {
+  opacity: 0;
+  transform: translateY(40px) scale(0.92);
+}
+
+/* ---- The labels ---- */
+
+.callouts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.callouts li {
+  position: absolute;
+  right: calc(100% + 14px);
+  top: calc(var(--y) * 100%);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  width: 210px;
+  pointer-events: auto;
+}
+.callouts button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 500 11px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: default;
+}
+.callouts button::after {
+  content: '';
+  width: 56px;
+  height: 1px;
+  background: var(--accent);
+  transform-origin: right;
+  transition: width 300ms;
+}
+.callouts .says {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: right;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    opacity 300ms,
+    transform 300ms;
+}
+.callouts li[data-on] .says {
+  opacity: 1;
+  transform: none;
+}
+.callouts li[data-on] button::after {
+  width: 76px;
+  box-shadow: 0 0 6px var(--glow);
+}
+
+.answer:not([data-in]) .callouts li {
+  opacity: 0;
+}
+.answer[data-in] .callouts li {
+  animation: label-in 500ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation-delay: calc(1300ms + var(--i) * 1000ms);
+}
+.answer[data-in] .callouts button::after {
+  animation: line-draw 500ms cubic-bezier(0.65, 0, 0.35, 1) both;
+  animation-delay: calc(1300ms + var(--i) * 1000ms);
+}
+@keyframes label-in {
+  from {
+    opacity: 0;
+    transform: translate(10px, -50%);
+  }
+}
+@keyframes line-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* ---- Copy ---- */
+
+.answer:not([data-in]) .answer-copy > * {
+  opacity: 0;
+}
+.answer[data-in] .answer-copy > * {
+  animation: rise 700ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.answer[data-in] .answer-copy > :nth-child(2) {
+  animation-delay: 150ms;
+}
+.answer[data-in] .answer-copy > :nth-child(3) {
+  animation-delay: 300ms;
+}
+
+/* ---- The flow: server, network, devices ---- */
+
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 70px;
+  font: 500 11.5px var(--mono);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.flow .node {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+.flow .flow-wire {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 140px;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 3px, transparent 3px 7px);
+}
+.flow .flow-wire .flow-label {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.flow .flow-packet {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--glow);
+  opacity: 0;
+}
+.answer[data-in] .flow .flow-packet {
+  animation: packet 1600ms cubic-bezier(0.6, 0, 0.4, 1) 900ms 2 both;
+}
+@keyframes packet {
+  0% {
+    left: 0;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .answer-grid {
+    grid-template-columns: 1fr;
+  }
+  .stage {
+    justify-self: center;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .callouts {
+    position: static;
+    display: grid;
+    gap: 10px;
+    width: min(340px, 100%);
+  }
+  .callouts li {
+    position: static;
+    transform: none;
+    width: auto;
+    align-items: flex-start;
+  }
+  .callouts button {
+    flex-direction: row-reverse;
+  }
+  .callouts .says {
+    opacity: 1;
+    transform: none;
+    text-align: left;
+  }
+  .answer[data-in] .callouts li {
+    animation-name: rise;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answer *,
+  .answer .shot[data-entry] {
+    animation: none !important;
+    transition: none !important;
+  }
+  .answer .shot[data-entry],
+  .answer:not([data-in]) .answer-copy > *,
+  .answer:not([data-in]) .callouts li {
+    opacity: 1;
+    transform: none;
+  }
+}

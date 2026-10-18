@@ -84,7 +84,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.2 | `site/` builds; Vercel preview per PR; CI builds it | M6.1 | ✅ |
 | M6.3 | The knob and its palettes | M6.2 | ✅ |
 | M6.4 | Arrival: the fly-in and the wave | M6.3 | ✅ |
-| M6.5 | Problem and answer, with triggered camera moves | M6.4 | ⬜ |
+| M6.5 | Problem and answer, with triggered camera moves | M6.4 | ✅ |
 | M6.6 | Staging on the HP, and every capture | M6.1 | ⬜ |
 | M6.7 | What it works with | M6.5, M6.6 | ⬜ |
 | M6.8 | The watch on its strap | M6.5 | ⬜ |
@@ -105,6 +105,13 @@ Nothing in `site/` is written until this is approved.
 **Approved 2026-10-17, at draft 2.** The one change from draft 1: section 01 now ends on the
 real pain — *"You can't keep an app for every one of them — let alone reach them all from
 outside your home"* — and 02 answers it: *"CueSeek answers for you."*
+
+### M6.5 — Problem and answer
+
+One change to the approved copy: the storyboard said restarting was "one tap". Restart is
+classed `disruptive`, so the app asks for confirmation first — two taps. The site says "a
+couple of taps" rather than promise a gesture the app does not offer. The dashboard picture
+is the README's for now; the real capture replaces it in M6.6.
 
 ### M6.14 — Sharing
 

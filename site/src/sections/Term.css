@@ -1,0 +1,41 @@
+.term {
+  position: relative;
+  display: inline;
+}
+.term > button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: help;
+  border-bottom: 1.5px dashed color-mix(in srgb, currentColor 55%, transparent);
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+.term-tip {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: calc(100% + 10px);
+  width: min(300px, 80vw);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--card-text);
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 30px -14px rgb(0 0 0 / 0.6);
+  font: 400 13.5px/1.45 var(--sans);
+  letter-spacing: 0;
+  text-align: left;
+  animation: tip-in 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+.term-tip b {
+  font-weight: 500;
+}
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
