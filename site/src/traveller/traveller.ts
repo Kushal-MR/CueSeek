@@ -251,7 +251,9 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     // Only within the section it is in, and not while it is crossing between sections.
     if (at === null || (flight && !flight.within)) return
     if (!m.el.closest('section')?.querySelector(`[data-station="${at}"]`)) return
-    rest = { el: m.el, track: !!m.track }
+    // Always follow what it sits on until that has stopped moving: a row still growing into
+    // place, a screenshot mid-zoom. Measuring once left it beside its target.
+    rest = { el: m.el, track: m.track ?? true }
     fly(() => pagePoint(m.el), { station: at, within: true, dur: m.dur, scale: m.scale, pulse: m.pulse })
   }
 

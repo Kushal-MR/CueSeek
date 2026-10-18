@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Term } from './Term.tsx'
 import { words } from './inView.ts'
 import { useCue } from '../traveller/useCue.ts'
-import { LAND_EVENT, dotTo } from '../traveller/traveller.ts'
+import { LAND_EVENT, dotTo, travellerActive } from '../traveller/traveller.ts'
 import './Problem.css'
 
 /**
@@ -37,42 +37,65 @@ export function Problem() {
   const chips = useRef<HTMLDivElement>(null)
   const toured = useRef(false)
 
-  // The dot's job here: it plays someone checking their server — tapping one service, then
-  // the next, faster and faster — "opening every one of them". When the pile collapses into
-  // a single row, it becomes that row's status dot: one answer.
+  // The dot's job here: it plays someone checking their server. It falls onto the first
+  // service and each one opens as the dot taps it, top to bottom, a little quicker each time
+  // — "opening every one of them". When the pile collapses into a single row, it becomes
+  // that row's status dot: one answer.
   useEffect(() => {
     const all = () => [...(chips.current?.querySelectorAll<HTMLElement>('.chip') ?? [])]
     const row = () => chips.current?.querySelector('.one-row .ok') ?? null
     const timers: number[] = []
     const later = (ms: number, f: () => void) => timers.push(window.setTimeout(f, ms))
+    const open = (chip: HTMLElement) => chip.classList.add('opened')
+    const openAll = () => all().forEach(open)
+    const isCollapsed = () => !!chips.current?.closest('.problem')?.hasAttribute('data-collapsed')
 
-    // A chip flinches as it is tapped.
+    // The tour is a chain: the next hop starts only when the dot has really arrived, so
+    // slow frames can never make it skip a service or run ahead of itself.
+    let next = -1
+    const lockOf = (chip: Element) => chip.querySelector('.lock')
+    const hop = () => {
+      const list = all()
+      if (next < 0 || next >= list.length) return
+      dotTo(lockOf(list[next]), { dur: Math.max(200, 340 - next * 20), scale: 0.62 })
+    }
+
+    // A chip opens as the dot lands on its lock — and flinches if it is tapped again.
     const onArrive = (e: Event) => {
-      const el = (e as CustomEvent<Element>).detail
-      if (!(el instanceof HTMLElement) || !el.classList.contains('chip')) return
-      el.classList.remove('tapped')
-      void el.offsetWidth
-      el.classList.add('tapped')
+      const lock = (e as CustomEvent<Element>).detail
+      const chip = lock instanceof Element ? lock.closest('.chip') : null
+      if (!(chip instanceof HTMLElement)) return
+      if (!chip.classList.contains('opened')) open(chip)
+      else {
+        chip.classList.remove('tapped')
+        void chip.offsetWidth
+        chip.classList.add('tapped')
+      }
+      const list = all()
+      if (next >= 0 && chip === list[next]) {
+        next += 1
+        if (next < list.length) later(110, hop)
+        else next = -1 // done: it rests on the last one
+      }
     }
 
     const settle = () => {
       const list = all()
-      dotTo(chips.current?.closest('.problem')?.hasAttribute('data-collapsed') ? row() : list[list.length - 1], {
-        scale: chips.current?.closest('.problem')?.hasAttribute('data-collapsed') ? 0.36 : 1,
-      })
+      dotTo(isCollapsed() ? row() : lockOf(list[list.length - 1]), { scale: isCollapsed() ? 0.36 : 0.62 })
     }
 
     const onLand = (e: Event) => {
       if ((e as CustomEvent<string>).detail !== 'problem') return
-      if (toured.current) return later(150, settle)
+      if (toured.current) {
+        openAll() // a tour cut short by scrolling away leaves nothing unopened
+        next = -1
+        return later(150, settle)
+      }
       toured.current = true
-      // After the chips have flown in, tour them, each hop a little quicker than the last.
-      let t = 2500
-      all().forEach((chip, i) => {
-        const dur = Math.max(170, 330 - i * 24)
-        later(t, () => dotTo(chip, { dur }))
-        t += dur + 70
-      })
+      // It has landed on the first service's lock: that one opens, then down the list.
+      open(all()[0])
+      next = 1
+      later(260, hop)
     }
 
     addEventListener(LAND_EVENT, onLand)
@@ -84,13 +107,29 @@ export function Problem() {
     }
   }, [])
 
+  // Without the dot — reduced motion, or a cue that came late — the services open on their own.
+  useEffect(() => {
+    if (!seen) return
+    // With the dot running, its tour opens them; this only catches a tour that never began
+    // (the reader scrolled straight past).
+    const t = setTimeout(
+      () => {
+        if (travellerActive && toured.current) return
+        chips.current?.querySelectorAll('.chip').forEach((c) => c.classList.add('opened'))
+      },
+      travellerActive ? 6000 : 0,
+    )
+    return () => clearTimeout(t)
+  }, [seen])
+
   // Collapsing gathers the pile into one row; the dot follows and becomes its status dot.
   useEffect(() => {
     if (!toured.current) return
     const t = setTimeout(() => {
       const list = chips.current?.querySelectorAll('.chip')
-      dotTo(collapsed ? (chips.current?.querySelector('.one-row .ok') ?? null) : (list?.[list.length - 1] ?? null), {
-        scale: collapsed ? 0.36 : 1,
+      const lastLock = list?.[list.length - 1]?.querySelector('.lock') ?? null
+      dotTo(collapsed ? (chips.current?.querySelector('.one-row .ok') ?? null) : lastLock, {
+        scale: collapsed ? 0.36 : 0.62,
         dur: 520,
       })
     }, collapsed ? 420 : 200)
@@ -158,11 +197,12 @@ export function Problem() {
           </p>
         </div>
 
-        <div ref={chips} className="chips" aria-hidden="true" data-station="problem" data-land="center">
+        <div ref={chips} className="chips" aria-hidden="true">
           {CHIPS.map((c, i) => (
             <span
               key={c.name}
               className="chip"
+              // The dot falls onto the first service: it is this section's station.
               style={
                 {
                   '--x': `${c.x}%`,
@@ -172,7 +212,8 @@ export function Problem() {
                 } as React.CSSProperties
               }
             >
-              <i className="lock" />
+              {/* The dot lands on the lock to open the service; the first is the station. */}
+              <i className="lock" data-station={i === 0 ? 'problem' : undefined} />
               <b>{c.name}</b>
               {c.port && <small>{c.port}</small>}
             </span>
