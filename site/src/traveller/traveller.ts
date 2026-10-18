@@ -21,6 +21,13 @@ const MOVE_EVENT = 'cueseek:dot'
 /** Whether a traveller is running — sections fall back to their own trigger if not. */
 export let travellerActive = false
 
+/**
+ * Which way the dot was going when it last landed on a station: `down` from a station above
+ * (or from the logo), `up` from one below. A section reads it on landing to take its own
+ * content in the reader's direction.
+ */
+export let arrivedGoing: 'down' | 'up' = 'down'
+
 export interface DotMove {
   /** How long the hop takes, ms. Short hops between neighbours want ~250. */
   dur?: number
@@ -141,11 +148,26 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
   function launch(to: string | null) {
     rest = null
     const target = to === null ? null : current()
-    fly(() => (to === null ? (homePoint() ?? pos) : pagePoint(target!.el, target!.el.dataset.land)), {
+    // Coming up from below, a station may name a different element to land on — the end of
+    // its content nearest the dot (`data-entry-up`, a selector within its section).
+    going = order(to) < order(at) ? 'up' : 'down'
+    let el: Element | null = target?.el ?? null
+    if (target && going === 'up' && target.el.dataset.entryUp) {
+      el = target.el.closest('section')?.querySelector(target.el.dataset.entryUp) ?? el
+    }
+    fly(() => (to === null || !el ? (homePoint() ?? pos) : pagePoint(el, el === target?.el ? target.el.dataset.land : undefined)), {
       station: to,
       within: false,
     })
   }
+
+  /** A station's place down the page: home is 0, then stations in document order. */
+  function order(id: string | null): number {
+    if (id === null) return 0
+    const all = [...document.querySelectorAll<HTMLElement>('[data-station]')].map((e) => e.dataset.station)
+    return all.indexOf(id) + 1
+  }
+  let going: 'down' | 'up' = 'down'
 
   function landed(f: Flight) {
     flight = null
@@ -166,6 +188,7 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     } else if (f.station === null) {
       setAway(false) // home: hand back to the logo's own handle, with its own spring and hop
     } else {
+      arrivedGoing = going
       dispatchEvent(new CustomEvent(LAND_EVENT, { detail: f.station }))
     }
   }
