@@ -1,6 +1,8 @@
 .problem {
   position: relative;
-  padding: 120px clamp(20px, 4vw, 44px) 160px;
+  /* Room below the pile: the stretch of scrolling where it has collapsed into one row and
+     the dot is that row's status light, before the next section calls the dot away. */
+  padding: 120px clamp(20px, 4vw, 44px) 40vh;
   min-height: 100vh;
 }
 .problem-grid {
@@ -78,20 +80,21 @@
     transform 700ms cubic-bezier(0.6, 0, 0.2, 1) calc(var(--i) * 35ms),
     opacity 400ms ease calc(300ms + var(--i) * 35ms);
 }
-/* They arrive one at a time, each with a small bounce, like tabs being opened. */
-.problem[data-in] .chip {
-  /* backwards, not both: once in, the chip must be free to transition into the collapse. */
-  animation: chip-in 650ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
-  animation-delay: calc(500ms + var(--i) * 170ms);
+/* Each service appears when it is opened — tapped by the travelling dot, in order, or all
+   at once without it (Problem.tsx). Hidden with visibility, not opacity, so opening is
+   instant and the collapse's opacity transition is left alone. */
+.chip:not(.opened) {
+  visibility: hidden;
 }
-@keyframes chip-in {
+.chip.opened {
+  /* backwards, not both: once open, the chip must be free to transition into the collapse. */
+  animation: chip-open 420ms cubic-bezier(0.3, 1.6, 0.5, 1) backwards;
+}
+@keyframes chip-open {
   from {
     opacity: 0;
-    transform: translate(60px, 30px) rotate(calc(var(--r) * 4)) scale(0.85);
+    transform: rotate(var(--r)) translateY(8px) scale(0.6);
   }
-}
-.problem:not([data-in]) .chip {
-  opacity: 0;
 }
 
 /* ---- The collapse: every chip folds into one row — the dashboard's, next section. ---- */
@@ -122,13 +125,6 @@
   opacity: 1;
   transform: translate(-50%, 0) scale(1);
   transition-delay: 450ms;
-}
-.problem-end {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 30vh;
-  height: 1px;
 }
 
 /* ---- Kinetic type: the headline arrives word by word. ---- */
@@ -180,6 +176,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .problem .chip {
+    visibility: visible;
+  }
   .problem .chip,
   .problem .one-row,
   .problem .kinetic .w,
@@ -197,5 +196,24 @@
   }
   .problem .one-row {
     display: none;
+  }
+}
+
+/* Tapped by the travelling dot: the chip flinches and its lock lights, as if opened. */
+.problem .chip.opened.tapped {
+  animation: tapped 420ms cubic-bezier(0.3, 0, 0.2, 1);
+  animation-delay: 0s;
+}
+.chip.tapped .lock {
+  border-color: var(--accent);
+  opacity: 1;
+}
+@keyframes tapped {
+  30% {
+    transform: rotate(var(--r)) translateY(3px) scale(0.96);
+    border-color: var(--accent);
+  }
+  60% {
+    transform: rotate(var(--r)) translateY(-2px) scale(1.04);
   }
 }

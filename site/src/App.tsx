@@ -3,6 +3,7 @@ import { Knob } from './theme/Knob.tsx'
 import { Arrival } from './arrival/Arrival.tsx'
 import { Problem } from './sections/Problem.tsx'
 import { Answer } from './sections/Answer.tsx'
+import { Traveller } from './traveller/Traveller.tsx'
 import './App.css'
 
 const REPO = 'https://github.com/Kushal-MR/CueSeek'
@@ -52,6 +53,7 @@ export default function App() {
           </section>
         ))}
       </main>
+      <Traveller />
 
       <footer className="foot">
         <span>
