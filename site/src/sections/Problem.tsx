@@ -15,7 +15,7 @@ const CHIPS = [
   { name: 'Immich', port: ':2283', x: 2, y: 46, r: -4 },
   { name: 'Vaultwarden', port: ':8000', x: 36, y: 56, r: 1 },
   { name: 'Syncthing', port: ':8384', x: 10, y: 68, r: -2 },
-  { name: '…and the machine itself', port: '', x: 44, y: 78, r: 3 },
+  { name: '…and the server they all run on', port: '', x: 40, y: 78, r: 3 },
 ] as const
 
 const HEADLINE = 'Your home server runs a dozen things.'
@@ -83,8 +83,8 @@ export function Problem() {
             </span>
           </h2>
           <p className="problem-body">
-            Each one has its own page, its own login, and its own idea of what "fine" means.
-            Finding out if they all are means opening every one of them.
+            Each one has its own page, its own login, and its own way of saying something's
+            wrong. Checking on all of them means opening every one.
           </p>
           <p className="problem-turn">
             You can't keep an app for every one of them — let alone reach them all from

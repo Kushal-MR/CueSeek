@@ -41,7 +41,6 @@ export default defineConfig({
     // none of them is a hand-made copy.
     alias: {
       '@brand': repo('docs/brand'),
-      '@images': repo('docs/images'),
       '@fonts': repo('clients/android/core/design/src/main/res/font'),
     },
   },

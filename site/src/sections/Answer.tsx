@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import dashboard from '@images/dashboard.png'
+// The README's dashboard with the host renamed to HomeServer — a public page should not
+// carry a real machine's name. A stand-in until M6.6's fresh captures replace it.
+import dashboard from '../assets/dashboard.png'
 import { Term } from './Term.tsx'
 import { useInView } from './inView.ts'
 import './Answer.css'
@@ -7,7 +9,7 @@ import './Answer.css'
 /** Where each part sits on the screenshot, as a fraction of its height. */
 const PARTS = [
   { id: 'verdict', label: 'The verdict', y: 0.22, says: 'One word for everything: Operational, or what needs you.' },
-  { id: 'machine', label: 'The machine', y: 0.5, says: 'The server itself — processor, memory, disk, temperature.' },
+  { id: 'server', label: 'The server', y: 0.5, says: 'The computer itself — processor, memory, disk, temperature.' },
   { id: 'services', label: 'Each service', y: 0.81, says: 'Every service, its own state, and a menu to act on it.' },
 ] as const
 type Part = (typeof PARTS)[number]['id']
@@ -32,7 +34,7 @@ export function Answer() {
     const steps: [number, Part | null][] = [
       [300, null], // pull back to the whole phone
       [1500, 'verdict'],
-      [2500, 'machine'],
+      [2500, 'server'],
       [3500, 'services'],
       [4500, null],
     ]
@@ -59,7 +61,7 @@ export function Answer() {
             <Term means="a small program on your server that does the asking. It never runs as root.">
               agent
             </Term>{' '}
-            on your server checks every service and the machine itself, and your phone gets
+            on your server checks every service — and the server itself — and your phone gets
             one answer.
           </p>
           <p>
