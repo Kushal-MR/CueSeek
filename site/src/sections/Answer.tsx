@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 // carry a real machine's name. A stand-in until M6.6's fresh captures replace it.
 import dashboard from '../assets/dashboard.png'
 import { Term } from './Term.tsx'
-import { useInView } from './inView.ts'
+import { useCue } from '../traveller/useCue.ts'
 import './Answer.css'
 
 /** Where each part sits on the screenshot, as a fraction of its height. */
@@ -23,7 +23,8 @@ type Part = (typeof PARTS)[number]['id']
  * started by a trigger and runs at its own pace; none is tied to the scroll position.
  */
 export function Answer() {
-  const [ref, seen] = useInView<HTMLElement>(0.35)
+  // Starts when the travelling dot lands on the phone (M6.5b).
+  const [ref, seen] = useCue<HTMLElement>('answer', 0.35)
   // With reduced motion there is no tour: the whole phone, still, from the start.
   const [still] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [focus, setFocus] = useState<Part | null>(still ? null : 'services')
@@ -74,7 +75,7 @@ export function Answer() {
           </p>
         </div>
 
-        <div className="stage">
+        <div className="stage" data-station="answer" data-land="top">
           <div
             className="shot"
             style={

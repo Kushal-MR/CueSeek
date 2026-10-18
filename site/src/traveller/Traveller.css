@@ -1,0 +1,30 @@
+/* Placed in the page, not the viewport: once it lands it scrolls with its section. */
+.traveller {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  will-change: transform;
+  -webkit-tap-highlight-color: transparent;
+}
+.traveller[data-shown] {
+  opacity: 1;
+  pointer-events: auto;
+}
+.traveller-body {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--hi);
+  box-shadow: 0 0 16px var(--glow);
+}
+
+/* While the dot is out travelling, the logo's gap is empty. */
+.hero-mark[data-dot-away] .handle-follow {
+  opacity: 0;
+}

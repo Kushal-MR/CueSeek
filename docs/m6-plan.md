@@ -85,6 +85,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.3 | The knob and its palettes | M6.2 | ✅ |
 | M6.4 | Arrival: the fly-in and the wave | M6.3 | ✅ |
 | M6.5 | Problem and answer, with triggered camera moves | M6.4 | ✅ |
+| M6.5b | The dot travels: it leaves the logo, hops to each section and cues it, and comes home | M6.5 | ✅ |
 | M6.6 | Staging on the HP, and every capture | M6.1 | ⬜ |
 | M6.7 | What it works with | M6.5, M6.6 | ⬜ |
 | M6.8 | The watch on its strap | M6.5 | ⬜ |
@@ -112,6 +113,14 @@ One change to the approved copy: the storyboard said restarting was "one tap". R
 classed `disruptive`, so the app asks for confirmation first — two taps. The site says "a
 couple of taps" rather than promise a gesture the app does not offer. The dashboard picture
 is the README's for now; the real capture replaces it in M6.6.
+
+### M6.5b — The travelling dot
+
+Kushal's idea, after seeing 01 and 02: the Swell's dot leaves the logo and follows the reader
+down the page. Each section marks a station with `data-station`; the dot hops there along an
+arc and its landing is the section's cue (`useCue`). Never the only cue — without the dot
+(reduced motion) a section starts when in view, and with it, a late dot is not waited for.
+Scrolling back up brings it home into the logo's gap. Every later section adds a station.
 
 ### M6.14 — Sharing
 

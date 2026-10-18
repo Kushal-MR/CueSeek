@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Term } from './Term.tsx'
-import { useInView, words } from './inView.ts'
+import { words } from './inView.ts'
+import { useCue } from '../traveller/useCue.ts'
 import './Problem.css'
 
 /**
@@ -29,7 +30,8 @@ const HEADLINE = 'Your home server runs a dozen things.'
  * dashboard. That collapse is the transition between the two.
  */
 export function Problem() {
-  const [ref, seen] = useInView<HTMLElement>(0.3)
+  // Starts when the travelling dot lands on the pile (M6.5b).
+  const [ref, seen] = useCue<HTMLElement>('problem', 0.3)
   const end = useRef<HTMLDivElement>(null)
   const [collapsed, setCollapsed] = useState(false)
 
@@ -92,7 +94,7 @@ export function Problem() {
           </p>
         </div>
 
-        <div className="chips" aria-hidden="true">
+        <div className="chips" aria-hidden="true" data-station="problem" data-land="center">
           {CHIPS.map((c, i) => (
             <span
               key={c.name}
