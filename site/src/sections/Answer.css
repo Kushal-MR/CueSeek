@@ -51,6 +51,16 @@
   display: block;
   width: 100%;
   height: auto;
+}
+.shot .live-spot {
+  position: absolute;
+  left: 85.14%;
+  top: 36.16%;
+  width: 0;
+  height: 0;
+}
+.shot .screen {
+  position: relative;
   transform-origin: 50% calc(var(--fy) * 100%);
   transform: scale(var(--zoom));
   transition:

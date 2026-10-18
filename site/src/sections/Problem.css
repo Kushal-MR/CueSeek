@@ -1,6 +1,8 @@
 .problem {
   position: relative;
-  padding: 120px clamp(20px, 4vw, 44px) 160px;
+  /* Room below the pile: the stretch of scrolling where it has collapsed into one row and
+     the dot is that row's status light, before the next section calls the dot away. */
+  padding: 120px clamp(20px, 4vw, 44px) 40vh;
   min-height: 100vh;
 }
 .problem-grid {
@@ -123,13 +125,6 @@
   transform: translate(-50%, 0) scale(1);
   transition-delay: 450ms;
 }
-.problem-end {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 30vh;
-  height: 1px;
-}
 
 /* ---- Kinetic type: the headline arrives word by word. ---- */
 
@@ -197,5 +192,24 @@
   }
   .problem .one-row {
     display: none;
+  }
+}
+
+/* Tapped by the travelling dot: the chip flinches and its lock lights, as if opened. */
+.problem[data-in] .chip.tapped {
+  animation: tapped 420ms cubic-bezier(0.3, 0, 0.2, 1);
+  animation-delay: 0s;
+}
+.chip.tapped .lock {
+  border-color: var(--accent);
+  opacity: 1;
+}
+@keyframes tapped {
+  30% {
+    transform: rotate(var(--r)) translateY(3px) scale(0.96);
+    border-color: var(--accent);
+  }
+  60% {
+    transform: rotate(var(--r)) translateY(-2px) scale(1.04);
   }
 }

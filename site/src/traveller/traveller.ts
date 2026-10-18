@@ -3,22 +3,39 @@
  *
  * The Swell's handle leaves the logo and follows the reader down the page. Scroll into a
  * section and it hops there along an arc, stretched by its speed; it lands with a squash on
- * that section's station, and the landing is the cue — the section's motion starts on
- * impact. Scroll back up and it hops back, station by station, into the logo's gap.
+ * that section's station, and the landing is the cue — the section's motion starts on impact.
+ * Scroll back up and it hops back, station by station, into the logo's gap.
  *
- * Stations are any element marked `data-station="<id>"` (with `data-land="center"` or
- * `"top"`); home is the logo's handle. A section that wants to be cued listens for the
- * `cueseek:land` event (see useCue). New sections join by adding the attribute — nothing
- * here needs to know them.
+ * **Wherever it goes, it has a job.** A section moves it around its own content with
+ * `dotTo()` — tapping each service in turn, becoming a status dot, becoming the dashboard's
+ * live indicator — and when it stops, it is a dot that means something there. It never just
+ * sits in empty space.
  *
- * Resting anywhere, it behaves as it does in the logo: it leans toward the pointer on a
- * spring and jumps when poked.
+ * Stations are elements marked `data-station="<id>"` (`data-land="center"` or `"top"`);
+ * home is the logo's handle. Sections listen for `cueseek:land` (see useCue).
  */
 
 export const LAND_EVENT = 'cueseek:land'
+const MOVE_EVENT = 'cueseek:dot'
 
 /** Whether a traveller is running — sections fall back to their own trigger if not. */
 export let travellerActive = false
+
+export interface DotMove {
+  /** How long the hop takes, ms. Short hops between neighbours want ~250. */
+  dur?: number
+  /** Size relative to the logo's dot, to become a small indicator. */
+  scale?: number
+  /** Pulse like the app's freshness beat. */
+  pulse?: boolean
+  /** Keep following the target while it moves (a zooming screenshot). */
+  track?: boolean
+}
+
+/** Send the dot to an element within the current section, where it will rest. */
+export function dotTo(el: Element | null, move: DotMove = {}) {
+  if (el) dispatchEvent(new CustomEvent(MOVE_EVENT, { detail: { el, ...move } }))
+}
 
 const DOT = 28 // px — the handle's diameter at hero size (r 7.5 of the 60-unit mark × 112/60)
 
@@ -28,26 +45,41 @@ interface Point {
 }
 
 /** A page position (not a viewport one), so a landed dot scrolls with its section. */
-function pagePoint(el: Element, land: string | undefined): Point {
+function pagePoint(el: Element, land?: string): Point {
   const r = el.getBoundingClientRect()
   const x = r.left + r.width / 2 + scrollX
   if (land === 'top') return { x, y: r.top + scrollY - DOT / 2 + 2 }
-  return { x, y: r.top + r.height * 0.42 + scrollY }
+  if (land === 'center') return { x, y: r.top + r.height * 0.42 + scrollY }
+  return { x, y: r.top + r.height / 2 + scrollY }
+}
+
+interface Flight {
+  from: Point
+  to: () => Point
+  t0: number
+  dur: number
+  lift: number
+  /** The station this flight ends at; for a hop within a section, the same station. */
+  station: string | null
+  /** A hop within a section, to rest on an element there. */
+  within: boolean
+  fromScale: number
+  toScale: number
+  pulse: boolean
 }
 
 export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void {
   travellerActive = true
+  document.documentElement.dataset.traveller = ''
   const home = () => document.querySelector<SVGGElement>('.hero-mark .handle-follow')
   const heroMark = () => document.querySelector<SVGSVGElement>('.hero-mark')
 
   /** The station the reader is at: the last one whose section has come well into view. */
-  function current(): { id: string; el: Element; land?: string } | null {
-    let found: { id: string; el: Element; land?: string } | null = null
+  function current(): { id: string; el: HTMLElement } | null {
+    let found: { id: string; el: HTMLElement } | null = null
     for (const el of document.querySelectorAll<HTMLElement>('[data-station]')) {
       const section = el.closest('section') ?? el
-      if (section.getBoundingClientRect().top < innerHeight * 0.55) {
-        found = { id: el.dataset.station!, el, land: el.dataset.land }
-      }
+      if (section.getBoundingClientRect().top < innerHeight * 0.55) found = { id: el.dataset.station!, el }
     }
     return found
   }
@@ -55,14 +87,21 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
   const pos: Point = { x: 0, y: 0 }
   const spring = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 }
   let at: string | null = null // station id; null = home in the logo
-  let flight: null | { from: Point; to: () => Point; c: Point; t0: number; dur: number; id: string | null } = null
+  let rest: { el: Element; track: boolean } | null = null // what it rests on, if not its station
+  let scale = 1
+  let flight: Flight | null = null
   let raf = 0
+  let still = 0
 
   function homePoint(): Point | null {
     const h = home()
-    if (!h) return null
-    const r = h.getBoundingClientRect()
-    return { x: r.left + r.width / 2 + scrollX, y: r.top + r.height / 2 + scrollY }
+    return h ? pagePoint(h) : null
+  }
+  function restPoint(): Point | null {
+    if (rest) return pagePoint(rest.el)
+    if (at === null) return homePoint()
+    const st = document.querySelector<HTMLElement>(`[data-station="${at}"]`)
+    return st ? pagePoint(st, st.dataset.land) : null
   }
 
   function setAway(away: boolean) {
@@ -70,28 +109,48 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     dot.toggleAttribute('data-shown', away)
   }
 
-  function launch(to: string | null) {
-    const target = to === null ? null : current()
-    const from = flight ? { ...pos } : at === null ? homePoint() : { ...pos }
+  function fly(
+    to: () => Point,
+    o: { station: string | null; within: boolean; dur?: number; scale?: number; pulse?: boolean },
+  ) {
+    const from = flight || at !== null ? { ...pos } : homePoint()
     if (!from) return
-    const dest = () =>
-      to === null ? (homePoint() ?? from) : pagePoint(target!.el, target!.land)
-    const end = dest()
+    const end = to()
     const dist = Math.hypot(end.x - from.x, end.y - from.y)
-    // A hop: the arc rises above both ends, more for a longer jump.
-    const lift = Math.min(260, 60 + dist * 0.28)
-    const c = { x: (from.x + end.x) / 2, y: Math.min(from.y, end.y) - lift }
-    flight = { from, to: dest, c, t0: performance.now(), dur: Math.min(1100, 420 + dist * 0.45), id: to }
+    flight = {
+      from,
+      to,
+      t0: performance.now(),
+      dur: o.dur ?? Math.min(1100, 420 + dist * 0.45),
+      // A hop: the arc rises above both ends — more for a long jump, a little for a short one.
+      lift: o.within ? Math.min(90, 18 + dist * 0.3) : Math.min(260, 60 + dist * 0.28),
+      station: o.station,
+      within: o.within,
+      fromScale: scale,
+      toScale: o.scale ?? 1,
+      pulse: !!o.pulse,
+    }
     pos.x = from.x
     pos.y = from.y
+    body.classList.remove('pulse')
     setAway(true)
     wake()
   }
 
-  function land(id: string | null) {
+  /** To another station (or home). Whatever it was resting on there is left behind. */
+  function launch(to: string | null) {
+    rest = null
+    const target = to === null ? null : current()
+    fly(() => (to === null ? (homePoint() ?? pos) : pagePoint(target!.el, target!.el.dataset.land)), {
+      station: to,
+      within: false,
+    })
+  }
+
+  function landed(f: Flight) {
     flight = null
-    at = id
-    // The squash of a landing, on the inner body so it composes with the travel transform.
+    at = f.station
+    scale = f.toScale
     body.animate(
       [
         { transform: 'scale(1.35, 0.7)' },
@@ -99,48 +158,56 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
         { transform: 'scale(1.05, 0.96)', offset: 0.75 },
         { transform: 'scale(1, 1)' },
       ],
-      { duration: 420, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' },
+      { duration: f.within ? 300 : 420, easing: 'cubic-bezier(0.3, 0, 0.2, 1)' },
     )
-    if (id === null) {
-      // Home: hand back to the logo's own handle, which has its own spring and hop.
-      setAway(false)
+    if (f.within) {
+      if (f.pulse) body.classList.add('pulse')
+      dispatchEvent(new CustomEvent('cueseek:dot-arrived', { detail: rest?.el }))
+    } else if (f.station === null) {
+      setAway(false) // home: hand back to the logo's own handle, with its own spring and hop
     } else {
-      dispatchEvent(new CustomEvent(LAND_EVENT, { detail: id }))
+      dispatchEvent(new CustomEvent(LAND_EVENT, { detail: f.station }))
     }
   }
 
   function frame(now: number) {
+    // Cleared first, so that however this frame ends, a later wake() can always schedule the
+    // next one — a stale handle here would freeze the dot until something else moved it.
+    raf = 0
     let stretch = 1
     let angle = 0
     if (flight) {
-      const k = Math.min((now - flight.t0) / flight.dur, 1)
+      const f = flight
+      const k = Math.min((now - f.t0) / f.dur, 1)
       const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2
-      const to = flight.to() // follows its target if the page reflows mid-flight
+      const to = f.to() // follows its target if the page reflows mid-flight
+      const cx = (f.from.x + to.x) / 2
+      const cy = Math.min(f.from.y, to.y) - f.lift
       const u = 1 - e
-      const nx = u * u * flight.from.x + 2 * u * e * flight.c.x + e * e * to.x
-      const ny = u * u * flight.from.y + 2 * u * e * flight.c.y + e * e * to.y
+      const nx = u * u * f.from.x + 2 * u * e * cx + e * e * to.x
+      const ny = u * u * f.from.y + 2 * u * e * cy + e * e * to.y
       const speed = Math.hypot(nx - pos.x, ny - pos.y)
       angle = (Math.atan2(ny - pos.y, nx - pos.x) * 180) / Math.PI
       stretch = 1 + Math.min(speed / 28, 0.55)
+      scale = f.fromScale + (f.toScale - f.fromScale) * e
       pos.x = nx
       pos.y = ny
       if (k >= 1) {
-        land(flight.id)
-        // The landing frame is the last one drawn before it rests: it must not keep the
-        // flight's stretch, or the dot sits there as an oval.
+        landed(f)
+        // The landing frame is the last one drawn before it rests: no flight stretch on it.
         stretch = 1
         angle = 0
       }
-    } else if (at !== null) {
-      const st = document.querySelector(`[data-station="${at}"]`) as HTMLElement | null
-      if (st) {
-        const p = pagePoint(st, st.dataset.land)
+    } else {
+      const p = restPoint()
+      if (p) {
+        still = Math.hypot(p.x - pos.x, p.y - pos.y) < 0.2 ? still + 1 : 0
         pos.x = p.x
         pos.y = p.y
       }
-      // At rest: the same spring as in the logo.
-      spring.vx = (spring.vx + (spring.tx - spring.x) * 0.11) * 0.8
-      spring.vy = (spring.vy + (spring.ty - spring.y) * 0.11) * 0.8
+      // At rest: the same spring as in the logo — smaller when it has become an indicator.
+      spring.vx = (spring.vx + (spring.tx * scale - spring.x) * 0.11) * 0.8
+      spring.vy = (spring.vy + (spring.ty * scale - spring.y) * 0.11) * 0.8
       spring.x += spring.vx
       spring.y += spring.vy
       const sp = Math.hypot(spring.vx, spring.vy)
@@ -151,16 +218,17 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     const y = pos.y + (flight ? 0 : spring.y) - DOT / 2
     dot.style.transform =
       `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) ` +
-      `rotate(${angle}deg) scale(${stretch}, ${1 / stretch}) rotate(${-angle}deg)`
+      `rotate(${angle}deg) scale(${stretch * scale}, ${scale / stretch}) rotate(${-angle}deg)`
 
-    const resting =
-      !flight &&
-      Math.hypot(spring.vx, spring.vy) < 0.01 &&
-      Math.hypot(spring.tx - spring.x, spring.ty - spring.y) < 0.05
-    // Resting, it needs no frames: it is placed in the page, so scrolling carries it.
-    raf = flight || !resting ? requestAnimationFrame(frame) : 0
+    const springing =
+      Math.hypot(spring.vx, spring.vy) > 0.01 ||
+      Math.hypot(spring.tx * scale - spring.x, spring.ty * scale - spring.y) > 0.05
+    // Tracking a moving target keeps frames coming until it has been still a while.
+    const tracking = !!rest?.track && still < 30
+    raf = flight || springing || tracking ? requestAnimationFrame(frame) : 0
   }
   function wake() {
+    still = 0
     if (!raf) raf = requestAnimationFrame(frame)
   }
 
@@ -172,10 +240,19 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     requestAnimationFrame(() => {
       checking = false
       const want = current()?.id ?? null
-      const heading = flight ? flight.id : at
+      const heading = flight && !flight.within ? flight.station : at
       if (want !== heading) launch(want)
-      else wake() // a reflow may have moved the station under it
+      else wake() // a reflow may have moved what it rests on
     })
+  }
+
+  function onMove(e: Event) {
+    const m = (e as CustomEvent<DotMove & { el: Element }>).detail
+    // Only within the section it is in, and not while it is crossing between sections.
+    if (at === null || (flight && !flight.within)) return
+    if (!m.el.closest('section')?.querySelector(`[data-station="${at}"]`)) return
+    rest = { el: m.el, track: !!m.track }
+    fly(() => pagePoint(m.el), { station: at, within: true, dur: m.dur, scale: m.scale, pulse: m.pulse })
   }
 
   function onPointer(e: PointerEvent) {
@@ -197,15 +274,21 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
   addEventListener('scroll', check, { passive: true })
   addEventListener('resize', check)
   addEventListener('pointermove', onPointer)
+  addEventListener(MOVE_EVENT, onMove)
+  // A zoom or other transition can move what the dot sits on.
+  document.addEventListener('transitionrun', wake)
   dot.addEventListener('pointerdown', onPoke)
   check()
 
   return () => {
     travellerActive = false
+    delete document.documentElement.dataset.traveller
     cancelAnimationFrame(raf)
     removeEventListener('scroll', check)
     removeEventListener('resize', check)
     removeEventListener('pointermove', onPointer)
+    removeEventListener(MOVE_EVENT, onMove)
+    document.removeEventListener('transitionrun', wake)
     dot.removeEventListener('pointerdown', onPoke)
     setAway(false)
   }

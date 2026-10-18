@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Term } from './Term.tsx'
 import { words } from './inView.ts'
 import { useCue } from '../traveller/useCue.ts'
+import { LAND_EVENT, dotTo } from '../traveller/traveller.ts'
 import './Problem.css'
 
 /**
@@ -32,20 +33,83 @@ const HEADLINE = 'Your home server runs a dozen things.'
 export function Problem() {
   // Starts when the travelling dot lands on the pile (M6.5b).
   const [ref, seen] = useCue<HTMLElement>('problem', 0.3)
-  const end = useRef<HTMLDivElement>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const chips = useRef<HTMLDivElement>(null)
+  const toured = useRef(false)
 
-  // The collapse starts when the bottom of the section passes the middle of the screen —
-  // and undoes itself on the way back up, so scrolling back finds the pile again.
+  // The dot's job here: it plays someone checking their server — tapping one service, then
+  // the next, faster and faster — "opening every one of them". When the pile collapses into
+  // a single row, it becomes that row's status dot: one answer.
   useEffect(() => {
-    const el = end.current
-    if (!el) return
-    const io = new IntersectionObserver(
-      ([e]) => setCollapsed(e.boundingClientRect.top < innerHeight * 0.5),
-      { threshold: [0, 1], rootMargin: '0px 0px -50% 0px' },
-    )
-    io.observe(el)
-    return () => io.disconnect()
+    const all = () => [...(chips.current?.querySelectorAll<HTMLElement>('.chip') ?? [])]
+    const row = () => chips.current?.querySelector('.one-row .ok') ?? null
+    const timers: number[] = []
+    const later = (ms: number, f: () => void) => timers.push(window.setTimeout(f, ms))
+
+    // A chip flinches as it is tapped.
+    const onArrive = (e: Event) => {
+      const el = (e as CustomEvent<Element>).detail
+      if (!(el instanceof HTMLElement) || !el.classList.contains('chip')) return
+      el.classList.remove('tapped')
+      void el.offsetWidth
+      el.classList.add('tapped')
+    }
+
+    const settle = () => {
+      const list = all()
+      dotTo(chips.current?.closest('.problem')?.hasAttribute('data-collapsed') ? row() : list[list.length - 1], {
+        scale: chips.current?.closest('.problem')?.hasAttribute('data-collapsed') ? 0.36 : 1,
+      })
+    }
+
+    const onLand = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== 'problem') return
+      if (toured.current) return later(150, settle)
+      toured.current = true
+      // After the chips have flown in, tour them, each hop a little quicker than the last.
+      let t = 2500
+      all().forEach((chip, i) => {
+        const dur = Math.max(170, 330 - i * 24)
+        later(t, () => dotTo(chip, { dur }))
+        t += dur + 70
+      })
+    }
+
+    addEventListener(LAND_EVENT, onLand)
+    addEventListener('cueseek:dot-arrived', onArrive)
+    return () => {
+      removeEventListener(LAND_EVENT, onLand)
+      removeEventListener('cueseek:dot-arrived', onArrive)
+      timers.forEach(clearTimeout)
+    }
+  }, [])
+
+  // Collapsing gathers the pile into one row; the dot follows and becomes its status dot.
+  useEffect(() => {
+    if (!toured.current) return
+    const t = setTimeout(() => {
+      const list = chips.current?.querySelectorAll('.chip')
+      dotTo(collapsed ? (chips.current?.querySelector('.one-row .ok') ?? null) : (list?.[list.length - 1] ?? null), {
+        scale: collapsed ? 0.36 : 1,
+        dur: 520,
+      })
+    }, collapsed ? 420 : 200)
+    return () => clearTimeout(t)
+  }, [collapsed])
+
+  // The collapse starts once the pile itself has scrolled up past the upper part of the
+  // screen — and undoes itself on the way back down, so scrolling back finds the pile again.
+  useEffect(() => {
+    const check = () => {
+      const c = chips.current
+      if (c) setCollapsed(c.getBoundingClientRect().bottom < innerHeight * 0.42)
+    }
+    addEventListener('scroll', check, { passive: true })
+    const first = requestAnimationFrame(check)
+    return () => {
+      removeEventListener('scroll', check)
+      cancelAnimationFrame(first)
+    }
   }, [])
 
   const [head, ...rest] = HEADLINE.split('home server')
@@ -94,7 +158,7 @@ export function Problem() {
           </p>
         </div>
 
-        <div className="chips" aria-hidden="true" data-station="problem" data-land="center">
+        <div ref={chips} className="chips" aria-hidden="true" data-station="problem" data-land="center">
           {CHIPS.map((c, i) => (
             <span
               key={c.name}
@@ -120,7 +184,6 @@ export function Problem() {
           </span>
         </div>
       </div>
-      <div ref={end} className="problem-end" aria-hidden="true" />
     </section>
   )
 }

@@ -28,3 +28,12 @@
 .hero-mark[data-dot-away] .handle-follow {
   opacity: 0;
 }
+
+/* Become the app's freshness beat: a slow pulse, as the dashboard's live dot does. */
+.traveller-body.pulse {
+  animation: beat 2.4s ease-in-out infinite;
+}
+@keyframes beat {
+  0%, 100% { box-shadow: 0 0 10px var(--glow); }
+  50% { box-shadow: 0 0 2px var(--glow), 0 0 0 9px color-mix(in srgb, var(--accent) 22%, transparent); }
+}

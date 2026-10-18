@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 // The README's dashboard with the host renamed to HomeServer — a public page should not
 // carry a real machine's name. A stand-in until M6.6's fresh captures replace it.
 import dashboard from '../assets/dashboard.png'
 import { Term } from './Term.tsx'
 import { useCue } from '../traveller/useCue.ts'
+import { LAND_EVENT, dotTo } from '../traveller/traveller.ts'
 import './Answer.css'
 
 /** Where each part sits on the screenshot, as a fraction of its height. */
@@ -43,6 +44,27 @@ export function Answer() {
     const done = setTimeout(() => setTouring(false), 4600)
     return () => [...timers, done].forEach(clearTimeout)
   }, [seen, still])
+
+  // The dot's job here: it becomes the dashboard's own "live" dot — the app's heartbeat —
+  // and rides along on it while the camera moves around the screen.
+  const live = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    let first = true
+    let t = 0
+    const onLand = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== 'answer') return
+      t = window.setTimeout(
+        () => dotTo(live.current, { scale: 0.34, pulse: true, track: true, dur: 650 }),
+        first ? 1250 : 200, // the first time, after the camera has pulled back
+      )
+      first = false
+    }
+    addEventListener(LAND_EVENT, onLand)
+    return () => {
+      removeEventListener(LAND_EVENT, onLand)
+      clearTimeout(t)
+    }
+  }, [])
 
   const part = PARTS.find((p) => p.id === focus)
   return (
@@ -86,12 +108,16 @@ export function Answer() {
             }
             data-entry={!seen || undefined}
           >
-            <img
-              src={dashboard}
-              alt="The CueSeek dashboard: the server reporting Operational, its processor, memory, disk and temperature, and Jellyfin and qBittorrent both running."
-              width={1272}
-              height={1460}
-            />
+            <div className="screen">
+              <img
+                src={dashboard}
+                alt="The CueSeek dashboard: the server reporting Operational, its processor, memory, disk and temperature, and Jellyfin and qBittorrent both running."
+                width={1272}
+                height={1460}
+              />
+              {/* Where the screenshot's own "live" dot is. */}
+              <span ref={live} className="live-spot" aria-hidden="true" />
+            </div>
           </div>
           <ul className="callouts">
             {PARTS.map((p, i) => (
