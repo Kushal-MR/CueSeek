@@ -122,6 +122,36 @@ arc and its landing is the section's cue (`useCue`). Never the only cue — with
 (reduced motion) a section starts when in view, and with it, a late dot is not waited for.
 Scrolling back up brings it home into the logo's gap. Every later section adds a station.
 
+### M6.6 — Staging and captures
+
+Real screens of the real product, against a library that is staged for the purpose and then
+removed — nothing of Kushal's own on a public page.
+
+**Staged:** two films Blender released under Creative Commons — *Sintel* (1.18 GB) and
+*Tears of Steel* (372 MB), from download.blender.org — in `/srv/cueseek-staging/films`, as
+a Jellyfin library seen only by a `Demo` user; and the Debian 13.7 netinst and Ubuntu
+24.04.4 desktop torrents in qBittorrent, in a `staging` category.
+
+**Shot list:**
+
+| | Screen | State |
+| --- | --- | --- |
+| P1 | Phone dashboard | Operational; both services running |
+| P2 | Phone, Jellyfin | Demo playing *Sintel* |
+| P3 | Phone, qBittorrent | both ISOs downloading |
+| P4 | Phone, Restart dialog | the confirmation only — cancelled |
+| P5 | Phone, Shut down dialog | the hold only — cancelled, never held |
+| W1–W4 | Watch | dashboard; Jellyfin detail; tile; complication on a face |
+| J1 | Jellyfin web UI | the Demo user's home: the two films |
+| Q1 | qBittorrent web UI | the `staging` category: the two ISOs |
+
+**Privacy pass on every capture before it is used:** the host name repainted to
+`HomeServer` (the agent reports the real one and has no display name — adding one would be a
+product change), no other user, torrent, film, address or notification visible.
+
+**Afterwards:** the library, the Demo user and the torrents (with their data) removed in the
+services' own UIs; the films folder deleted.
+
 ### M6.14 — Sharing
 
 The MP4 needs an encoder (ffmpeg, via `imageio-ffmpeg`). Approved in principle; installed
