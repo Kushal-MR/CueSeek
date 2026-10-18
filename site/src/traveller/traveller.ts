@@ -73,6 +73,8 @@ interface Flight {
   fromScale: number
   toScale: number
   pulse: boolean
+  /** For a crossing between stations: the element it is landing on, and how. */
+  landOn?: { el: Element; land?: string }
 }
 
 export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void {
@@ -94,7 +96,9 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
   const pos: Point = { x: 0, y: 0 }
   const spring = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0 }
   let at: string | null = null // station id; null = home in the logo
-  let rest: { el: Element; track: boolean } | null = null // what it rests on, if not its station
+  // What it rests on — the element it actually landed on, which for a station reached from
+  // below is not the station's own (see data-entry-up).
+  let rest: { el: Element; track: boolean; land?: string } | null = null
   let scale = 1
   let flight: Flight | null = null
   let raf = 0
@@ -105,7 +109,7 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     return h ? pagePoint(h) : null
   }
   function restPoint(): Point | null {
-    if (rest) return pagePoint(rest.el)
+    if (rest) return pagePoint(rest.el, rest.land)
     if (at === null) return homePoint()
     const st = document.querySelector<HTMLElement>(`[data-station="${at}"]`)
     return st ? pagePoint(st, st.dataset.land) : null
@@ -130,7 +134,14 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
       t0: performance.now(),
       dur: o.dur ?? Math.min(1100, 420 + dist * 0.45),
       // A hop: the arc rises above both ends — more for a long jump, a little for a short one.
-      lift: o.within ? Math.min(90, 18 + dist * 0.3) : Math.min(260, 60 + dist * 0.28),
+      // Going up the page it must not: an arc above an end that is already higher sends the
+      // dot past where it is going, toward the top of the screen, before it drops back.
+      lift:
+        end.y < from.y - 40
+          ? Math.min(40, 12 + dist * 0.04)
+          : o.within
+            ? Math.min(90, 18 + dist * 0.3)
+            : Math.min(260, 60 + dist * 0.28),
       station: o.station,
       within: o.within,
       fromScale: scale,
@@ -155,10 +166,12 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
     if (target && going === 'up' && target.el.dataset.entryUp) {
       el = target.el.closest('section')?.querySelector(target.el.dataset.entryUp) ?? el
     }
-    fly(() => (to === null || !el ? (homePoint() ?? pos) : pagePoint(el, el === target?.el ? target.el.dataset.land : undefined)), {
+    const land = el === target?.el ? target?.el.dataset.land : undefined
+    fly(() => (to === null || !el ? (homePoint() ?? pos) : pagePoint(el, land)), {
       station: to,
       within: false,
     })
+    if (flight && to !== null && el) flight.landOn = { el, land }
   }
 
   /** A station's place down the page: home is 0, then stations in document order. */
@@ -172,6 +185,9 @@ export function startTraveller(dot: HTMLElement, body: HTMLElement): () => void 
   function landed(f: Flight) {
     flight = null
     at = f.station
+    // It rests where it landed. Resting on the station's own element instead snapped a dot
+    // that had come up from below straight to the top of the section.
+    if (!f.within) rest = f.landOn ? { el: f.landOn.el, land: f.landOn.land, track: true } : null
     scale = f.toScale
     body.animate(
       [

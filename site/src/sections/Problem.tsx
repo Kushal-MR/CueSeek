@@ -36,7 +36,8 @@ export function Problem() {
   const [collapsed, setCollapsed] = useState(false)
   const chips = useRef<HTMLDivElement>(null)
   const toured = useRef(false)
-  const exposeTour = useRef<((going: 'down' | 'up', startAt: 0 | 1) => void) | null>(null)
+  // The tour's controls, for the collapse to use: only one tour may ever run at a time.
+  const tourCtl = useRef<{ start: (going: 'down' | 'up', startAt: 0 | 1) => void; stop: () => void; busy: () => boolean } | null>(null)
 
   // The dot's job here: it plays someone checking their server. It falls onto the first
   // service and each one opens as the dot taps it, top to bottom, a little quicker each time
@@ -75,7 +76,7 @@ export function Problem() {
       void chip.offsetWidth
       chip.classList.add('tapped')
     }
-    exposeTour.current = tour
+    tourCtl.current = { start: tour, stop: () => { next = -1 }, busy: () => next >= 0 }
 
     // A chip opens as the dot lands on its lock — or flinches, if it is already open.
     const onArrive = (e: Event) => {
@@ -134,8 +135,13 @@ export function Problem() {
     if (!toured.current) return
     const t = setTimeout(
       () => {
-        if (collapsed) dotTo(chips.current?.querySelector('.one-row .ok') ?? null, { scale: 0.36, dur: 520 })
-        else exposeTour.current?.('up', 0)
+        if (collapsed) {
+          tourCtl.current?.stop() // a tour in progress gives way to the collapse
+          dotTo(chips.current?.querySelector('.one-row .ok') ?? null, { scale: 0.36, dur: 520 })
+        } else if (!tourCtl.current?.busy()) {
+          // Climbing back up: unless a tour is already doing so — two would fight.
+          tourCtl.current?.start('up', 0)
+        }
       },
       collapsed ? 420 : 250,
     )
