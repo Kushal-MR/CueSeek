@@ -93,7 +93,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.10 | Why it is built this way | M6.5 | ✅ |
 | M6.11 | The demo page | M6.5 | ✅ |
 | M6.12 | The download page | M6.2 | ✅ |
-| M6.13 | Phones, reduced motion, accessibility, weight | all above | ⬜ |
+| M6.13 | Phones, reduced motion, accessibility, weight | all above | ✅ |
 | M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ⬜ |
 | M6.15 | Launch: the placeholder points to the new site; README links; the arrival back to once per visit (`ONCE_PER_VISIT` in `site/src/arrival/arriving.ts`) | all | ⬜ |
 
@@ -235,6 +235,26 @@ the address and the code (`docs/pairing.md`) — and the APKs have their own che
 The release is one constant in `Download.tsx` for M6.15 and later releases. With every
 section real, the placeholder scaffolding is gone; the footer credits the author, with
 LinkedIn to come.
+
+### M6.13 — Phones, reduced motion, accessibility, weight
+
+Measured, then fixed what the measurements showed.
+
+- **Weight.** The fonts were 670 KB of full TTFs — 971 glyphs each, for an English page that
+  uses about 260. `site/scripts/subset-fonts.py` cuts them from the apps' files to WOFF
+  (95 KB), CI checks the site's copies still match their source, and every one of the 111
+  characters the site draws was checked to survive. Section 06 bundled 57 KB of Markdown
+  for six excerpts; a build-time plugin (`scripts/quotes.ts`) now ships only the excerpts —
+  still the records' own words, and the build fails if one disappears from its record.
+- **Phones.** At 360 px the nav pushed the knob off the screen; the narrowest phones now
+  drop the nav's GitHub link (it is in the footer). Controls that were under 32 px tall —
+  the reel's bar strip, the copy buttons, the guide links, the demo's ⋮ — were given room.
+  What remains under 32 px is inline text links, which WCAG 2.2 exempts, and nothing is
+  under 24 px.
+- **Audited** at 1280, 390 and 360 px, with and without reduced motion: no horizontal
+  overflow, nothing left invisible once its section is reached, every control named,
+  every image described, one h1 and an ordered outline on both pages, and every one of the
+  97 Tab stops across both pages shows a focus ring.
 
 ### M6.14 — Sharing
 

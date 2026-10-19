@@ -259,6 +259,14 @@ jobs:
       - name: Contrast on every theme stop
         run: npm run check:contrast
 
+      # The site's fonts are cut down from the apps' (scripts/subset-fonts.py); this fails if
+      # the apps' fonts change and the site's copies were not regenerated.
+      - name: Fonts match the apps' fonts
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fonts"
+          "$RUNNER_TEMP/fonts/bin/pip" install --quiet fonttools==4.63.0
+          "$RUNNER_TEMP/fonts/bin/python" scripts/subset-fonts.py --check
+
       - name: Typecheck and build
         run: npm run build
 

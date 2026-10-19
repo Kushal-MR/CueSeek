@@ -264,6 +264,7 @@
   }
   .callouts button {
     flex-direction: row-reverse;
+    padding: 8px 0;
   }
   .callouts .says {
     opacity: 1;

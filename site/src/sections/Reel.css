@@ -170,7 +170,7 @@
 }
 .reel-bars button {
   flex: 1;
-  height: 16px;
+  height: 32px; /* a tap target; the bar it draws is the thin line inside */
   padding: 0;
   border: 0;
   background: none;
@@ -180,7 +180,7 @@
 .reel-bars button::after {
   content: '';
   position: absolute;
-  inset: 5px 0;
+  inset: 13px 0;
   border-radius: 3px;
   background: var(--line);
 }
