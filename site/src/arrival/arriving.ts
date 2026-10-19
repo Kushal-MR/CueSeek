@@ -1,11 +1,11 @@
 const SEEN = 'cueseek.arrived'
 
 /**
- * While the site is being built, the entrance plays on every load so it can be judged on
- * every refresh. **Turn this on before launch (M6.15)**: then it plays once per visit, and a
- * reload or a return from another page lands on the settled hero.
+ * The entrance plays once per visit: a reload, or a return from another page, lands on the
+ * settled hero. (While the site was being built it played on every load, to be judged on
+ * every refresh; turned on at launch, M6.15.)
  */
-const ONCE_PER_VISIT = false
+const ONCE_PER_VISIT = true
 
 /**
  * Whether this page load gets the entrance. Never with reduced motion.

@@ -35,7 +35,7 @@ const STEPS = [
     says: 'Installs over ADB — a computer and a few commands: watches can’t install an APK on their own. Once paired, your phone hands it the server’s address.',
     needs: 'Needs Wear OS 3 or later.',
     file: `cueseek-wear_${VERSION}.apk`,
-    guide: { label: 'How to install it', href: `${REPO}#the-watch` },
+    guide: { label: 'How to install it', href: `${REPO}/blob/main/docs/install.md#the-watch-optional` },
   },
 ]
 

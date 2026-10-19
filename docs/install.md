@@ -110,27 +110,31 @@ Then install the Android client and type the address, port and code into it.
 tarball — it was tagged before the Android release workflow existed, so if you looked there
 and found no APK, that is why.
 
-**If you built the client from source, you cannot upgrade to the published APK.** Android
-refuses to replace a package with one signed by a different key, and a source build is
-signed with the debug key:
+**A client you built from source installs beside the published one,** as
+`dev.cueseek.android.debug`, so a development build never displaces the app you rely on. Only
+a source build from before `v0.1.1` used the release's own id; Android refuses to replace it
+with the published APK, because the two are signed with different keys:
 
 ```
 INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.cueseek.android
 signatures do not match newer version; ignoring!
 ```
 
-That is the signature check doing its job. Uninstall the build you have first:
+If you have one of those, uninstall it first (`adb uninstall dev.cueseek.android`), then
+install the published APK. That costs its pairing — the token is app-private and excluded
+from backup — so mint a new code and pair again; the agent and every other device are
+unaffected. Released APKs share a signing key, so each one upgrades the last in place, with
+the pairing intact.
 
-```bash
-adb uninstall dev.cueseek.android
-adb install cueseek_0.1.1.apk
-```
+### The watch (optional)
 
-**This costs you the pairing** — the token is app-private and excluded from backup, so it
-does not survive the uninstall. Mint a new code and pair again; the agent, its database and
-every other device are unaffected. Do it once, when you move from a source build to a
-published one, and never again: released APKs share a signing key, so `v0.1.1` upgrades to
-`v0.1.2` in place with the pairing intact.
+The release page carries `cueseek-wear_<version>.apk` beside the phone's APK, signed with the
+same key, checksummed and attested the same way. There is no Play listing, so it installs over
+ADB: enable wireless debugging on the watch, `adb connect` to it, then `adb install`. It pairs
+with a code of its own; the phone app, if installed and paired, hands the watch the host's
+address so it does not have to be typed on a wrist. That address is the one the phone uses —
+if the phone reaches the host over Tailscale and the watch cannot, change it on the watch to
+the host's home-network address. Wear OS 3 or later.
 
 At this point you have a working dashboard of the machine itself.
 
