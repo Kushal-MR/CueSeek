@@ -1,8 +1,9 @@
 /**
  * The reel's soundtrack, composed in the browser: no samples, no files, no services.
- * 24 s on the reel's own clock (120 BPM, four beats a bar), in C major — calm, the way a
- * product keynote is: warm pads, a soft electric-piano line, a gentle sub, a half-time beat,
- * and quiet chimes on the reel's events.
+ * 24 s on the reel's own clock (120 BPM, four beats a bar), in D minor — low and dark rather
+ * than bright: deep pads, a pulsing synth bass, low electric-piano chords, a half-time beat
+ * with a dark clap and swung hats, a boom where things land, and quiet chimes on the reel's
+ * events.
  *
  * It is played into an OfflineAudioContext — the browser's own oscillators, filters, reverb
  * and compressor — rendered once, the first time it is needed, to a plain stereo buffer the
@@ -19,31 +20,27 @@ const BEAT = 0.5
 const at = (bar: number, beat = 0) => (bar - 1) * 2 + beat * BEAT
 const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12)
 
-/** One chord a bar, voiced for the pads. */
+/** One chord a bar, voiced low for the pads. Bars 7 and 8 set the mood for the rest. */
 const CHORDS: number[][] = [
-  [48, 55, 59, 62, 64], // 1 boot — Cmaj9
-  [45, 52, 55, 59, 60], // 2 the question — Am9
-  [41, 48, 52, 57, 59], // 3 the pile — Fmaj7♯11, a little unsettled
-  [48, 55, 60, 62, 64], // 4 the answer — Cadd9, arriving
-  [43, 50, 57, 59, 64], // 5 the phone — G6/9
-  [45, 52, 55, 60, 64], // 6 inside — Am7
-  [50, 53, 57, 60, 64], // 7 attention — Dm9, darker
-  [46, 50, 53, 57, 60], // 8 control — B♭maj7, waiting
+  [38, 45, 53, 60, 64], // 1 boot — Dm9
+  [34, 41, 50, 57, 64], // 2 the question — B♭maj7♯11
+  [43, 46, 50, 53, 57], // 3 the pile — Gm9
+  [41, 48, 52, 55, 57], // 4 the answer — Fmaj9, arriving
+  [38, 45, 53, 60, 64], // 5 the phone — Dm9
+  [34, 41, 50, 57, 60], // 6 inside — B♭maj9
+  [50, 53, 57, 60, 64], // 7 attention — Dm9
+  [46, 50, 53, 57, 60], // 8 control — B♭maj7
   [41, 48, 53, 55, 60], // 9 the hold — Fsus2
-  [48, 55, 59, 62, 64], // 10 everywhere — Cmaj9
-  [41, 48, 52, 55, 57], // 11 works with — Fmaj9, lifting
-  [36, 48, 55, 59, 62, 64], // 12 end — Cmaj9, home
+  [38, 45, 53, 60, 64], // 10 everywhere — Dm9
+  [34, 41, 50, 57, 60], // 11 works with — B♭maj9
+  [29, 41, 48, 52, 55, 57], // 12 end — Fmaj9, home
 ]
-const ROOTS = [36, 33, 29, 36, 31, 33, 38, 34, 29, 36, 29, 36]
-/** The piano's line: [beat, note] for the bars that have the groove. */
-const MOTIF: Record<number, [number, number][]> = {
-  4: [[0, 79], [0.5, 76], [1, 74], [2, 76], [3, 72]],
-  5: [[0, 79], [0.5, 74], [1, 71], [2, 74], [3, 69]],
-  6: [[0, 76], [0.5, 72], [1, 69], [2, 72], [3, 67]],
-  10: [[0, 84], [0.5, 79], [1, 76], [2, 79], [3, 74]],
-  11: [[0, 81], [0.5, 77], [1, 72], [2, 76], [3, 79]],
-}
+/** Each bar's root, for the bass. */
+const ROOTS = [38, 34, 43, 41, 38, 34, 38, 34, 41, 38, 34, 41]
+/** Where the beat plays: where things are well. */
 const GROOVE = [4, 5, 6, 10, 11]
+/** The bass line, in eighths: root, octave and fifth, accented like a pulse. */
+const PULSE: [number, number][] = [[0, 1], [0, 0.5], [12, 0.8], [0, 0.5], [7, 0.9], [0, 0.5], [12, 0.75], [7, 0.6]]
 
 export async function composeSoundtrack(): Promise<AudioBuffer> {
   const ctx = new OfflineAudioContext(2, SR * (DURATION + TAIL), SR)
@@ -257,34 +254,82 @@ export async function composeSoundtrack(): Promise<AudioBuffer> {
   }
 
   const kickNow = (t: number, vel: number) => {
-    const o = osc('sine', 120, t, t + 0.3)
-    o.frequency.exponentialRampToValueAtTime(48, t + 0.08)
+    const o = osc('sine', 95, t, t + 0.45)
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.12)
     const env = ctx.createGain()
-    env.gain.setValueAtTime(0.65 * vel, t)
-    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.22)
+    env.gain.setValueAtTime(0.8 * vel, t)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.34)
     const out = bus(0, 0.04)
     o.connect(env).connect(out)
-    const click = osc('triangle', 1800, t, t + 0.02)
+    const click = osc('triangle', 1400, t, t + 0.02)
     const clickEnv = ctx.createGain()
-    clickEnv.gain.setValueAtTime(0.05 * vel, t)
-    clickEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.012)
+    clickEnv.gain.setValueAtTime(0.03 * vel, t)
+    clickEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.01)
     click.connect(clickEnv).connect(out)
     duck(t)
   }
 
-  const shakerNow = (t: number, vel: number, pan: number) => {
+  /** Something landing: a low sine that falls and rings — felt more than heard. */
+  const boomNow = (t: number, vel: number) => {
+    const o = osc('sine', 62, t, t + 2)
+    o.frequency.exponentialRampToValueAtTime(36, t + 0.9)
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0.0001, t)
+    env.gain.exponentialRampToValueAtTime(0.5 * vel, t + 0.015)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 1.8)
+    o.connect(env).connect(bus(0, 0.2))
+    duck(t)
+  }
+
+  /** A dark clap: three quick bursts of filtered noise, mostly reverb. */
+  const clapNow = (t: number, vel: number) => {
+    const out = bus(0.05, 0.7)
+    for (const [k, off] of [[1, 0], [0.8, 0.009], [1, 0.018]]) {
+      const src = ctx.createBufferSource()
+      src.buffer = noise
+      const bp = ctx.createBiquadFilter()
+      bp.type = 'bandpass'
+      bp.frequency.value = 1150
+      bp.Q.value = 0.9
+      const env = ctx.createGain()
+      env.gain.setValueAtTime(0, t + off)
+      env.gain.linearRampToValueAtTime(0.22 * vel * k, t + off + 0.002)
+      env.gain.exponentialRampToValueAtTime(0.0001, t + off + (off === 0.018 ? 0.16 : 0.012))
+      src.connect(bp).connect(env).connect(out)
+      src.start(t + off, rnd() * 1.5, 0.2)
+    }
+  }
+
+  /** A closed hat: a tick of high noise. */
+  const hatNow = (t: number, vel: number, pan: number) => {
     const src = ctx.createBufferSource()
     src.buffer = noise
-    const bp = ctx.createBiquadFilter()
-    bp.type = 'bandpass'
-    bp.frequency.value = 6000
-    bp.Q.value = 0.7
+    const hp = ctx.createBiquadFilter()
+    hp.type = 'highpass'
+    hp.frequency.value = 7500
     const env = ctx.createGain()
     env.gain.setValueAtTime(0, t)
-    env.gain.linearRampToValueAtTime(0.24 * vel, t + 0.006)
-    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.07)
-    src.connect(bp).connect(env).connect(bus(pan, 0.15))
-    src.start(t, rnd() * 1.5, 0.1)
+    env.gain.linearRampToValueAtTime(0.16 * vel, t + 0.002)
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.035)
+    src.connect(hp).connect(env).connect(bus(pan, 0.1))
+    src.start(t, rnd() * 1.5, 0.05)
+  }
+
+  /** The bass line: a low sawtooth, plucked through a resonant low-pass. */
+  const pulseNow = (note: number, t: number, vel: number) => {
+    const o = osc('sawtooth', hz(note), t, t + 0.3)
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.Q.value = 3.5
+    lp.frequency.setValueAtTime(280 + 700 * vel, t)
+    lp.frequency.exponentialRampToValueAtTime(190, t + 0.16)
+    const env = ctx.createGain()
+    env.gain.setValueAtTime(0, t)
+    env.gain.linearRampToValueAtTime(0.15 * vel, t + 0.006)
+    env.gain.setTargetAtTime(0.09 * vel, t + 0.01, 0.06)
+    env.gain.setValueAtTime(0.09 * vel, t + 0.2)
+    env.gain.linearRampToValueAtTime(0, t + 0.24)
+    o.connect(lp).connect(env).connect(bus(0, 0.08, 0, ducked))
   }
 
   const subNow = (note: number, t0: number, t1: number, level: number) => {
@@ -313,38 +358,51 @@ export async function composeSoundtrack(): Promise<AudioBuffer> {
   const tok = later((...a: Parameters<typeof tokNow>) => a[0] as number, tokNow)
   const swish = later((...a: Parameters<typeof swishNow>) => a[0] as number, swishNow)
   const kick = later((...a: Parameters<typeof kickNow>) => a[0] as number, kickNow)
-  const shaker = later((...a: Parameters<typeof shakerNow>) => a[0] as number, shakerNow)
+  const boom = later((...a: Parameters<typeof boomNow>) => a[0] as number, boomNow)
+  const clap = later((...a: Parameters<typeof clapNow>) => a[0] as number, clapNow)
+  const hat = later((...a: Parameters<typeof hatNow>) => a[0] as number, hatNow)
+  const pulse = later((...a: Parameters<typeof pulseNow>) => a[1] as number, pulseNow)
   const sub = later((...a: Parameters<typeof subNow>) => a[1] as number, subNow)
 
   // ---- the arrangement, bar by bar
 
-  // the pads under everything: quiet at the edges, opening at the answer, dark at the doubt
+  // the pads under everything: low and dark, opening a little where things are well
   CHORDS.forEach((notes, i) => {
     const bar = i + 1
     const t0 = at(bar)
     const t1 = at(bar + 1)
-    if (bar === 1) return pad(notes, t0, t1, { level: 0.15, attack: 1.3, cutoff: 600, cutoffTo: 1400 })
+    if (bar === 1) return pad(notes, t0, t1, { level: 0.15, attack: 1.3, cutoff: 500, cutoffTo: 1000 })
     if (bar === 9) return pad(notes, t0, at(9, 2.9), { level: 0.07, cutoff: 900, release: 0.4 })
-    if (bar === 12) return pad(notes, t0, at(12, 3.4), { level: 0.13, attack: 0.9, cutoff: 1800, release: 2.6 })
+    if (bar === 12) return pad(notes, t0, at(12, 3.4), { level: 0.14, attack: 0.9, cutoff: 1200, release: 2.6 })
     const dark = bar === 7 || bar === 8
-    pad(notes, t0, t1, { level: bar < 4 ? 0.15 : dark ? 0.09 : 0.1, cutoff: dark ? 850 : bar === 4 ? 2200 : 1500 })
+    pad(notes, t0, t1, { level: bar < 4 ? 0.15 : dark ? 0.09 : 0.11, cutoff: dark ? 850 : bar < 4 ? 1000 : 1150 })
   })
 
-  // the bass, from the answer on; it steps back for the doubt and leaves for the hold
+  // the sub, from the answer on; it steps back for the doubt and leaves for the hold
   ROOTS.forEach((root, i) => {
     const bar = i + 1
-    if (bar < 4 || bar === 9) return
-    sub(root, at(bar), bar === 12 ? at(12, 3.2) : at(bar + 1) - 0.05, bar === 7 || bar === 8 ? 0.1 : 0.15)
+    if (bar < 4 || bar === 9 || bar === 12) return
+    const low = root >= 40 ? root - 12 : root
+    sub(low, at(bar), at(bar + 1) - 0.05, bar === 7 || bar === 8 ? 0.1 : 0.13)
   })
 
-  // the groove: a half-time kick and a shaker, only where things are well
+  // the groove, only where things are well: a deep kick, a dark clap on the half-time
+  // backbeat, swung hats, the pulsing bass, and low electric-piano chords
   for (const bar of GROOVE) {
-    if (bar !== 11) kick(at(bar, 0), bar === 4 || bar === 10 ? 0.5 : 0.65) // the returns come in softly
-    kick(at(bar, 2), 0.5)
-    for (let e = 0; e < 8; e++) shaker(at(bar, e / 2), e % 2 ? 0.6 : 0.3, e % 2 ? 0.3 : -0.2)
-    for (const [beat, note] of MOTIF[bar]) {
-      if (bar === 11 && beat < 1) continue // the cards turning over have the first beat
-      piano(note, at(bar, beat), beat % 1 ? 0.38 : 0.5, beat % 1 ? 0.25 : -0.1)
+    const first = bar === 4 || bar === 10 // where the beat comes back in
+    if (first) boom(at(bar, 0), 0.9)
+    if (bar !== 11) kick(at(bar, 0), first ? 0.7 : 0.8)
+    kick(at(bar, 1.75), 0.4)
+    kick(at(bar, 2.5), 0.65)
+    clap(at(bar, 2), 0.6)
+    for (let s16 = bar === 11 ? 4 : 0; s16 < 16; s16++) {
+      const swing = s16 % 2 ? 0.035 : 0
+      hat(at(bar, s16 / 4) + swing, [0.9, 0.35, 0.6, 0.35][s16 % 4], s16 % 2 ? 0.25 : -0.15)
+    }
+    PULSE.forEach(([step, vel], e) => pulse(ROOTS[bar - 1] + step, at(bar, e / 2), vel))
+    const keys = CHORDS[bar - 1].filter((n) => n >= 48)
+    for (const [beat, vel] of bar === 11 ? [[1, 0.32], [2.75, 0.26]] : [[0, 0.34], [2.75, 0.26]]) {
+      keys.forEach((n, k) => piano(n, at(bar, beat) + k * 0.012, vel, (k - keys.length / 2) * 0.15, 0.22))
     }
   }
 
@@ -355,11 +413,11 @@ export async function composeSoundtrack(): Promise<AudioBuffer> {
   // bar 2 — the question: one note a word, rising; the dot, an answer not yet given
   piano(76, at(2, 0), 0.5, -0.2)
   piano(79, at(2, 1), 0.5, 0)
-  piano(83, at(2, 2), 0.55, 0.2)
+  piano(81, at(2, 2), 0.55, 0.2)
   chime(88, at(2, 3), 0.55)
 
   // bar 3 — the pile: every service pipes up; a few clamour; then they gather into the dot
-  ;[77, 81, 84, 88, 79, 83, 86, 81].forEach((n, i) => pip(n, at(3, i * 0.32), 0.45, i % 2 ? 0.5 : -0.5))
+  ;[77, 81, 82, 86, 79, 84, 86, 81].forEach((n, i) => pip(n, at(3, i * 0.32), 0.45, i % 2 ? 0.5 : -0.5))
   for (const beat of [1.6, 2.3, 2.9]) {
     pip(81, at(3, beat), 0.22, rnd() - 0.5)
     pip(81, at(3, beat) + 0.09, 0.16, rnd() - 0.5) // a gentle double knock: look at me
@@ -408,11 +466,12 @@ export async function composeSoundtrack(): Promise<AudioBuffer> {
 
   // bar 12 — the end card: the arc draws, the dot lands, everything resolves home
   const land = at(12, 0.95)
-  sub(36, land, DURATION + 1.6, 0.1) // the bass stays under the last chord as it rings out
+  boom(land, 1)
+  sub(29, land, DURATION + 1.6, 0.12) // the bass stays under the last chord as it rings out
   chime(84, land, 0.6, -0.2)
   chime(88, land + 0.03, 0.45, 0)
   chime(91, land + 0.06, 0.4, 0.2)
-  piano(72, land, 0.45, 0, 0.2)
+  ;[53, 57, 60, 64].forEach((n, k) => piano(n, land + k * 0.015, 0.36, (k - 1.5) * 0.15, 0.2))
 
   // Build each bar's sounds 0.4 s before the bar begins; the first bar's, before rendering.
   const lead = 0.4

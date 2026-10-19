@@ -189,8 +189,8 @@ Built from its own storyboard (`.site-ref/reel-storyboard.html`, draft 1), on Ku
 to build it and judge it running. Twelve bars at 120 BPM, 24 s, drawn on a canvas by
 `site/src/reel/scenes.ts` every frame — so it follows the knob. The proof's synth was ported
 first and judged "not good at all"; Kushal chose a calm-keynote score instead, and `synth.ts`
-now composes it with the browser's own audio graph in an OfflineAudioContext — pads, a soft
-electric piano, a ducked sub, a half-time beat, chimes on the reel's events — built bar by bar
+then, on his word that the beat sections sounded childish, rescored it deep and dark in D minor — built on bars 7–8, which he liked — and `synth.ts`
+now composes it with the browser's own audio graph in an OfflineAudioContext — dark pads, a pulsing synth bass, low electric-piano chords, a half-time beat with a dark clap and swung hats, a boom where things land, chimes on the reel's events — built bar by bar
 just before each renders (a node that exists is a node the renderer works on), at 32 kHz.
 It is composed in the background while the reel first plays, silent, and runs 3 s past the
 picture so the last chord rings over the loop's first bar. Each revision was listened to by
