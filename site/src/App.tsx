@@ -30,6 +30,10 @@ export default function App() {
           <Mark size={20} />
           CueSeek
         </a>
+        <a className="demo-cta" href="./demo">
+          <span aria-hidden="true" />
+          Try the demo
+        </a>
         <nav aria-label="Sections">
           <a href="#answer">How it works</a>
           <a href="#works-with">Works with</a>

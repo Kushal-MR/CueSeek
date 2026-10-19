@@ -32,7 +32,22 @@ export function Phone({ st }: { st: State }) {
     <div className="phone" aria-label="The CueSeek phone app">
       <div className="ph-status" aria-hidden="true">
         <span>11:11</span>
-        <span className="ph-icons">▾ ▮▮▮ 73%</span>
+        <span className="ph-icons">
+          <svg viewBox="0 0 16 12" width="15" height="11">
+            <path d="M8 11.2 1 4.3a10 10 0 0 1 14 0z" fill="currentColor" />
+          </svg>
+          <svg viewBox="0 0 14 12" width="13" height="11">
+            {[0, 1, 2, 3].map((i) => (
+              <rect key={i} x={i * 3.6} y={9 - i * 3} width="2.4" height={3 + i * 3} rx="0.6" fill="currentColor" />
+            ))}
+          </svg>
+          <svg viewBox="0 0 24 12" width="22" height="11">
+            <rect x="0.75" y="0.75" width="19.5" height="10.5" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <rect x="2.5" y="2.5" width="11.5" height="7" rx="1.2" fill="#9bd38f" />
+            <rect x="21.2" y="4" width="1.8" height="4" rx="0.8" fill="currentColor" />
+          </svg>
+          73%
+        </span>
       </div>
 
       <div className="ph-top">
