@@ -114,20 +114,22 @@ function phoneRect(s: Stage) {
 
 // bar 5 — the phone: the real app
 const PARTS = [
-  ['the verdict', 0.22],
-  ['the server: processor · memory · disk · temperature', 0.5],
-  ['each service, and a menu to act on it', 0.81],
+  // what it says, and where it is on the capture: [top, bottom] as fractions of its height
+  ['the verdict', 0.135, 0.385],
+  ['the server: processor · memory · disk · temperature', 0.405, 0.61],
+  ['each service, and a menu to act on it', 0.635, 0.98],
 ] as const
 function phone(s: Stage) {
   s.label('THE REAL APP')
   const r = phoneRect(s)
   s.shot(s.img.dashboard, r.x, r.y, r.w, { alpha: s.at(0, 0.4) })
-  PARTS.forEach(([says, y], i) => {
+  PARTS.forEach(([says, top, bottom], i) => {
     const p = s.at(0.8 + i, 0.4) * (1 - s.at(1.8 + i, 0.3) * (i < 2 ? 1 : 0))
-    const band = r.y + r.h * y
-    s.box(r.x - 14, band - r.h * 0.1, r.w + 28, r.h * 0.2, 18, undefined, s.c.accent, p)
+    const y0 = r.y + r.h * top
+    const y1 = r.y + r.h * bottom
+    s.box(r.x - 14, y0, r.w + 28, y1 - y0, 18, undefined, s.c.accent, p)
     if (s.p) s.text(says, s.cx, s.h * 0.86, { size: 30, align: 'center', color: s.c.text, alpha: p })
-    else s.text(says, r.x - 80, band + 10, { size: 28, align: 'right', alpha: p })
+    else s.text(says, r.x - 80, (y0 + y1) / 2 + 10, { size: 28, align: 'right', alpha: p })
   })
   s.text('every 10 s, live', s.p ? s.cx : r.x - 80, s.p ? s.h * 0.91 : s.h * 0.92, {
     size: 22, mono: true, align: s.p ? 'center' : 'right', color: s.c.muted, alpha: s.at(2, 0.5),

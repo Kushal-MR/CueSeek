@@ -40,6 +40,7 @@ export function Reel() {
   const [sound, setSound] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showSource, setShowSource] = useState(false)
+  const [flash, setFlash] = useState<{ n: number; playing: boolean } | null>(null)
   const [pos, setPos] = useState({ bar: 0, line: -1 })
   const userPaused = useRef(false)
   const bars = useMemo(() => splitSource(source), [])
@@ -104,6 +105,25 @@ export function Reel() {
     }
   }, [still])
 
+  // The light is lit while the reel plays: if the dot is sitting on it, it rests when paused.
+  useEffect(() => {
+    const dot = document.querySelector<HTMLElement>('.traveller')
+    const check = () => {
+      const l = led.current?.getBoundingClientRect()
+      const d = dot?.getBoundingClientRect()
+      const here = !!l && !!d && Math.hypot(l.x + l.width / 2 - (d.x + d.width / 2), l.y + l.height / 2 - (d.y + d.height / 2)) < 12
+      dot?.toggleAttribute('data-resting', here && !playing)
+    }
+    check()
+    addEventListener('scroll', check, { passive: true })
+    addEventListener('cueseek:dot-arrived', check)
+    return () => {
+      removeEventListener('scroll', check)
+      removeEventListener('cueseek:dot-arrived', check)
+      dot?.removeAttribute('data-resting')
+    }
+  }, [playing])
+
   const toggle = () => {
     const p = player.current
     if (!p) return
@@ -115,6 +135,7 @@ export function Reel() {
       userPaused.current = false
     }
     setPlaying(p.isPlaying)
+    setFlash((f) => ({ n: (f?.n ?? 0) + 1, playing: p.isPlaying }))
   }
   const toggleSound = async () => {
     const p = player.current
@@ -154,10 +175,17 @@ export function Reel() {
       >
         <canvas
           ref={canvas}
+          onClick={toggle}
           role="img"
           aria-label="A 24-second reel: is everything fine? — Operational. The real phone and watch apps, a service needing attention, a restart that is asked rather than assumed, a shutdown that needs a hold, the three tiers of services, and the CueSeek logo."
         />
         <span className="reel-station" data-station="reel" aria-hidden="true" />
+        {/* A tap on the picture plays or pauses it; this flashes which, as players do. */}
+        {flash && (
+          <span key={flash.n} className="reel-flash" aria-hidden="true">
+            {flash.playing ? '▶' : '❚❚'}
+          </span>
+        )}
         {showSource && (
           <pre className="reel-source" aria-label={`The code for bar ${pos.bar + 1}`}>
             {block?.lines.map((l, i) => (

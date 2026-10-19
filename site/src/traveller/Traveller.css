@@ -37,3 +37,10 @@
   0%, 100% { box-shadow: 0 0 10px var(--glow); }
   50% { box-shadow: 0 0 2px var(--glow), 0 0 0 9px color-mix(in srgb, var(--accent) 22%, transparent); }
 }
+
+/* A light that has been switched off where it rests (the reel, paused). */
+.traveller[data-resting] .traveller-body {
+  animation: none;
+  opacity: 0.4;
+  box-shadow: none;
+}

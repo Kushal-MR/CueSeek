@@ -33,6 +33,33 @@
   display: block;
   width: 100%;
   height: 100%;
+  cursor: pointer;
+}
+.reel-flash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  margin: -42px 0 0 -42px;
+  border-radius: 50%;
+  background: rgb(10 13 11 / 0.6);
+  color: #e2e7de;
+  font: 500 26px var(--sans);
+  pointer-events: none;
+  animation: flash 600ms ease-out both;
+}
+@keyframes flash {
+  from {
+    opacity: 1;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.25);
+  }
 }
 .reel-station {
   position: absolute;
