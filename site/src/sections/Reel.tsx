@@ -78,6 +78,9 @@ export function Reel() {
         if (e.isIntersecting && !userPaused.current) {
           p.play()
           setPlaying(true)
+          // Compose the soundtrack now, quietly, so "Sound" answers at once when pressed.
+          const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1500))
+          idle(() => void p.compose())
         } else if (!e.isIntersecting && p.isPlaying) {
           p.pause()
           setPlaying(false)

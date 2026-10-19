@@ -7,7 +7,7 @@ import watch from '../assets/screens/watch-dashboard.webp'
 import complication from '../assets/screens/watch-complication.webp'
 import { BAR_SECONDS, LENGTH, type Images, type Palette, Stage } from './kit.ts'
 import { SCENES } from './scenes.ts'
-import { renderSoundtrack } from './synth.ts'
+import { composeSoundtrack } from './synth.ts'
 
 const SOURCES = { dashboard, jfPage, jfNow, qbPage, qbNow, watch, complication }
 const TOKENS = ['bg', 'card', 'text', 'muted', 'accent', 'hi', 'line', 'ok', 'warn', 'bad', 'glow'] as const
@@ -28,7 +28,7 @@ export class ReelPlayer {
   private startTime = 0
   private audio: AudioContext | null = null
   private buffer: AudioBuffer | null = null
-  private source: AudioBufferSourceNode | null = null
+  private sources: AudioBufferSourceNode[] = []
   private sound = false
   /** Told the time on every frame, for the controls and the source view. */
   onTick: (t: number) => void = () => {}
@@ -71,8 +71,8 @@ export class ReelPlayer {
         // Loop: back to bar 1, picture and sound together.
         t %= LENGTH
         this.startTime = t
-        this.startedAt = performance.now() - 0
-        this.startAudio()
+        this.startedAt = performance.now()
+        this.startAudio(true) // the old soundtrack's last chord rings on over bar 1
       }
       this.time = t
       this.draw()
@@ -100,39 +100,47 @@ export class ReelPlayer {
     this.seek(bar * BAR_SECONDS + 0.001)
   }
 
-  /** Turn the sound on or off. The first time, the soundtrack is synthesised (≈ a second). */
+  /** Turn the sound on or off. The soundtrack is composed once, ahead of time if it can be. */
   async setSound(on: boolean) {
     this.sound = on
     if (!on) return this.stopAudio()
     this.audio ??= new AudioContext()
-    // Compose first (≈ 0.4 s, after a frame so "Composing…" can show); the context starts on
-    // this same click, but is not waited for.
-    if (!this.buffer) await new Promise((r) => setTimeout(r, 40))
-    this.buffer ??= renderSoundtrack(this.audio)
-    void this.audio.resume()
-    // Re-anchor to now: rendering took a moment, and the picture kept going.
+    void this.audio.resume() // starts on this same click; not waited for
+    this.buffer ??= await this.compose()
+    // Re-anchor to now: composing may have taken a moment, and the picture kept going.
     this.startTime = this.time
     this.startedAt = performance.now()
     if (this.playing) this.startAudio()
   }
 
-  private startAudio() {
-    this.stopAudio()
+  private composing: Promise<AudioBuffer> | null = null
+  /** Compose the soundtrack (offline, off the main thread); once, however often asked. */
+  compose() {
+    this.composing ??= composeSoundtrack().then((b) => (this.buffer = b))
+    return this.composing
+  }
+
+  /** Play the soundtrack from the picture's time. `ringOn`: leave the previous one sounding. */
+  private startAudio(ringOn = false) {
+    if (!ringOn) this.stopAudio()
     if (!this.sound || !this.audio || !this.buffer || !this.playing) return
     const src = this.audio.createBufferSource()
     src.buffer = this.buffer
     src.connect(this.audio.destination)
     src.start(0, this.time)
-    this.source = src
+    src.onended = () => (this.sources = this.sources.filter((x) => x !== src))
+    this.sources.push(src)
   }
 
   private stopAudio() {
-    try {
-      this.source?.stop()
-    } catch {
-      // already stopped
+    for (const src of this.sources) {
+      try {
+        src.stop()
+      } catch {
+        // already stopped
+      }
     }
-    this.source = null
+    this.sources = []
   }
 
   /** Size the canvas to its box, at the screen's own pixel density. */

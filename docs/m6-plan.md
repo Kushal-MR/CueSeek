@@ -187,8 +187,14 @@ pointer or jumps when poked.
 
 Built from its own storyboard (`.site-ref/reel-storyboard.html`, draft 1), on Kushal's word
 to build it and judge it running. Twelve bars at 120 BPM, 24 s, drawn on a canvas by
-`site/src/reel/scenes.ts` every frame — so it follows the knob — with the proof's synth
-ported to the browser (`synth.ts`, composed in ≈ 0.4 s the first time sound is turned on).
+`site/src/reel/scenes.ts` every frame — so it follows the knob. The proof's synth was ported
+first and judged "not good at all"; Kushal chose a calm-keynote score instead, and `synth.ts`
+now composes it with the browser's own audio graph in an OfflineAudioContext — pads, a soft
+electric piano, a ducked sub, a half-time beat, chimes on the reel's events — built bar by bar
+just before each renders (a node that exists is a node the renderer works on), at 32 kHz.
+It is composed in the background while the reel first plays, silent, and runs 3 s past the
+picture so the last chord rings over the loop's first bar. Each revision was listened to by
+Gemini (ears only) and measured here; Kushal's ear is the judge.
 "View source" shows that same file, cut at each bar, the running line lit. A phone gets the
 scenes composed at 4:5, the cut M6.14 exports. The dot enters the reel and becomes the
 player's light.
