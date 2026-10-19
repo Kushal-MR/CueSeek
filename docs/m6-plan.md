@@ -260,8 +260,8 @@ Measured, then fixed what the measurements showed.
 
 The arrival plays once per visit. The M4.9 placeholder (`docs/index.html`, GitHub Pages)
 now sends visitors on to cueseek.vercel.app. The README's screenshot is the M6.6 capture —
-HomeServer, not the real machine's name. And the README, on Kushal's word that a long one
-reads as unread-able and machine-written, is now one screen: what it is, the three facts that
+HomeServer, not the real machine's name. And the README, on Kushal's word that a long one goes unread and looks machine-written,
+is now one screen: what it is, the three facts that
 matter, the install, and links. Nothing was dropped: the architecture, what works today,
 the repository layout and development moved to `docs/architecture.md`, the roadmap to
 `docs/roadmap.md`, and the watch's install steps to `docs/install.md` — where a stale note
