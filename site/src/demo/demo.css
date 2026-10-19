@@ -619,11 +619,14 @@
   right: 0;
   z-index: 1;
   padding: 9px 0 16px;
-  background: linear-gradient(#0e1210 62%, rgb(14 18 16 / 0));
   pointer-events: none;
+  transition: background 200ms;
   text-align: center;
   font: 11px var(--mono);
   color: #b4bcb1;
+}
+.wd-face[data-scrolled] .wd-time {
+  background: linear-gradient(#0e1210 62%, rgb(14 18 16 / 0));
 }
 .wd-scroll {
   height: 100%;

@@ -10,6 +10,9 @@ import { type ServiceId, type State, actionsFor, invoke, verdict, watchHandoff }
 export function Watch({ st }: { st: State }) {
   const [open, setOpen] = useState<ServiceId | null>(null)
   const [confirming, setConfirming] = useState(false)
+  // The fade under the clock is only for content that has scrolled up beneath it.
+  const [scrolled, setScrolled] = useState(false)
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => setScrolled(e.currentTarget.scrollTop > 2)
   const services = Object.values(st.services)
   const healthy = services.filter((s) => s.status === 'healthy').length
   const on = st.power === 'on'
@@ -24,10 +27,10 @@ export function Watch({ st }: { st: State }) {
 
   return (
     <div className="watch-demo" aria-label="The CueSeek watch app">
-      <div className="wd-face">
+      <div className="wd-face" data-scrolled={scrolled || undefined}>
         <div className="wd-time">11:11</div>
         {!s || !on ? (
-          <div className="wd-scroll">
+          <div className="wd-scroll" onScroll={onScroll}>
             <div className="wd-host">HomeServer</div>
             <div className="wd-verdict" data-tone={!on ? 'off' : v === 'Operational' ? 'ok' : 'warn'}>
               {v}
@@ -35,7 +38,7 @@ export function Watch({ st }: { st: State }) {
             <div className="wd-count">{on ? `${healthy}/${services.length} healthy` : 'can’t reach it'}</div>
             {on &&
               services.map((x) => (
-                <button key={x.id} type="button" className="wd-row" onClick={() => setOpen(x.id)}>
+                <button key={x.id} type="button" className="wd-row" onClick={() => (setOpen(x.id), setScrolled(false))}>
                   <i data-tone={x.status} />
                   <span>
                     {x.name}
@@ -45,8 +48,8 @@ export function Watch({ st }: { st: State }) {
               ))}
           </div>
         ) : (
-          <div className="wd-scroll">
-            <button type="button" className="wd-back" onClick={() => (setOpen(null), setConfirming(false))} aria-label="Back">
+          <div className="wd-scroll" onScroll={onScroll}>
+            <button type="button" className="wd-back" onClick={() => (setOpen(null), setConfirming(false), setScrolled(false))} aria-label="Back">
               ‹
             </button>
             <div className="wd-title">{s.name}</div>

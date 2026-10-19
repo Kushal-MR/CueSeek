@@ -157,6 +157,7 @@ function later(ms: number, f: () => void) {
 }
 
 function note(n: Omit<Note, 'id'>) {
+  if (state.notes[0]?.title === n.title) return // already the newest thing said
   set((s) => ({ ...s, notes: [{ ...n, id: ++noteId }, ...s.notes].slice(0, 6) }))
 }
 
@@ -270,7 +271,8 @@ function power(action: string, from: 'phone' | 'watch') {
 
 export const scenarios = {
   disconnect() {
-    if (state.power !== 'on' || !state.services.qbittorrent.running) return
+    const q = state.services.qbittorrent
+    if (state.power !== 'on' || !q.running || q.status === 'degraded') return // it already has
     patch('qbittorrent', {
       status: 'degraded',
       reason: 'qBittorrent is running but not connected to any peers. Check the host’s network and qBittorrent’s connection settings.',
