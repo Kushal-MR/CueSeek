@@ -46,5 +46,11 @@ export default defineConfig({
     },
   },
   server: { fs: { allow: ['..'] } },
+  // Two pages: the site, and the demo it leads to (M6.11).
+  build: {
+    rollupOptions: {
+      input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), demo: fileURLToPath(new URL('./demo.html', import.meta.url)) },
+    },
+  },
   preview: { headers },
 })

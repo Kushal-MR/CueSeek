@@ -91,7 +91,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.8 | The watch on its strap | M6.5 | ✅ |
 | M6.9 | The reel, ported to the browser | M6.6 | ✅ |
 | M6.10 | Why it is built this way | M6.5 | ✅ |
-| M6.11 | The demo page | M6.5 | ⬜ |
+| M6.11 | The demo page | M6.5 | ✅ |
 | M6.12 | The download page | M6.2 | ⬜ |
 | M6.13 | Phones, reduced motion, accessibility, weight | all above | ⬜ |
 | M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ⬜ |
@@ -211,6 +211,19 @@ the press-and-hold is for stopping a service and for powering the machine off. O
 note shows the record's own words — its Decision section, imported from `docs/` at build
 time (`@docs`), so the quotation cannot drift from the record. The dot deals the notes and
 marks the open one; on a phone, where the notes are a row to swipe, it is the page marker.
+
+### M6.11 — The demo page
+
+A second page, `/demo`: a pretend HomeServer in the tab (`site/src/demo/sim.ts`), the phone
+and watch apps redrawn beside it, things to make happen, and a "why" note for each. It uses
+the agent's own words — the verdict, every action's label and description
+(`lifecycle.go`, `host.go`) — and the apps' rules: Start fires from the menu, Restart asks
+for a confirmation, Stop and both power actions are a 1.2 s hold timed by the clock, every
+action is *asked* and the row changes only when the server reports back, and the watch has
+no power controls. One correction to the storyboard: its scenario was qBittorrent
+*Degraded — firewalled*; the demo loses the connection instead, which is what degrades it,
+and the note explains why firewalled alone would not. Section 07 on the main page is the
+band that leads there; the dot is its button's light.
 
 ### M6.14 — Sharing
 

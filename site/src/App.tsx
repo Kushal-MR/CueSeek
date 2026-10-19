@@ -7,6 +7,7 @@ import { WorksWith } from './sections/WorksWith.tsx'
 import { Wrist } from './sections/Wrist.tsx'
 import { Reel } from './sections/Reel.tsx'
 import { Why } from './sections/Why.tsx'
+import { Try } from './sections/Try.tsx'
 import { Traveller } from './traveller/Traveller.tsx'
 import './App.css'
 
@@ -18,7 +19,6 @@ const REPO = 'https://github.com/Kushal-MR/CueSeek'
  * promise to load nothing but itself; the showpieces arrive one phase at a time.
  */
 const SECTIONS = [
-  { id: 'try', n: '07', title: 'Break a server. Nothing will happen.', phase: 'M6.11' },
   { id: 'download', n: '08', title: 'Install it.', phase: 'M6.12' },
 ] as const
 
@@ -29,6 +29,10 @@ export default function App() {
         <a className="brand" href="#top">
           <Mark size={20} />
           CueSeek
+        </a>
+        <a className="demo-cta" href="./demo">
+          <span aria-hidden="true" />
+          Try the demo
         </a>
         <nav aria-label="Sections">
           <a href="#answer">How it works</a>
@@ -47,6 +51,7 @@ export default function App() {
         <Wrist />
         <Reel />
         <Why />
+        <Try />
 
         {SECTIONS.map((s) => (
           <section key={s.id} id={s.id} className="stub" aria-labelledby={`${s.id}-title`}>
