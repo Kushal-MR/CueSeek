@@ -137,7 +137,7 @@ export function Why() {
       }
       order = arrivedGoing === 'down' ? [0, 1, 2, 3, 4, 5] : [5, 4, 3, 2, 1, 0]
       next = 0
-      dotTo(mark(order[0]), { scale: 0.36, dur: 220 })
+      dotTo(mark(order[0]), { scale: 0.36, dur: 380 })
     }
     const onArrive = (e: Event) => {
       const el = (e as CustomEvent<Element>).detail
@@ -152,7 +152,8 @@ export function Why() {
         note.classList.add('tapped')
       }
       next += 1
-      if (next < order.length) timer = window.setTimeout(() => dotTo(mark(order[next]), { scale: 0.36, dur: 240 }), 140)
+      // Unhurried: each note gets its moment before the dot moves on.
+      if (next < order.length) timer = window.setTimeout(() => dotTo(mark(order[next]), { scale: 0.36, dur: 450 }), 380)
       else next = -1
     }
     addEventListener(LAND_EVENT, onLand)
