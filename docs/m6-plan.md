@@ -149,7 +149,7 @@ a Jellyfin library seen only by a `Demo` user; and the Debian 13.7 netinst and U
 `HomeServer` (the agent reports the real one and has no display name — adding one would be a
 product change), no other user, torrent, film, address or notification visible.
 
-**Shot 2026-10-19.** Thirteen captures in `site/src/assets/captures/` (WebP), plus the
+**Shot 2026-10-19.** Thirteen captures in `site/src/assets/screens/` (WebP), plus the
 dashboard for section 02, cut from P1 to the README picture's exact frame so the "live" dot
 and the camera tour line up unchanged. The film playing was *Tears of Steel*. In every phone
 and watch shot the clock reads 11:11 and the status bar keeps only Wi-Fi, signal and
