@@ -89,7 +89,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.6 | Staging on the HP, and every capture | M6.1 | ✅ |
 | M6.7 | What it works with | M6.5, M6.6 | ✅ |
 | M6.8 | The watch on its strap | M6.5 | ✅ |
-| M6.9 | The reel, ported to the browser | M6.6 | ⬜ |
+| M6.9 | The reel, ported to the browser | M6.6 | ✅ |
 | M6.10 | Why it is built this way | M6.5 | ⬜ |
 | M6.11 | The demo page | M6.5 | ⬜ |
 | M6.12 | The download page | M6.2 | ⬜ |
@@ -182,6 +182,20 @@ app, the M6.6 captures, inside a generic case drawn in code (no brand's design);
 through them as the real app does. The strap is a small Verlet rope (`strap.ts`), and the
 dot's job is the pin it hangs from: the strap follows the dot as it leans toward the
 pointer or jumps when poked.
+
+### M6.9 — The reel
+
+Built from its own storyboard (`.site-ref/reel-storyboard.html`, draft 1), on Kushal's word
+to build it and judge it running. Twelve bars at 120 BPM, 24 s, drawn on a canvas by
+`site/src/reel/scenes.ts` every frame — so it follows the knob — with the proof's synth
+ported to the browser (`synth.ts`, composed in ≈ 0.4 s the first time sound is turned on).
+"View source" shows that same file, cut at each bar, the running line lit. A phone gets the
+scenes composed at 4:5, the cut M6.14 exports. The dot enters the reel and becomes the
+player's light.
+
+One correction from the M5 proof: it showed qBittorrent *Degraded — firewalled*. The agent
+does not degrade for firewalled — it only adds a note, deliberately (`qbittorrent.go`);
+*disconnected* is what degrades it. The reel now shows that, in the agent's own words.
 
 ### M6.14 — Sharing
 
