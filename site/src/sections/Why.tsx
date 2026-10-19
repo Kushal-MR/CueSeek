@@ -144,6 +144,13 @@ export function Why() {
       if (next < 0 || !(el instanceof Element) || el !== mark(order[next])) return
       const i = order[next]
       setDealt((d) => new Set(d).add(i))
+      // Each note answers the dot: a small pop as it lands — on the first deal, and every visit.
+      const note = el.closest('.why-note')
+      if (note) {
+        note.classList.remove('tapped')
+        void (note as HTMLElement).offsetWidth
+        note.classList.add('tapped')
+      }
       next += 1
       if (next < order.length) timer = window.setTimeout(() => dotTo(mark(order[next]), { scale: 0.36, dur: 240 }), 140)
       else next = -1

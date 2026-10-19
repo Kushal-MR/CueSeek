@@ -44,6 +44,25 @@
 .why:not([data-in]) .why-note {
   opacity: 0;
 }
+/* The dot lands on a note: it lifts to meet it, and its mark lights. */
+.why-note.tapped {
+  animation: note-pop 420ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+.why-note.tapped .why-mark {
+  animation: mark-lit 600ms ease-out;
+}
+@keyframes note-pop {
+  35% {
+    transform: translateY(-6px) scale(1.025);
+    border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+    box-shadow: 0 14px 30px -18px var(--glow);
+  }
+}
+@keyframes mark-lit {
+  from {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+}
 .why-note[data-open] {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
