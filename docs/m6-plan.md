@@ -95,7 +95,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.12 | The download page | M6.2 | ✅ |
 | M6.13 | Phones, reduced motion, accessibility, weight | all above | ✅ |
 | M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ✅ |
-| M6.15 | Launch: the placeholder points to the new site; README links; the arrival back to once per visit (`ONCE_PER_VISIT` in `site/src/arrival/arriving.ts`) | all | ⬜ |
+| M6.15 | Launch: the placeholder points to the new site; README links; the arrival back to once per visit (`ONCE_PER_VISIT` in `site/src/arrival/arriving.ts`) | all | ✅ |
 
 ### M6.1 — Storyboard
 
@@ -255,6 +255,18 @@ Measured, then fixed what the measurements showed.
   overflow, nothing left invisible once its section is reached, every control named,
   every image described, one h1 and an ordered outline on both pages, and every one of the
   97 Tab stops across both pages shows a focus ring.
+
+### M6.15 — Launch
+
+The arrival plays once per visit. The M4.9 placeholder (`docs/index.html`, GitHub Pages)
+now sends visitors on to cueseek.vercel.app. The README's screenshot is the M6.6 capture —
+HomeServer, not the real machine's name. And the README, on Kushal's word that a long one goes unread and looks machine-written,
+is now one screen: what it is, the three facts that
+matter, the install, and links. Nothing was dropped: the architecture, what works today,
+the repository layout and development moved to `docs/architecture.md`, the roadmap to
+`docs/roadmap.md`, and the watch's install steps to `docs/install.md` — where a stale note
+about source builds (true only before `v0.1.1`) was corrected on the way. Still to come from
+Kushal: the LinkedIn link for the footer.
 
 ### M6.14 — Sharing
 
