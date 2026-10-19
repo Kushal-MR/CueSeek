@@ -27,8 +27,12 @@ function wristFindings(md: string) {
 }
 
 /** In the order of section 06's notes. Fails the build if a record no longer has its excerpt. */
-export function quotes(docs: string): string[][] {
-  const read = (path: string) => readFileSync(`${docs}/${path}`, 'utf8')
+export function quotes(docs: string): { quotes: string[][]; files: string[] } {
+  const files: string[] = []
+  const read = (path: string) => {
+    files.push(`${docs}/${path}`)
+    return readFileSync(`${docs}/${path}`, 'utf8')
+  }
   const all = [
     decision(read('adr/0001-vpn-only-remote-access.md')).slice(0, 1),
     decision(read('adr/0002-host-privilege-dbus-polkit.md')).slice(0, 2),
@@ -40,5 +44,5 @@ export function quotes(docs: string): string[][] {
   all.forEach((q, i) => {
     if (!q.length || q.some((p) => !p)) throw new Error(`section 06: note ${i + 1}'s excerpt is no longer in its record`)
   })
-  return all
+  return { quotes: all, files }
 }

@@ -270,6 +270,21 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+      # The build and the dev server resolve modules differently; a plugin can work in one
+      # and break the other (it has: #89's quotes plugin built fine and stopped `npm run dev`).
+      # Ask the dev server for every page and section module, as a browser would.
+      - name: The dev server serves every module
+        run: |
+          npx vite --port 5199 --strictPort > "$RUNNER_TEMP/vite.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:5199/ > /dev/null && break; sleep 1; done
+          fail=0
+          for m in src/main.tsx src/App.tsx src/demo/main.tsx src/sections/*.tsx src/demo/*.tsx; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:5199/$m")
+            echo "$code $m"
+            [ "$code" = 200 ] || fail=1
+          done
+          [ "$fail" = 0 ] || { cat "$RUNNER_TEMP/vite.log"; exit 1; }
+
       # "This page loads nothing but itself" is a promise the placeholder made and M6 keeps.
       # The browser enforces it through the Content-Security-Policy in vercel.json; this
       # makes sure nobody loosens that policy without a red check saying so.
