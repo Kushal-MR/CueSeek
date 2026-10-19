@@ -90,7 +90,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.7 | What it works with | M6.5, M6.6 | ✅ |
 | M6.8 | The watch on its strap | M6.5 | ✅ |
 | M6.9 | The reel, ported to the browser | M6.6 | ✅ |
-| M6.10 | Why it is built this way | M6.5 | ⬜ |
+| M6.10 | Why it is built this way | M6.5 | ✅ |
 | M6.11 | The demo page | M6.5 | ⬜ |
 | M6.12 | The download page | M6.2 | ⬜ |
 | M6.13 | Phones, reduced motion, accessibility, weight | all above | ⬜ |
@@ -202,6 +202,15 @@ player's light.
 One correction from the M5 proof: it showed qBittorrent *Degraded — firewalled*. The agent
 does not degrade for firewalled — it only adds a note, deliberately (`qbittorrent.go`);
 *disconnected* is what degrades it. The reel now shows that, in the agent's own words.
+
+### M6.10 — Why it is built this way
+
+Six notes, each checked against its record before it shipped. One correction to the
+storyboard's copy: it said "a tap restarts". A restart asks for confirmation (`Disruptive`);
+the press-and-hold is for stopping a service and for powering the machine off. Opening a
+note shows the record's own words — its Decision section, imported from `docs/` at build
+time (`@docs`), so the quotation cannot drift from the record. The dot deals the notes and
+marks the open one; on a phone, where the notes are a row to swipe, it is the page marker.
 
 ### M6.14 — Sharing
 
