@@ -119,10 +119,15 @@ export function WorksWith() {
                   />
                   <span className="name">{s.name}</span>
                   <span className="what">{s.what}</span>
+                  <span className="go" aria-hidden="true">›</span>
                 </button>
               </li>
             ))}
           </ul>
+          <p className="svcs-hint" aria-hidden="true">
+            <span className="fine">Point at</span>
+            <span className="coarse">Tap</span> a service to see its own page
+          </p>
 
           <figure className="peek" data-show={shown}>
             <div className="peek-turn">

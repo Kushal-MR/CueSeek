@@ -63,24 +63,64 @@
 
 /* ---- Full support: the two services, each with its status light ---- */
 
+.svcs li {
+  border-top: 1px solid color-mix(in srgb, var(--card-text) 12%, transparent);
+  padding: 3px 0;
+}
 .svc {
   display: grid;
-  grid-template-columns: 10px auto 1fr;
+  grid-template-columns: 10px auto 1fr 12px;
   align-items: center;
   gap: 12px;
-  width: 100%;
-  padding: 9px 4px;
+  width: calc(100% + 16px);
+  margin: 0 -8px;
+  padding: 7px 8px;
   border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--card-text) 12%, transparent);
+  border-radius: 8px;
   background: none;
   color: inherit;
   font: inherit;
   font-size: 15px;
   text-align: left;
   cursor: pointer;
+  transition: background 200ms;
+}
+.svc:hover,
+.svc[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--card-text) 7%, transparent);
 }
 .svc .what {
   justify-self: end;
+}
+.svc .go {
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0.4;
+  transition:
+    opacity 200ms,
+    transform 200ms;
+}
+.svc:hover .go,
+.svc[aria-pressed='true'] .go {
+  opacity: 1;
+  transform: translateX(2px);
+  color: var(--accent);
+}
+.svcs-hint {
+  margin: 10px 0 0;
+  font: 11px var(--mono);
+  opacity: 0.72;
+}
+.svcs-hint .coarse {
+  display: none;
+}
+@media (pointer: coarse) {
+  .svcs-hint .fine {
+    display: none;
+  }
+  .svcs-hint .coarse {
+    display: inline;
+  }
 }
 .svc .light {
   width: 10px;

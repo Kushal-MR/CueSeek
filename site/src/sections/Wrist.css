@@ -55,16 +55,16 @@
 }
 .strap .edge {
   stroke: color-mix(in srgb, var(--line) 70%, var(--text) 30%);
-  stroke-width: calc(var(--r) * 0.66 + 2px);
+  stroke-width: calc(var(--r) * 0.82 + 2px);
   filter: drop-shadow(0 14px 14px rgb(0 0 0 / 0.35));
 }
 .strap .band {
   stroke: color-mix(in srgb, var(--card) 80%, #000);
-  stroke-width: calc(var(--r) * 0.66);
+  stroke-width: calc(var(--r) * 0.82);
 }
 .strap .sheen {
   stroke: color-mix(in srgb, var(--text) 7%, transparent);
-  stroke-width: calc(var(--r) * 0.2);
+  stroke-width: calc(var(--r) * 0.26);
 }
 .strap .holes {
   fill: none;
@@ -105,6 +105,7 @@
   cursor: grab;
   touch-action: none;
   user-select: none;
+  -webkit-user-drag: none;
   will-change: transform;
 }
 .watch:active {
@@ -135,6 +136,27 @@
 }
 .watch .dial img[data-on] {
   opacity: 1;
+}
+.watch .pages {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--r) * 0.0425 - 3px);
+  display: flex;
+  gap: 5px;
+  transform: translateX(-50%);
+}
+.watch .pages i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0b0d0b;
+  opacity: 0.6;
+  transition: opacity 200ms;
+}
+.watch .pages i[data-on] {
+  opacity: 1;
+  background: #cde8cf;
+  box-shadow: 0 0 4px #5f8f66;
 }
 .watch .crown {
   position: absolute;

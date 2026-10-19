@@ -164,6 +164,7 @@ export function Wrist() {
   }
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!strap.current) return
+    e.preventDefault() // no native image drag or text selection: the watch is what moves
     e.currentTarget.setPointerCapture(e.pointerId)
     const p = local(e)
     down.current = { ...p, t: e.timeStamp }
@@ -241,11 +242,18 @@ export function Wrist() {
             onPointerUp={onUp}
             onPointerCancel={onUp}
             onKeyDown={onKey}
+            onDragStart={(e) => e.preventDefault()}
           >
             <span className="crown" />
             <span className="dial">
               {SCREENS.map((s, i) => (
                 <img key={s.src} src={s.src} alt="" draggable={false} data-on={i === screen || undefined} />
+              ))}
+            </span>
+            {/* Which of the app's screens is showing, on the bezel below the screen. */}
+            <span className="pages" aria-hidden="true">
+              {SCREENS.map((s, i) => (
+                <i key={s.src} data-on={i === screen || undefined} />
               ))}
             </span>
           </div>
