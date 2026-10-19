@@ -1,7 +1,6 @@
 # CueSeek
 
-**Is everything on your home server fine?** One glance at your phone or your watch tells you —
-and lets you fix it when it isn't.
+**An operations console for self-hosted home servers**
 
 **[Website](https://cueseek.vercel.app)** · **[Try the demo](https://cueseek.vercel.app/demo)** ·
 **[Download v0.1.4](https://github.com/Kushal-MR/CueSeek/releases/tag/v0.1.4)**
