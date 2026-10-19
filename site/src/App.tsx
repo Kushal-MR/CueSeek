@@ -8,20 +8,17 @@ import { Wrist } from './sections/Wrist.tsx'
 import { Reel } from './sections/Reel.tsx'
 import { Why } from './sections/Why.tsx'
 import { Try } from './sections/Try.tsx'
+import { Download } from './sections/Download.tsx'
 import { Traveller } from './traveller/Traveller.tsx'
 import './App.css'
 
 const REPO = 'https://github.com/Kushal-MR/CueSeek'
 
 /**
- * The page's bones: every section from the approved storyboard, in order, each saying which
- * phase fills it. Deliberately plain — M6.2 proves the site builds, deploys and keeps its
- * promise to load nothing but itself; the showpieces arrive one phase at a time.
+ * The page, in the order of the approved storyboard: the arrival, the problem and the answer,
+ * what it works with, the watch, the reel, why it is built this way, the demo, and the
+ * download. The travelling dot is rendered once, over all of them.
  */
-const SECTIONS = [
-  { id: 'download', n: '08', title: 'Install it.', phase: 'M6.12' },
-] as const
-
 export default function App() {
   return (
     <>
@@ -52,15 +49,8 @@ export default function App() {
         <Reel />
         <Why />
         <Try />
+        <Download />
 
-        {SECTIONS.map((s) => (
-          <section key={s.id} id={s.id} className="stub" aria-labelledby={`${s.id}-title`}>
-            <span className="hud">
-              Section {s.n} — arrives in {s.phase}
-            </span>
-            <h2 id={`${s.id}-title`}>{s.title}</h2>
-          </section>
-        ))}
       </main>
       <Traveller />
 
@@ -68,7 +58,9 @@ export default function App() {
         <span>
           <Mark size={14} /> CueSeek · Apache-2.0 · this page loads nothing but itself
         </span>
-        <a href={REPO}>Source on GitHub</a>
+        <span>
+          Built by Kushal M R · <a href={REPO}>GitHub</a>
+        </span>
       </footer>
     </>
   )

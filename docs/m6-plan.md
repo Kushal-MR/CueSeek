@@ -92,7 +92,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.9 | The reel, ported to the browser | M6.6 | ✅ |
 | M6.10 | Why it is built this way | M6.5 | ✅ |
 | M6.11 | The demo page | M6.5 | ✅ |
-| M6.12 | The download page | M6.2 | ⬜ |
+| M6.12 | The download page | M6.2 | ✅ |
 | M6.13 | Phones, reduced motion, accessibility, weight | all above | ⬜ |
 | M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ⬜ |
 | M6.15 | Launch: the placeholder points to the new site; README links; the arrival back to once per visit (`ONCE_PER_VISIT` in `site/src/arrival/arriving.ts`) | all | ⬜ |
@@ -224,6 +224,17 @@ no power controls. One correction to the storyboard: its scenario was qBittorren
 *Degraded — firewalled*; the demo loses the connection instead, which is what degrades it,
 and the note explains why firewalled alone would not. Section 07 on the main page is the
 band that leads there; the dot is its button's light.
+
+### M6.12 — Download
+
+Section 08: the agent, the phone app and the watch app from the v0.1.4 release — names,
+sizes and requirements from the release and README "Installing" — and how to check them
+(`SHA256SUMS`, `SHA256SUMS-apk`, `gh attestation verify`, with the `gh` 2.49 caveat).
+Two corrections to the storyboard: pairing is not "scan the code" — there is no QR, you type
+the address and the code (`docs/pairing.md`) — and the APKs have their own checksum file.
+The release is one constant in `Download.tsx` for M6.15 and later releases. With every
+section real, the placeholder scaffolding is gone; the footer credits the author, with
+LinkedIn to come.
 
 ### M6.14 — Sharing
 
