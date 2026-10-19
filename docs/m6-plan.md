@@ -94,7 +94,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.11 | The demo page | M6.5 | ✅ |
 | M6.12 | The download page | M6.2 | ✅ |
 | M6.13 | Phones, reduced motion, accessibility, weight | all above | ✅ |
-| M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ⬜ |
+| M6.14 | Sharing: the MP4, a captioned 4:5 cut, the link preview image | M6.9 | ✅ |
 | M6.15 | Launch: the placeholder points to the new site; README links; the arrival back to once per visit (`ONCE_PER_VISIT` in `site/src/arrival/arriving.ts`) | all | ⬜ |
 
 ### M6.1 — Storyboard
@@ -261,6 +261,15 @@ Measured, then fixed what the measurements showed.
 The MP4 needs an encoder (ffmpeg, via `imageio-ffmpeg`). Approved in principle; installed
 only when this phase starts. The 4:5 cut has captions burned in, because feeds autoplay
 muted.
+
+**Done 2026-10-19,** with `imageio-ffmpeg` (ffmpeg 7.1) installed on Kushal's go-ahead. The
+videos are rendered from the site's own modules — `scenes.ts`, `kit.ts`, `synth.ts` — frame by
+frame in headless Chrome, not screen-recorded: 27 s (the reel, then the end card held while
+the last chord rings out), 30 fps, H.264 and AAC. The 16:9 cut is 1920×1080 (2.2 MB); the
+4:5 cut is 1080×1350 (2.0 MB) with one plain caption a bar, in a band under the picture.
+They are for posting, not for the site, and live outside the repository. The link preview
+(`site/public/og.png`, 1200×630) is the reel's end card; both pages carry Open Graph and
+Twitter-card tags pointing at it.
 
 ### Still to come from Kushal
 
