@@ -86,7 +86,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.4 | Arrival: the fly-in and the wave | M6.3 | ✅ |
 | M6.5 | Problem and answer, with triggered camera moves | M6.4 | ✅ |
 | M6.5b | The dot travels: it leaves the logo, hops to each section and cues it, and comes home | M6.5 | ✅ |
-| M6.6 | Staging on the HP, and every capture | M6.1 | ⬜ |
+| M6.6 | Staging on the HP, and every capture | M6.1 | ✅ |
 | M6.7 | What it works with | M6.5, M6.6 | ⬜ |
 | M6.8 | The watch on its strap | M6.5 | ⬜ |
 | M6.9 | The reel, ported to the browser | M6.6 | ⬜ |
@@ -137,7 +137,7 @@ a Jellyfin library seen only by a `Demo` user; and the Debian 13.7 netinst and U
 | | Screen | State |
 | --- | --- | --- |
 | P1 | Phone dashboard | Operational; both services running |
-| P2 | Phone, Jellyfin | Demo playing *Sintel* |
+| P2 | Phone, Jellyfin | Demo playing a film |
 | P3 | Phone, qBittorrent | both ISOs downloading |
 | P4 | Phone, Restart dialog | the confirmation only — cancelled |
 | P5 | Phone, Shut down dialog | the hold only — cancelled, never held |
@@ -149,8 +149,19 @@ a Jellyfin library seen only by a `Demo` user; and the Debian 13.7 netinst and U
 `HomeServer` (the agent reports the real one and has no display name — adding one would be a
 product change), no other user, torrent, film, address or notification visible.
 
+**Shot 2026-10-19.** Thirteen captures in `site/src/assets/captures/` (WebP), plus the
+dashboard for section 02, cut from P1 to the README picture's exact frame so the "live" dot
+and the camera tour line up unchanged. The film playing was *Tears of Steel*. In every phone
+and watch shot the clock reads 11:11 and the status bar keeps only Wi-Fi, signal and
+battery. P3 and Q1 are cropped above Kushal's own torrents. The repaint scripts live with
+the other scratch tools in `.site-ref/tools`.
+
+**Credit owed:** *Sintel* and *Tears of Steel* are © Blender Foundation under CC BY 3.0. Any
+page that shows their posters or titles credits them (the footer, from M6.7 on).
+
 **Afterwards:** the library, the Demo user and the torrents (with their data) removed in the
-services' own UIs; the films folder deleted.
+services' own UIs; the films folder deleted. Kept until M6.15 in case a later phase needs a
+reshoot.
 
 ### M6.14 — Sharing
 

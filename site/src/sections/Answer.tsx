@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-// The README's dashboard with the host renamed to HomeServer — a public page should not
-// carry a real machine's name. A stand-in until M6.6's fresh captures replace it.
-import dashboard from '../assets/dashboard.png'
+// M6.6's capture against the staged library, with the host renamed to HomeServer — a public
+// page should not carry a real machine's name.
+import dashboard from '../assets/dashboard.webp'
 import { Term } from './Term.tsx'
 import { useCue } from '../traveller/useCue.ts'
 import { LAND_EVENT, dotTo } from '../traveller/traveller.ts'
@@ -111,7 +111,7 @@ export function Answer() {
             <div className="screen">
               <img
                 src={dashboard}
-                alt="The CueSeek dashboard: the server reporting Operational, its processor, memory, disk and temperature, and Jellyfin and qBittorrent both running."
+                alt="The CueSeek dashboard: the server reporting Operational, its processor, memory, disk and temperature, with Jellyfin playing a film and qBittorrent downloading."
                 width={1272}
                 height={1460}
               />
