@@ -248,6 +248,7 @@
   color: var(--p-muted);
 }
 .ph-dots {
+  min-width: 32px;
   padding: 4px 8px;
   border: 0;
   background: none;

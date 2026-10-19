@@ -90,11 +90,27 @@
   gap: 8px;
 }
 .foot a {
+  display: inline-block;
+  padding: 6px 0;
   color: var(--text);
 }
 
 @media (max-width: 640px) {
   .nav nav a:not(:last-child) {
     display: none;
+  }
+  /* Taps, not clicks: every control in the bar is at least 32 px tall. */
+  .nav .brand,
+  .nav nav a {
+    padding: 6px 0;
+  }
+}
+/* The narrowest phones: the name, the demo and the knob. GitHub is in the footer. */
+@media (max-width: 400px) {
+  .nav nav {
+    display: none;
+  }
+  .nav .demo-cta {
+    margin-right: auto;
   }
 }

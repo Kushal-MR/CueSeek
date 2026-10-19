@@ -1,24 +1,24 @@
 @font-face {
   font-family: 'IBM Plex Sans';
-  src: url('@fonts/plex_sans_regular.ttf') format('truetype');
+  src: url('./assets/fonts/plex_sans_regular.woff') format('woff');
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: 'IBM Plex Sans';
-  src: url('@fonts/plex_sans_medium.ttf') format('truetype');
+  src: url('./assets/fonts/plex_sans_medium.woff') format('woff');
   font-weight: 500 700;
   font-display: swap;
 }
 @font-face {
   font-family: 'IBM Plex Mono';
-  src: url('@fonts/plex_mono_regular.ttf') format('truetype');
+  src: url('./assets/fonts/plex_mono_regular.woff') format('woff');
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: 'IBM Plex Mono';
-  src: url('@fonts/plex_mono_medium.ttf') format('truetype');
+  src: url('./assets/fonts/plex_mono_medium.woff') format('woff');
   font-weight: 500;
   font-display: swap;
 }

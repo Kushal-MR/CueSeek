@@ -1,36 +1,10 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import adr1 from '@docs/adr/0001-vpn-only-remote-access.md?raw'
-import adr2 from '@docs/adr/0002-host-privilege-dbus-polkit.md?raw'
-import adr4 from '@docs/adr/0004-contract-openapi-sse.md?raw'
-import adr5 from '@docs/adr/0005-capability-based-adapters.md?raw'
-import adr8 from '@docs/adr/0008-multi-host-and-computed-health.md?raw'
-import m5 from '@docs/m5-verification.md?raw'
+import QUOTES from 'virtual:why-quotes'
 import { useCue } from '../traveller/useCue.ts'
 import { LAND_EVENT, arrivedGoing, dotTo } from '../traveller/traveller.ts'
 import './Why.css'
 
 const BLOB = 'https://github.com/Kushal-MR/CueSeek/blob/main/docs/'
-
-/** The paragraphs of a record's "## Decision" section — quoted, never paraphrased. */
-function decision(md: string) {
-  const from = md.indexOf('## Decision')
-  const body = md.slice(md.indexOf('\n', from) + 1)
-  const end = body.search(/\n## /)
-  return paragraphs(end < 0 ? body : body.slice(0, end))
-}
-
-function paragraphs(text: string) {
-  return text
-    .split(/\n\s*\n|\n(?=- )/) // paragraphs, and each list item on its own
-    .map((p) => p.replace(/\s*\n\s*/g, ' ').trim())
-    .filter(Boolean)
-}
-
-/** The wrist's two findings, from the M5 verification record. */
-function wristFindings(md: string) {
-  const from = md.indexOf('**The wrist found two defects')
-  return paragraphs(md.slice(from, md.indexOf('That fix had a trap', from))).filter((p) => /^\*\*\d\./.test(p))
-}
 
 /**
  * Each note: a plain claim, the reason, and the record that decided it. Every claim was
@@ -42,42 +16,42 @@ const NOTES = [
     why: 'The server answers only over your private network. No port forwarding, nothing for a stranger to find.',
     cite: 'ADR-0001',
     href: `${BLOB}adr/0001-vpn-only-remote-access.md`,
-    quote: decision(adr1).slice(0, 1),
+    quote: QUOTES[0],
   },
   {
     claim: 'Never root.',
     why: 'The agent runs as an ordinary user. It can restart exactly the services you list, and nothing else — the operating system enforces it, not the app.',
     cite: 'ADR-0002',
     href: `${BLOB}adr/0002-host-privilege-dbus-polkit.md`,
-    quote: decision(adr2).slice(0, 2),
+    quote: QUOTES[1],
   },
   {
     claim: 'The server decides what "fine" means.',
     why: 'Health is worked out once, on the server, so your phone and your watch can never disagree about it.',
     cite: 'ADR-0008',
     href: `${BLOB}adr/0008-multi-host-and-computed-health.md`,
-    quote: decision(adr8).slice(1, 2),
+    quote: QUOTES[2],
   },
   {
     claim: 'It says "asked", not "done".',
     why: 'Pressing Restart sends a request. The app reports what the server later confirms — never a success it didn’t see.',
     cite: 'ADR-0004',
     href: `${BLOB}adr/0004-contract-openapi-sse.md`,
-    quote: decision(adr4).filter((p) => p.startsWith('- Writes')),
+    quote: QUOTES[3],
   },
   {
     claim: 'Shutting down takes a hold.',
     why: 'Every action carries its own risk level. A restart asks you to confirm; stopping a service or turning the machine off needs a deliberate press-and-hold.',
     cite: 'ADR-0005',
     href: `${BLOB}adr/0005-capability-based-adapters.md`,
-    quote: paragraphs(adr5).filter((p) => p.startsWith('- **Actions must be data**')),
+    quote: QUOTES[4],
   },
   {
     claim: 'Tested on a real wrist.',
     why: 'A day on a real watch against a real server found what the desk couldn’t: a clipped button, and a hold that could be held twice.',
     cite: 'Verification record',
     href: `${BLOB}m5-verification.md`,
-    quote: wristFindings(m5).map((p) => p.split(/(?<=\.)\s/).slice(0, 2).join(' ')),
+    quote: QUOTES[5],
   },
 ]
 
