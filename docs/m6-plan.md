@@ -88,7 +88,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.5b | The dot travels: it leaves the logo, hops to each section and cues it, and comes home | M6.5 | ✅ |
 | M6.6 | Staging on the HP, and every capture | M6.1 | ✅ |
 | M6.7 | What it works with | M6.5, M6.6 | ✅ |
-| M6.8 | The watch on its strap | M6.5 | ⬜ |
+| M6.8 | The watch on its strap | M6.5 | ✅ |
 | M6.9 | The reel, ported to the browser | M6.6 | ⬜ |
 | M6.10 | Why it is built this way | M6.5 | ⬜ |
 | M6.11 | The demo page | M6.5 | ⬜ |
@@ -172,6 +172,16 @@ not fit. And the "flip" became a peek inside the full-support card: the service'
 page with CueSeek's view of the same moment over it, turning between Jellyfin and
 qBittorrent. The dot is the selection light: it lands on a service's status light, that
 service's page turns up, and afterwards it follows whichever service the reader points at.
+
+### M6.8 — The watch on its strap
+
+One correction to the storyboard's copy: it said a restart on the watch is a press-and-hold.
+It is a tap and a confirm — `Disruptive` in `ActionControls.kt` — and the press-and-hold is
+for stopping a service (`Destructive`). The page now says so. The face shows the real watch
+app, the M6.6 captures, inside a generic case drawn in code (no brand's design); a tap walks
+through them as the real app does. The strap is a small Verlet rope (`strap.ts`), and the
+dot's job is the pin it hangs from: the strap follows the dot as it leans toward the
+pointer or jumps when poked.
 
 ### M6.14 — Sharing
 

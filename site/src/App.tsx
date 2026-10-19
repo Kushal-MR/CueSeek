@@ -4,6 +4,7 @@ import { Arrival } from './arrival/Arrival.tsx'
 import { Problem } from './sections/Problem.tsx'
 import { Answer } from './sections/Answer.tsx'
 import { WorksWith } from './sections/WorksWith.tsx'
+import { Wrist } from './sections/Wrist.tsx'
 import { Traveller } from './traveller/Traveller.tsx'
 import './App.css'
 
@@ -15,7 +16,6 @@ const REPO = 'https://github.com/Kushal-MR/CueSeek'
  * promise to load nothing but itself; the showpieces arrive one phase at a time.
  */
 const SECTIONS = [
-  { id: 'wrist', n: '04', title: 'Same answer, on your wrist.', phase: 'M6.8' },
   { id: 'reel', n: '05', title: 'This video is not a video.', phase: 'M6.9' },
   { id: 'why', n: '06', title: "Why it's built this way.", phase: 'M6.10' },
   { id: 'try', n: '07', title: 'Break a server. Nothing will happen.', phase: 'M6.11' },
@@ -44,6 +44,7 @@ export default function App() {
         <Problem />
         <Answer />
         <WorksWith />
+        <Wrist />
 
         {SECTIONS.map((s) => (
           <section key={s.id} id={s.id} className="stub" aria-labelledby={`${s.id}-title`}>

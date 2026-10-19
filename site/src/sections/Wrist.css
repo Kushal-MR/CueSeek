@@ -1,0 +1,229 @@
+.wrist {
+  position: relative;
+  padding: 120px clamp(20px, 4vw, 44px) 80px;
+  overflow: clip; /* a thrown watch may leave the stage, never widen the page */
+}
+.wrist-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(24px, 4vw, 64px);
+  align-items: center;
+  margin-top: 36px;
+}
+.wrist-copy h2 {
+  margin: 0;
+  font-size: clamp(36px, 4.4vw, 60px);
+  line-height: 1.04;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.wrist-copy p {
+  margin: 22px 0 0;
+  max-width: 30em;
+  color: var(--muted);
+  font-size: clamp(16px, 1.4vw, 18.5px);
+}
+.wrist-copy b {
+  color: var(--text);
+  font-weight: 500;
+}
+.wrist-copy .small {
+  font-size: 13.5px;
+}
+
+/* ---- The stage: a pin, a strap, a watch ---- */
+
+.wrist-stage {
+  position: relative;
+  height: calc(var(--r) * 2 + 390px);
+  touch-action: pan-y;
+}
+.strap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.strap .edge,
+.strap .band,
+.strap .sheen {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.strap .edge {
+  stroke: color-mix(in srgb, var(--line) 70%, var(--text) 30%);
+  stroke-width: calc(var(--r) * 0.82 + 2px);
+  filter: drop-shadow(0 14px 14px rgb(0 0 0 / 0.35));
+}
+.strap .band {
+  stroke: color-mix(in srgb, var(--card) 80%, #000);
+  stroke-width: calc(var(--r) * 0.82);
+}
+.strap .sheen {
+  stroke: color-mix(in srgb, var(--text) 7%, transparent);
+  stroke-width: calc(var(--r) * 0.26);
+}
+.strap .holes {
+  fill: none;
+  stroke: var(--bg);
+  stroke-width: 6px;
+  stroke-linecap: round;
+  stroke-dasharray: 0 20;
+  opacity: 0.9;
+}
+.pin {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--hi);
+  box-shadow: 0 0 12px var(--glow);
+}
+.pin[data-hidden] {
+  opacity: 0;
+}
+
+.watch {
+  position: absolute;
+  left: calc(var(--r) * -1);
+  top: calc(var(--r) * -1);
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 88%, rgb(0 0 0 / 0.35) 100%),
+    conic-gradient(from 200deg, #7d857c, #2f342f, #5d655c, #252925, #8a928a, #2f342f, #7d857c);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.18),
+    0 30px 50px -20px rgb(0 0 0 / 0.75);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform;
+}
+.watch:active {
+  cursor: grabbing;
+}
+.watch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 6px;
+}
+.watch .dial {
+  position: absolute;
+  inset: calc(var(--r) * 0.085);
+  border-radius: 50%;
+  overflow: hidden;
+  background: #000;
+  box-shadow:
+    0 0 0 calc(var(--r) * 0.03) #050605,
+    inset 0 0 calc(var(--r) * 0.12) rgb(0 0 0 / 0.8);
+}
+.watch .dial img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 280ms ease;
+  pointer-events: none;
+}
+.watch .dial img[data-on] {
+  opacity: 1;
+}
+.watch .pages {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--r) * 0.0425 - 3px);
+  display: flex;
+  gap: 5px;
+  transform: translateX(-50%);
+}
+.watch .pages i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0b0d0b;
+  opacity: 0.6;
+  transition: opacity 200ms;
+}
+.watch .pages i[data-on] {
+  opacity: 1;
+  background: #cde8cf;
+  box-shadow: 0 0 4px #5f8f66;
+}
+.watch .crown {
+  position: absolute;
+  right: calc(var(--r) * -0.07);
+  top: 50%;
+  width: calc(var(--r) * 0.11);
+  height: calc(var(--r) * 0.3);
+  margin-top: calc(var(--r) * -0.15);
+  border-radius: 4px;
+  background: linear-gradient(90deg, #2a2f2a, #4a514a);
+}
+
+.hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  text-align: center;
+  font: 500 11px var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: opacity 400ms;
+}
+.hint[data-gone] {
+  opacity: 0;
+}
+
+/* Before the cue the stage is empty but for the pin, waiting for the dot. */
+.wrist:not([data-in]) .watch,
+.wrist:not([data-in]) .strap,
+.wrist:not([data-in]) .hint {
+  opacity: 0;
+}
+.wrist:not([data-in]) .wrist-copy > * {
+  opacity: 0;
+}
+.wrist[data-in] .wrist-copy > * {
+  animation: rise 700ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.wrist[data-in] .wrist-copy > :nth-child(2) {
+  animation-delay: 150ms;
+}
+.wrist[data-in] .wrist-copy > :nth-child(3) {
+  animation-delay: 300ms;
+}
+.wrist[data-in] .hint {
+  animation: rise 600ms 2600ms both;
+}
+
+@media (max-width: 860px) {
+  .wrist-grid {
+    grid-template-columns: 1fr;
+  }
+  .wrist-stage {
+    order: -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrist * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .wrist:not([data-in]) .watch,
+  .wrist:not([data-in]) .strap,
+  .wrist:not([data-in]) .wrist-copy > * {
+    opacity: 1;
+  }
+}
