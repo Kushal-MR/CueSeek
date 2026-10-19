@@ -3,6 +3,7 @@ import { Knob } from './theme/Knob.tsx'
 import { Arrival } from './arrival/Arrival.tsx'
 import { Problem } from './sections/Problem.tsx'
 import { Answer } from './sections/Answer.tsx'
+import { WorksWith } from './sections/WorksWith.tsx'
 import { Traveller } from './traveller/Traveller.tsx'
 import './App.css'
 
@@ -14,7 +15,6 @@ const REPO = 'https://github.com/Kushal-MR/CueSeek'
  * promise to load nothing but itself; the showpieces arrive one phase at a time.
  */
 const SECTIONS = [
-  { id: 'works-with', n: '03', title: 'Works with what you already run.', phase: 'M6.7' },
   { id: 'wrist', n: '04', title: 'Same answer, on your wrist.', phase: 'M6.8' },
   { id: 'reel', n: '05', title: 'This video is not a video.', phase: 'M6.9' },
   { id: 'why', n: '06', title: "Why it's built this way.", phase: 'M6.10' },
@@ -43,6 +43,7 @@ export default function App() {
         <Arrival />
         <Problem />
         <Answer />
+        <WorksWith />
 
         {SECTIONS.map((s) => (
           <section key={s.id} id={s.id} className="stub" aria-labelledby={`${s.id}-title`}>

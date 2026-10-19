@@ -87,7 +87,7 @@ motion set gets a still version of every section, not a broken one.
 | M6.5 | Problem and answer, with triggered camera moves | M6.4 | ✅ |
 | M6.5b | The dot travels: it leaves the logo, hops to each section and cues it, and comes home | M6.5 | ✅ |
 | M6.6 | Staging on the HP, and every capture | M6.1 | ✅ |
-| M6.7 | What it works with | M6.5, M6.6 | ⬜ |
+| M6.7 | What it works with | M6.5, M6.6 | ✅ |
 | M6.8 | The watch on its strap | M6.5 | ⬜ |
 | M6.9 | The reel, ported to the browser | M6.6 | ⬜ |
 | M6.10 | Why it is built this way | M6.5 | ⬜ |
@@ -157,11 +157,21 @@ battery. P3 and Q1 are cropped above Kushal's own torrents. The repaint scripts 
 the other scratch tools in `.site-ref/tools`.
 
 **Credit owed:** *Sintel* and *Tears of Steel* are © Blender Foundation under CC BY 3.0. Any
-page that shows their posters or titles credits them (the footer, from M6.7 on).
+page that shows their posters or titles credits them — section 03 does, right under them.
 
 **Afterwards:** the library, the Demo user and the torrents (with their data) removed in the
 services' own UIs; the films folder deleted. Kept until M6.15 in case a later phase needs a
 reshoot.
+
+### M6.7 — What it works with
+
+The three tiers from the storyboard, every line checked against `docs/configure.md`. Two
+changes from it. The basic tier's "up · start · stop · restart" is said once, as the board's
+header, rather than on all five rows — repeated, it was noise, and on a narrow card it did
+not fit. And the "flip" became a peek inside the full-support card: the service's own web
+page with CueSeek's view of the same moment over it, turning between Jellyfin and
+qBittorrent. The dot is the selection light: it lands on a service's status light, that
+service's page turns up, and afterwards it follows whichever service the reader points at.
 
 ### M6.14 — Sharing
 
