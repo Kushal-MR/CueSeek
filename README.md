@@ -11,8 +11,8 @@
 
 CueSeek tells you whether everything on your home server is working, on your phone and on
 your watch, and lets you fix it when it isn't. A small agent on the server checks each
-service and the machine itself, and your devices get one answer: **Operational**, or exactly
-what needs attention.
+service and the machine itself; the phone and watch show a single status, **Operational**, or
+which services need attention and why.
 
 ## What you get
 
@@ -27,7 +27,7 @@ what needs attention.
   &nbsp;
   <img src="docs/images/phone-restart.png" alt="Restart machine? A warning that a stream is playing and two transfers are running, and a button that has to be held." height="420">
   &nbsp;
-  <img src="docs/images/watch.png" alt="The watch app: HomeServer, Operational, 2 of 2 healthy, with processor, memory and disk." height="200">
+  <img src="docs/images/watch.png" alt="The watch app: HomeServer, Operational, 2 of 2 healthy, with processor, memory and disk." height="420">
 </p>
 
 **What it works with:** Jellyfin and qBittorrent in full, with health from their own APIs plus
@@ -43,17 +43,18 @@ Full Plex support is planned.
  watch ──┘   or your LAN                         └──▶ systemd, logind          D-Bus, via one polkit rule
 ```
 
-- **It never runs as root.** One short [polkit rule](deploy/10-cueseek.rules) lists the units
-  it may start, stop and restart, plus reboot and power off. That rule is everything it can
-  do. ([ADR-0002](docs/adr/0002-host-privilege-dbus-polkit.md))
-- **It is never on the open internet.** You reach it over your own private network, so there
-  is no public endpoint that can turn your server off.
-  ([ADR-0001](docs/adr/0001-vpn-only-remote-access.md))
-- **It says "asked", not "done".** Pressing Restart sends a request; the app shows the result
-  only when the server reports it. Anything that takes something down needs a press-and-hold.
-  ([ADR-0004](docs/adr/0004-contract-openapi-sse.md), [ADR-0005](docs/adr/0005-capability-based-adapters.md))
-- **Every device has its own key.** The watch is paired separately and cannot power off the
-  server unless you allow it. ([ADR-0006](docs/adr/0006-device-pairing-scoped-tokens.md),
+- The agent runs as an unprivileged user. A [polkit rule](deploy/10-cueseek.rules) lists the
+  units it may start, stop and restart, plus reboot and power off, and it can do nothing else.
+  ([ADR-0002](docs/adr/0002-host-privilege-dbus-polkit.md))
+- You reach it over your private network (Tailscale, WireGuard or your LAN). It is not meant
+  to be exposed to the internet. ([ADR-0001](docs/adr/0001-vpn-only-remote-access.md))
+- Actions are requests. The app sends a restart, then waits for the server to report how it
+  went before showing it. Restarting asks for confirmation; stopping a service or powering
+  off needs a press-and-hold. ([ADR-0004](docs/adr/0004-contract-openapi-sse.md),
+  [ADR-0005](docs/adr/0005-capability-based-adapters.md))
+- Each device is paired with its own token and permissions. By default the watch can restart
+  services but cannot power off the server.
+  ([ADR-0006](docs/adr/0006-device-pairing-scoped-tokens.md),
   [ADR-0014](docs/adr/0014-watch-pairing-address-handoff.md))
 
 ## Install
