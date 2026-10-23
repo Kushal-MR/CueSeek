@@ -13,6 +13,7 @@ import { Traveller } from './traveller/Traveller.tsx'
 import './App.css'
 
 const REPO = 'https://github.com/Kushal-MR/CueSeek'
+const LINKEDIN = 'https://www.linkedin.com/in/kushal-mr/'
 
 /**
  * The page, in the order of the approved storyboard: the arrival, the problem and the answer,
@@ -59,7 +60,7 @@ export default function App() {
           <Mark size={14} /> CueSeek · Apache-2.0 · this page loads nothing but itself
         </span>
         <span>
-          Built by Kushal M R · <a href={REPO}>GitHub</a>
+          Built by Kushal M R · <a href={REPO}>GitHub</a> · <a href={LINKEDIN}>LinkedIn</a>
         </span>
       </footer>
     </>
