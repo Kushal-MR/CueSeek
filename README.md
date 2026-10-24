@@ -38,9 +38,19 @@ Full Plex support is planned.
 ## How it works
 
 ```
- phone ──┐                                       ┌──▶ Jellyfin, qBittorrent    their HTTP APIs
-         ├── Tailscale, WireGuard ──▶ cueseekd ──┤
- watch ──┘   or your LAN                         └──▶ systemd, logind          D-Bus, via one polkit rule
+   phone        watch
+     │            │
+     └─────┬──────┘
+           │  Tailscale, WireGuard or your LAN
+           ▼
+   ┌───────────────┐
+   │   cueseekd    │   one Go binary, never root
+   └───────┬───────┘
+           │
+     ┌─────┴──────────────────┐
+     ▼                        ▼
+   Jellyfin, qBittorrent    systemd, logind
+   their HTTP APIs          D-Bus, via one polkit rule
 ```
 
 - The agent runs as an unprivileged user. A [polkit rule](deploy/10-cueseek.rules) lists the
