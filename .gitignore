@@ -12,6 +12,8 @@ spike/
 # in the repository.
 .claude/settings.local.json
 .claude/*.local.json
+# The desktop app's dev-server preview config, made per machine.
+.claude/launch.json
 
 # ---------- Secrets & local config ----------
 # The agent's runtime state (device registry, token hashes, audit log) and any
