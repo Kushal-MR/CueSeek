@@ -1,0 +1,28 @@
+name: Support for another service
+description: Ask for full support for a service, such as Plex, Sonarr or Immich.
+labels: [service request]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Any service run by systemd already works at the basic level: running or stopped, plus start, stop and restart.
+        Full support means CueSeek asks the service itself whether it is working, and shows what it is doing.
+  - type: input
+    id: service
+    attributes:
+      label: Service
+      placeholder: Plex
+    validations:
+      required: true
+  - type: textarea
+    id: show
+    attributes:
+      label: What would you want to see at a glance?
+      description: For example, who is streaming, what is downloading, or a queue that is stuck.
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: Its API, if you know it
+      description: A link to the service's API documentation helps a lot.
