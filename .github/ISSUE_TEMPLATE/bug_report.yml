@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in the agent, the phone app or the watch app is not working.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Many problems are covered in [troubleshooting](https://github.com/Kushal-MR/CueSeek/blob/main/docs/troubleshooting.md), so it is worth a quick look first.
+        For a security problem, do not open an issue: use [private reporting](https://github.com/Kushal-MR/CueSeek/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part
+      options:
+        - Agent (cueseekd)
+        - Phone app
+        - Watch app
+        - Install or upgrade
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Agent version
+      description: The output of `cueseekd -version`.
+      placeholder: cueseekd v0.1.4 (linux/amd64, ...)
+  - type: input
+    id: system
+    attributes:
+      label: Server and devices
+      description: Linux distribution, and the phone or watch model if it is about an app.
+      placeholder: Ubuntu 24.04, Pixel 8, Galaxy Watch 6
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of `sudo cueseekd check`
+      description: It changes nothing and reports what is wrong with the install. Remove anything private, such as addresses, before pasting.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Agent logs
+      description: The output of `journalctl -u cueseekd -n 100 --no-pager`, with anything private removed.
+      render: text
