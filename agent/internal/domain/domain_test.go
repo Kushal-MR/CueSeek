@@ -73,6 +73,65 @@ func TestHasScope(t *testing.T) {
 	}
 }
 
+// TestHealthStatusIsAClosedSetOfFour: ADR-0008 makes a fifth status a contract change
+// shared by the API, both clients and the design system. If this fails, that decision is
+// being made here by accident.
+func TestHealthStatusIsAClosedSetOfFour(t *testing.T) {
+	if len(AllHealthStatuses) != 4 {
+		t.Fatalf("AllHealthStatuses has %d entries, want 4 (ADR-0008)", len(AllHealthStatuses))
+	}
+	for _, s := range AllHealthStatuses {
+		if !s.Valid() {
+			t.Errorf("%q is in AllHealthStatuses but reports invalid", s)
+		}
+	}
+	for _, s := range []HealthStatus{"", "ok", "down", "Healthy", "healthy "} {
+		if s.Valid() {
+			t.Errorf("%q reports valid", s)
+		}
+	}
+}
+
+func TestRiskLevelValidity(t *testing.T) {
+	for _, r := range []RiskLevel{RiskSafe, RiskDisruptive, RiskDestructive} {
+		if !r.Valid() {
+			t.Errorf("%q reports invalid", r)
+		}
+	}
+	// An unrecognised risk must not pass: clients gate confirmation on this value.
+	for _, r := range []RiskLevel{"", "critical", "SAFE"} {
+		if r.Valid() {
+			t.Errorf("%q reports valid", r)
+		}
+	}
+}
+
+// TestUnknownHealthIsTheHonestDefault: the zero Health has an empty status, which is not
+// one of the four. UnknownHealth exists so "I don't know" is the easy thing to write.
+func TestUnknownHealthIsTheHonestDefault(t *testing.T) {
+	var zero Health
+	if zero.Status.Valid() {
+		t.Fatal("the zero Health reports a valid status; UnknownHealth would have no reason to exist")
+	}
+
+	at := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	reason := HealthReason{Code: ReasonNotPolled, Message: "Not checked yet."}
+	h := UnknownHealth(at, reason)
+
+	if h.Status != StatusUnknown || !h.Status.Valid() {
+		t.Errorf("status = %q, want %q", h.Status, StatusUnknown)
+	}
+	if h.Reachable {
+		t.Error("an unknown observation claims the service was reachable")
+	}
+	if len(h.Reasons) != 1 || h.Reasons[0] != reason {
+		t.Errorf("reasons = %v, want exactly %v", h.Reasons, reason)
+	}
+	if !h.ObservedAt.Equal(at) {
+		t.Errorf("observed at %v, want %v", h.ObservedAt, at)
+	}
+}
+
 // TestDeviceCarriesNoSecret is a structural guard. A Device is passed to clients, logged
 // and serialised; ADR-0006 requires that a token exists in exactly one place. If someone
 // later adds a Token or TokenHash field for convenience, this fails.
