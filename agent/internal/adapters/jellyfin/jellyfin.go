@@ -324,16 +324,16 @@ func (a *adapter) unreachable(observedAt time.Time, err error) domain.Health {
 	}
 }
 
-// summarise strips the URL out of a transport error.
-//
-// net/http errors embed the full request URL, which for some services carries the API key
-// in a query string. This message ends up in an API response and in the log, so the URL
-// does not travel with it.
 // summariseErr is summarise's error-returning sibling, for paths that wrap rather than
 // render. Keeping one implementation of the URL-stripping means a credential cannot leak
 // through whichever of the two a future caller happens to pick.
 func summariseErr(err error) error { return errors.New(summarise(err)) }
 
+// summarise strips the URL out of a transport error.
+//
+// net/http errors embed the full request URL, which for some services carries the API key
+// in a query string. This message ends up in an API response and in the log, so the URL
+// does not travel with it.
 func summarise(err error) string {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) && urlErr.Err != nil {

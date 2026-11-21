@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -339,6 +340,36 @@ func TestErrorsDoNotLeakTheAPIKey(t *testing.T) {
 		if strings.Contains(reason.Message, testAPIKey) {
 			t.Errorf("reason leaks the API key: %q", reason.Message)
 		}
+	}
+}
+
+// TestSummariseStripsTheURL tests the stripping directly. The test above cannot fail on
+// its own, because this adapter sends the key in a header; a service that puts it in the
+// query string, or a future change here, relies on summarise doing its job.
+func TestSummariseStripsTheURL(t *testing.T) {
+	cause := errors.New("connection refused")
+	err := &url.Error{
+		Op:  "Get",
+		URL: "http://127.0.0.1:8096/Sessions?api_key=" + testAPIKey,
+		Err: cause,
+	}
+
+	for name, got := range map[string]string{
+		"summarise":    summarise(err),
+		"summariseErr": summariseErr(err).Error(),
+	} {
+		if strings.Contains(got, testAPIKey) || strings.Contains(got, "127.0.0.1") {
+			t.Errorf("%s = %q; the URL travelled with the message", name, got)
+		}
+		if got != cause.Error() {
+			t.Errorf("%s = %q, want the underlying cause %q", name, got, cause)
+		}
+	}
+
+	// An error that is not a url.Error has no URL to strip, and is passed through whole.
+	plain := errors.New("decode: unexpected EOF")
+	if got := summarise(plain); got != plain.Error() {
+		t.Errorf("summarise(plain) = %q, want %q", got, plain)
 	}
 }
 
